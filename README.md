@@ -92,4 +92,3 @@ Clinical-data compliance layer · companion to Ferrum · Synaptic Four
 <br />
 © 2026 Synaptic Four · Licensed under BUSL-1.1 · Free for non-commercial research under the Additional Use Grant
 </div>
-

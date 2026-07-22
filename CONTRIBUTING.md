@@ -22,7 +22,7 @@ Solum’s default posture is a **compliance layer** (jurisdiction profiles, encr
 
 Reference: [docs/PRODUCT-DEFINITION.md](docs/PRODUCT-DEFINITION.md) §3 (public product definition; not legal advice — regulatory review before go-to-market claims).
 
-Issue template: [`.github/ISSUE_TEMPLATE/feature.md`](.github/ISSUE_TEMPLATE/feature.md)  
+Issue template: [`.github/ISSUE_TEMPLATE/feature.md`](.github/ISSUE_TEMPLATE/feature.md)
 PR template: [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)
 
 ---
