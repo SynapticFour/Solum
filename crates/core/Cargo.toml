@@ -1,0 +1,23 @@
+[package]
+name = "solum-core"
+description = "Solum product core — clinical compliance orchestration (not a Ferrum fork)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "solum"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+solum-profiles.workspace = true
+solum-crypto.workspace = true
+solum-audit.workspace = true
+solum-fhir.workspace = true
+solum-openehr.workspace = true

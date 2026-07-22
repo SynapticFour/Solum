@@ -1,0 +1,90 @@
+# Solum jurisdiction profile — EU European Health Data Space (EHDS)
+# Regulation (EU) 2025/327, with emphasis on Annex II essential requirements
+# for EHR systems (general, interoperability, security & logging).
+#
+# Adding further jurisdictions (ke-*, ng-*, za-*) means adding a sibling TOML
+# file with the same schema — no code change required.
+
+schema_version = 1
+
+[meta]
+profile = "eu-ehds"
+jurisdiction = "EU"
+description = "EU EHDS compliance posture for clinical electronic health data (primary use priority categories + Annex II controls)"
+references = [
+    "Regulation (EU) 2025/327 — European Health Data Space",
+    "EHDS Annex II — Essential requirements for harmonised EHR software components",
+    "GDPR (Regulation (EU) 2016/679) — lawful basis and purpose limitation",
+]
+
+[encryption]
+# Priority categories of personal electronic health data (EHDS Art. 14 family)
+# plus identifiers that must be encrypted at rest under this profile.
+required_field_categories = [
+    "patient_identifier",
+    "patient_summary",
+    "e_prescription",
+    "e_dispensation",
+    "medical_images",
+    "medical_image_reports",
+    "laboratory_results",
+    "discharge_reports",
+    "clinical_notes",
+    "consent_record",
+]
+allowed_key_custody = ["customer_held"]
+
+[audit]
+# Annex II §3 — security and logging: access events with actor, data category, timestamp.
+mandatory_events = [
+    "access.granted",
+    "access.denied",
+    "data.read",
+    "data.export",
+    "data.receive_eehrxf",
+    "consent.granted",
+    "consent.revoked",
+    "identity.authenticated",
+    "key.use",
+    "residency.transfer_attempt",
+]
+helios_export_prepared = true
+
+[retention]
+# Member-state clinical retention varies; profile sets a conservative floor for
+# Solum-managed audit evidence. Clinical record retention is operator-configured
+# but must meet or exceed these minima when Solum enforces the policy.
+default_retention_days = 3650          # 10 years clinical default floor
+audit_log_retention_days = 3650        # Annex II logging retention support
+
+[retention.category_overrides_days]
+consent_record = 3650
+access_log = 3650
+laboratory_results = 5475              # 15 years (common clinical practice floor)
+
+[storage]
+# Primary personal electronic health data must remain in the Union / EEA
+# unless a lawful transfer mechanism is separately documented outside Solum.
+allowed_regions = ["EU", "EEA"]
+enforce_residency = true
+
+[consent]
+workflow = "gdpr_granular"
+required_purposes = [
+    "care_provision",
+    "emergency_access",
+    "secondary_use_hdab",
+    "quality_improvement",
+]
+
+[regulatory]
+annex_requirements = [
+    "II.1 — General requirements (intended performance, patient safety, rights of natural persons)",
+    "II.2 — Interoperability (EEHRxF access, receive, structured entry, anti-restriction)",
+    "II.3 — Security and logging (health-professional identification, comprehensive access logs, log review, retention differentiation)",
+]
+notes = [
+    "Solum is a compliance layer for clinical data — not a medical device by default.",
+    "Features that interpret clinical data for diagnosis/therapy support require an MDCG boundary review (see CONTRIBUTING.md).",
+    "Genomic / -omic exchange remains Ferrum's domain; Solum does not re-implement GA4GH.",
+]

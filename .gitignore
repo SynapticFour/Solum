@@ -1,0 +1,11 @@
+/target/
+**/*.rs.bk
+.DS_Store
+.idea/
+.vscode/
+*.swp
+.env
+.env.*
+!.env.example
+# Local Ferrum path override (see .cargo/config.toml.example)
+.cargo/config.toml

@@ -1,0 +1,9 @@
+# Optional local override when developing next to a Ferrum checkout.
+# Copy to config.toml (gitignored if you prefer) only for local work:
+#
+#   cp .cargo/config.toml.example .cargo/config.toml
+#
+# CI and clean clones should use the git pin in crates/crypto/Cargo.toml.
+
+[patch."https://github.com/SynapticFour/Ferrum.git"]
+ferrum-core = { path = "../Ferrum/crates/ferrum-core" }

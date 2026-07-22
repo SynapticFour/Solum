@@ -1,0 +1,19 @@
+[package]
+name = "solum-crypto"
+description = "Solum encryption and customer-held key management (Crypt4GH-style sovereignty)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+# Pin must stay in sync with config/ci/ferrum-revision.txt (full git SHA).
+# Same pattern as Ferrum Lab Kit → ferrum-core. Product-specific crypto logic
+# lives in this crate; do not patch Ferrum without an explicit product decision.
+ferrum-core = { git = "https://github.com/SynapticFour/Ferrum.git", rev = "27a6a8e9a719fd1a171da28b20462a777f95cf65" }

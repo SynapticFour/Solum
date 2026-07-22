@@ -1,0 +1,51 @@
+Business Source License 1.1
+Licensor: Synaptic Four, Germany
+Licensed Work: Solum — clinical-data compliance layer (EHDS / jurisdiction profiles)
+The Licensed Work is (c) 2026 Synaptic Four
+Additional Use Grant: You may use the Licensed Work for non-commercial
+research, academic, and educational purposes without restriction.
+Institutions operating Solum solely for internal research (not as a
+commercial service to third parties) are also granted free use.
+Change Date: Four years from the release date of each version.
+Change License: Apache License, Version 2.0
+For information about alternative licensing arrangements:
+https://github.com/SynapticFour/Solum
+
+Business Source License 1.1
+Parameters
+Licensor: Synaptic Four
+Licensed Work: Solum
+Additional Use Grant: Non-commercial research and academic use permitted.
+Change Date: Four years from each version's release date.
+Change License: Apache-2.0
+
+License text follows:
+The Business Source License (this document, or the "License") is not an
+Open Source license. However, the Licensor has made the Licensed Work
+available under the License, and intends to make the Licensed Work
+available under an Open Source license in the future.
+The Licensor grants you a non-exclusive, royalty-free, worldwide,
+non-sublicensable, non-transferable license to copy, modify, and
+create derivative works of the Licensed Work.
+The above license may not be exercised if you provide the Licensed Work
+to third parties as a hosted or managed service, or you use the Licensed
+Work for commercial advantage or private monetary gain, except as
+permitted by the Additional Use Grant above.
+Effective on the Change Date, or the fourth anniversary of the first
+publicly available distribution of a specific version of the Licensed
+Work under this License, whichever comes first, the Licensor hereby
+grants you rights under the terms of the Change License, and the
+rights granted in the paragraph above terminate.
+If your use of the Licensed Work does not comply with the requirements
+currently in effect as described in this License, you must purchase a
+commercial license from the Licensor, its affiliated entities, or
+authorized resellers, or you must refrain from using the Licensed Work.
+For commercial licensing inquiries, open an issue or discussion at:
+https://github.com/SynapticFour/Solum
+THE LICENSED WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+LICENSED WORK OR THE USE OR OTHER DEALINGS IN THE LICENSED WORK.

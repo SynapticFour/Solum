@@ -1,0 +1,35 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/profiles",
+    "crates/fhir",
+    "crates/openehr",
+    "crates/audit",
+    "crates/crypto",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "BUSL-1.1"
+repository = "https://github.com/SynapticFour/Solum"
+rust-version = "1.91.1"
+authors = ["Synaptic Four <hello@synapticfour.com>"]
+
+[workspace.dependencies]
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+toml = "0.8"
+tracing = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Internal crates
+solum-core = { path = "crates/core" }
+solum-profiles = { path = "crates/profiles" }
+solum-fhir = { path = "crates/fhir" }
+solum-openehr = { path = "crates/openehr" }
+solum-audit = { path = "crates/audit" }
+solum-crypto = { path = "crates/crypto" }
