@@ -20,7 +20,7 @@ Solum is licensed under the **Business Source License 1.1** (BUSL-1.1), with par
 
 Solum’s default posture is a **compliance layer** (jurisdiction profiles, encryption, audit evidence, FHIR/openEHR interchange) — **not** a medical device. Crossing into diagnosis/therapy support changes the regulatory perimeter of this repository.
 
-Reference: [docs/PRODUCT-DEFINITION.md](docs/PRODUCT-DEFINITION.md) (full product-definition document to be linked when published).
+Reference: [docs/PRODUCT-DEFINITION.md](docs/PRODUCT-DEFINITION.md) §3 (public product definition; not legal advice — regulatory review before go-to-market claims).
 
 Issue template: [`.github/ISSUE_TEMPLATE/feature.md`](.github/ISSUE_TEMPLATE/feature.md)  
 PR template: [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)
