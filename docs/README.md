@@ -19,7 +19,9 @@ Shared philosophy: customer-held keys, residency enforcement, auditable access �
 | [profiles.md](profiles.md) | Jurisdiction TOML schema and planned files |
 | [ferrum.md](ferrum.md) | What is reused vs linked from Ferrum |
 | [helios.md](helios.md) | Evidence / HELIOS boundary |
+| [ECOSYSTEM.md](ECOSYSTEM.md) | Synaptic Four related projects (Solum · Ferrum · HELIOS · Lab Kit) |
 | [LICENSE](../LICENSE) | BUSL-1.1 ([notes](LICENSE-OPTIONS.md)) |
+| [LICENSE-COMPATIBILITY.md](../LICENSE-COMPATIBILITY.md) | Allowed dependency licenses |
 
 ## Do not duplicate Ferrum docs
 

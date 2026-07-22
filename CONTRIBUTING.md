@@ -37,15 +37,26 @@ PR template: [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.
 ## Development
 
 ```bash
+pre-commit install   # once per clone (shared Synaptic Four Rust hook set)
+make check           # fmt + clippy + test
+# or:
 cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+```
+
+Optional license/source policy check (requires [cargo-deny](https://github.com/EmbarkStudios/cargo-deny)):
+
+```bash
+make deny
 ```
 
 Bump the Ferrum pin by updating **both**:
 
 1. `ferrum-core` `rev` in `crates/crypto/Cargo.toml`
 2. `config/ci/ferrum-revision.txt`
+
+**Dependencies:** do not enable Dependabot. Bump crates deliberately and review license impact (`deny.toml` / [LICENSE-COMPATIBILITY.md](LICENSE-COMPATIBILITY.md)).
 
 ## Pull requests
 

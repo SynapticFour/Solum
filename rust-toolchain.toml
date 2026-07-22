@@ -1,0 +1,5 @@
+[toolchain]
+# Keep in sync with Ferrum Lab Kit / ferrum-core consumers (rust-version in Cargo.toml).
+# If Ferrum raises MSRV, bump this pin in the same PR as the ferrum-core rev bump.
+channel = "1.91.1"
+components = ["rustfmt", "clippy"]

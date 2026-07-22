@@ -142,7 +142,9 @@ pub enum ProfileError {
     },
     #[error("unsupported profile schema_version {found} (expected {PROFILE_SCHEMA_VERSION})")]
     UnsupportedSchema { found: u32 },
-    #[error("startup refused: configuration contradicts jurisdiction profile '{profile}': {reason}")]
+    #[error(
+        "startup refused: configuration contradicts jurisdiction profile '{profile}': {reason}"
+    )]
     StartupRefused { profile: String, reason: String },
 }
 
@@ -223,8 +225,11 @@ pub fn validate_startup(
         }
     }
 
-    validate_key_custody(&runtime.key_management, &profile.encryption.allowed_key_custody)
-        .map_err(|e| refuse(e.to_string()))?;
+    validate_key_custody(
+        &runtime.key_management,
+        &profile.encryption.allowed_key_custody,
+    )
+    .map_err(|e| refuse(e.to_string()))?;
 
     for required in &profile.audit.mandatory_events {
         if !runtime

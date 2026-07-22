@@ -1,8 +1,18 @@
 # Solum
 
+[![CI](https://github.com/SynapticFour/Solum/actions/workflows/ci.yml/badge.svg)](https://github.com/SynapticFour/Solum/actions/workflows/ci.yml)
+[![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue.svg)](LICENSE)
+[![Rust 1.91.1](https://img.shields.io/badge/rust-1.91.1-orange.svg)](rust-toolchain.toml)
+
 **Clinical-data compliance layer** for EU EHDS and African data-protection regimes.
 
-Ferrum for genomic data · **Solum for clinical data** · shared sovereignty philosophy — separate brand, repository, and regulatory boundary.
+Built by **[Synaptic Four](https://synapticfour.com)**. Ferrum for genomic data · **Solum for clinical data** · shared sovereignty philosophy — separate brand, repository, and regulatory boundary.
+
+> **Legal notice:** This README describes technical capabilities, not legal advice. Compliance with EHDS, GDPR, or other frameworks depends on the operator’s legal basis, configuration, and organisational measures. See [docs/PRODUCT-DEFINITION.md](docs/PRODUCT-DEFINITION.md).
+
+## Synaptic Four portfolio
+
+Solum is the clinical compliance sibling to [Ferrum](https://github.com/SynapticFour/Ferrum). Related projects and ownership boundaries: **[docs/ECOSYSTEM.md](docs/ECOSYSTEM.md)**. For the GA4GH five-repo stack, see [Ferrum’s ecosystem map](https://github.com/SynapticFour/Ferrum/blob/main/docs/ECOSYSTEM.md).
 
 Solum **does not own durable clinical storage**. It enforces policy, translates interchange formats (FHIR / openEHR), and produces evidence of conforming processing — wherever the data already lives.
 
@@ -58,4 +68,28 @@ Solum manages, encrypts, logs, and translates — it does **not** interpret clin
 
 ## Documentation
 
-Start at [docs/README.md](docs/README.md) — product definition, architecture, roadmap, profiles, HELIOS.
+Start at [docs/README.md](docs/README.md) — product definition, architecture, roadmap, profiles, HELIOS, ecosystem.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) (includes the mandatory MDCG boundary question) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Security reports: [SECURITY.md](SECURITY.md).
+
+```bash
+pre-commit install   # optional; same hooks as Ferrum / Lab Kit
+make check           # fmt + clippy + test
+```
+
+Dependency updates are **manual / reviewed**. Dependabot is not used (Synaptic Four org policy).
+
+## Contact
+
+[contact@synapticfour.com](mailto:contact@synapticfour.com) · [synapticfour.com](https://synapticfour.com)
+
+---
+
+<div align="center">
+Clinical-data compliance layer · companion to Ferrum · Synaptic Four
+<br />
+© 2026 Synaptic Four · Licensed under BUSL-1.1 · Free for non-commercial research under the Additional Use Grant
+</div>
+
