@@ -38,3 +38,8 @@ solum-openehr = { path = "crates/openehr" }
 solum-audit = { path = "crates/audit" }
 solum-crypto = { path = "crates/crypto" }
 solum-consent = { path = "crates/consent" }
+
+[patch.crates-io]
+# SynapticFour crypt4gh fork (same lineage as Ferrum/third_party/crypt4gh):
+# removes unmaintained rust-crypto (RUSTSEC-2022-0011). Keep in sync with Ferrum.
+crypt4gh = { path = "third_party/crypt4gh" }

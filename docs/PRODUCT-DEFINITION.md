@@ -45,7 +45,7 @@ Division of labour: **openEHR** for durable clinical modelling semantics; **FHIR
 Documented in depth in [architecture.md](architecture.md). Summary:
 
 1. **On-premise first** (stage 1); SaaS is a prepared stage-2 path, not the initial delivery model.
-2. **Customer-held keys from the start** — sovereignty via git-pinned `ferrum-core`; clinical field envelopes in `solum-crypto` (not Crypt4GH containers — see [CRYPTO.md](CRYPTO.md)).
+2. **Customer-held keys from the start** — sovereignty via git-pinned `ferrum-core`; clinical fields encrypted with **Crypt4GH** in `solum-crypto` (same envelope as Ferrum — see [CRYPTO.md](CRYPTO.md)).
 3. **Honest zero-knowledge path** — full cryptographic ZK is not claimed where validation, masking, or transform require processing; target is customer-held keys + confidential computing where appropriate + customer-visible auditability.
 4. **Residency enforced at startup** — refuse to run if storage/key posture contradicts the active jurisdiction profile.
 5. **Ferrum-core pinned, not forked** — Lab Kit pattern; product-specific clinical logic stays in this repo.

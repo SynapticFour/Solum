@@ -18,7 +18,7 @@ Shared philosophy: customer-held keys, residency enforcement, auditable access �
 | [roadmap.md](roadmap.md) | Stage 1 vs stage 2 |
 | [profiles.md](profiles.md) | Jurisdiction TOML schema and planned files |
 | [ferrum.md](ferrum.md) | What is reused vs linked from Ferrum |
-| [CRYPTO.md](CRYPTO.md) | Crypt4GH (Ferrum) vs Solum field envelopes |
+| [CRYPTO.md](CRYPTO.md) | Shared Crypt4GH envelope (Ferrum objects · Solum fields) |
 | [helios.md](helios.md) | Evidence / HELIOS boundary |
 | [ECOSYSTEM.md](ECOSYSTEM.md) | Synaptic Four related projects (Solum · Ferrum · HELIOS · Lab Kit) |
 | [LICENSE](../LICENSE) | BUSL-1.1 ([notes](LICENSE-OPTIONS.md)) |

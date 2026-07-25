@@ -23,9 +23,9 @@ Stage 1 targets operator-controlled deployments. A SaaS path may follow in stage
 
 ### Customer-held keys
 
-Encryption posture assumes keys remain under customer control from day one (not a later retrofit). Shared types/config come from git-pinned [`ferrum-core`](ferrum.md); clinical **field** envelopes, KEK providers, and custody checks live in `solum-crypto`.
+Encryption posture assumes keys remain under customer control from day one (not a later retrofit). Shared types/config come from git-pinned [`ferrum-core`](ferrum.md); Crypt4GH field encryption, key providers, and custody checks live in `solum-crypto`.
 
-Ferrum’s Crypt4GH layer remains the path for genomic file objects. Solum deliberately uses a compact field envelope instead — rationale in [CRYPTO.md](CRYPTO.md).
+Both Ferrum and Solum use **Crypt4GH** envelopes; Ferrum for genomic DRS objects, Solum for clinical field categories — same format, different product surfaces ([CRYPTO.md](CRYPTO.md)).
 
 ### Honest zero-knowledge path
 
@@ -53,7 +53,7 @@ Chosen for consistency with Ferrum-core and direct reuse of existing Rust buildi
 |-------|------|
 | `solum-core` | Product orchestration + `solum` CLI (`check`) |
 | `solum-profiles` | Load/validate jurisdiction TOML profiles |
-| `solum-crypto` | Field-envelope AEAD + key custody; pins `ferrum-core` |
+| `solum-crypto` | Crypt4GH field encryption + key custody; pins `ferrum-core` |
 | `solum-fhir` | FHIR adapter (stage 1 focus) |
 | `solum-openehr` | openEHR adapter (stage 2 scaffold) |
 | `solum-audit` | Audit events; `FileAuditStore` persists a hash-chained, tamper-evident log + HELIOS-oriented JSON export |

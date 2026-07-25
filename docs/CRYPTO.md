@@ -1,41 +1,30 @@
-# Cryptography: Ferrum Crypt4GH vs Solum field envelopes
+# Cryptography: Crypt4GH across Ferrum and Solum
 
-Solum and Ferrum share a **sovereignty philosophy** (customer-held control, open standards, ChaCha20-Poly1305–class AEAD). They do **not** share the same wire/container format for every encrypted byte.
+Crypt4GH is a **universal envelope encryption scheme** (X25519 header packets + ChaCha20-Poly1305 payload segments). Synaptic Four uses it as the shared at-rest envelope for both genomic objects (Ferrum) and clinical field categories (Solum).
 
-## What Ferrum’s Crypt4GH is for
+## Why Crypt4GH here (not a custom AEAD blob)
 
-[Ferrum Crypt4GH](https://github.com/SynapticFour/Ferrum/blob/main/docs/CRYPT4GH.md) (`ferrum-crypt4gh`) encrypts **genomic file/stream objects** in DRS:
+1. **One envelope across the portfolio** — same format, same key tooling, same threat model as Ferrum.
+2. **No FHIR at-rest field standard** — HL7 FHIR security labels are metadata, not encryption. JWE (JOSE) appears in **SMART Health Links** and experimental bulk-export key delivery for *sharing* FHIR files; it is not a general “encrypt every PHI category at rest in a compliance layer” standard for EHDS Annex II–style deployments.
+3. **Grain size is not a format veto** — Crypt4GH works for small payloads as well as BAM-scale streams; Ferrum’s DRS use case does not reserve the format for genomics alone.
 
-- Crypt4GH container: X25519 header + **ChaCha20-Poly1305** payload segments (64 KiB)
-- Designed for BAM/VCF-scale objects and O(1) header re-wrap on download
-- Lab Kit does **not** link `ferrum-crypt4gh`; it only toggles server-side encrypt on Ferrum
+## Layout
 
-Ferrum’s compliance wording separates concerns roughly as: TLS in transit, general at-rest controls, **Crypt4GH for genomics** ([COMPLIANCE.md](https://github.com/SynapticFour/Ferrum/blob/main/docs/COMPLIANCE.md)).
+| Layer | Owner |
+|-------|--------|
+| Crypt4GH format + SynapticFour `crypt4gh` fork (no `rust-crypto`) | Vendored at [`third_party/crypt4gh`](../third_party/crypt4gh) (same lineage as Ferrum) |
+| Genomic DRS encrypt / re-wrap / proxy | [Ferrum `ferrum-crypt4gh`](https://github.com/SynapticFour/Ferrum/blob/main/docs/CRYPT4GH.md) |
+| Clinical category encrypt + custody policy | `solum-crypto` (`crypt4gh-v1` on [`EncryptedField`](../crates/crypto/src/lib.rs)) |
 
-## What Solum encrypts
+## Customer-held keys
 
-Solum encrypts **clinical field / category blobs** (FHIR elements, consent records, identifiers listed in jurisdiction `required_field_categories`) under a compact **envelope**:
+Under `KeyCustody::CustomerHeld`, Solum never generates Crypt4GH keypairs. Operators register customer-supplied pub/priv material via `CustomerHeldKeyProvider`. `EphemeralTestKeyProvider` may mint keys **only** for tests/demos.
 
-| Layer | Role |
-|-------|------|
-| DEK | Random per `encrypt_field` call; encrypts plaintext with ChaCha20-Poly1305 |
-| KEK | Customer-held (HSM/KMS); Solum only references it via [`KeyRef`](../crates/crypto/src/lib.rs) — never mints KEKs under `CustomerHeld` |
-| Format | Serde-friendly `EncryptedField` (`chacha20poly1305-envelope-v1`), not a Crypt4GH file |
+## SMART Health Links / JWE (out of scope for stage-1 at-rest)
 
-Implementation: `solum-crypto` (RustCrypto `chacha20poly1305`). Same AEAD family as Crypt4GH payloads; **not** the Crypt4GH container.
-
-## Why Solum does not call Crypt4GH for fields
-
-1. **Wrong grain size** — Crypt4GH is a segmented file format; clinical fields are small, often column/JSON-sized values.
-2. **Wrong product boundary** — Crypt4GH in Ferrum is tied to DRS object storage and GA4GH genomic exchange; Solum must not re-host that stack.
-3. **Same philosophy, separate format** — customer-held keys + AEAD; when genomic blobs appear, hand them to **Ferrum/DRS + Crypt4GH**, do not re-implement Crypt4GH here.
-
-## When Solum might touch Crypt4GH later
-
-Only as an **integration**, not a reimplementation: e.g. a clinical record references a Ferrum DRS ID for an encrypted genomic attachment. Field PHI stays in Solum envelopes; the genomic object stays Crypt4GH under Ferrum.
+If Solum later **exports** FHIR via SMART Health Links or similar share manifests, a JWE adapter can sit *beside* Crypt4GH at-rest storage. That is an interchange concern, not a reason to replace Crypt4GH for residency-bound clinical fields.
 
 ## Related
 
-- [ferrum.md](ferrum.md) — dependency and ownership boundaries
-- [architecture.md](architecture.md) — customer-held keys / honest ZK path
+- [ferrum.md](ferrum.md)
 - Ferrum: [CRYPT4GH.md](https://github.com/SynapticFour/Ferrum/blob/main/docs/CRYPT4GH.md)

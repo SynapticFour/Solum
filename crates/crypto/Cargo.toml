@@ -1,6 +1,6 @@
 [package]
 name = "solum-crypto"
-description = "Solum field-envelope encryption and customer-held key management (companion to Ferrum Crypt4GH)"
+description = "Solum Crypt4GH field encryption and customer-held key management"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,20 +13,14 @@ serde.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
-# ChaCha20-Poly1305 field AEAD (same cipher family as Crypt4GH payloads; NOT the
-# Crypt4GH container). ferrum-core pulls `ring` via rustls; we use RustCrypto here
-# for a safe per-field API — see docs/CRYPTO.md.
-chacha20poly1305 = "0.10"
-rand = "0.8"
-zeroize = { version = "1", features = ["derive"] }
+# Crypt4GH envelope (same format as Ferrum). Use the SynapticFour fork via
+# workspace [patch.crates-io] — see root Cargo.toml and docs/CRYPTO.md.
+crypt4gh = "0.4.1"
 
 # Pin must stay in sync with config/ci/ferrum-revision.txt (full git SHA).
-# Same pattern as Ferrum Lab Kit → ferrum-core. Product-specific crypto logic
-# lives in this crate; do not patch Ferrum without an explicit product decision.
 ferrum-core = { git = "https://github.com/SynapticFour/Ferrum.git", rev = "27a6a8e9a719fd1a171da28b20462a777f95cf65" }
 
 [dev-dependencies]
-# Dev-only: load eu-ehds.toml for category-gate tests. Not a normal dependency —
-# solum-profiles already depends on solum-crypto (KeyCustody), which would cycle.
 solum-profiles = { workspace = true }
 serde_json.workspace = true
+tempfile.workspace = true
