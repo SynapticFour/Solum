@@ -1,0 +1,21 @@
+# Gitleaks 8.24.3 (pinned in .github/workflows/secret-scan.yml).
+# Extend defaults — a bare config without useDefault would replace all rules.
+[extend]
+useDefault = true
+
+# Global [allowlist] with both paths + regexes is OR'd in 8.24.x and has no
+# `condition` field. For path AND regex (narrow allow), use a rule allowlist.
+[[rules]]
+id = "private-key"
+
+  [[rules.allowlists]]
+  description = "PEM armor header string literals in Crypt4GH keygen code (not actual key material)"
+  condition = "AND"
+  # Match the full finding span (BEGIN…nearby END in source), not only the extracted secret.
+  regexTarget = "match"
+  regexes = [
+    '''-----BEGIN CRYPT4GH (PUBLIC|PRIVATE) KEY-----''',
+  ]
+  paths = [
+    '''third_party/crypt4gh/src/keys\.rs''',
+  ]
