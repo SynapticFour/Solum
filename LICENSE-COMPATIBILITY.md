@@ -23,9 +23,21 @@ These are enforced via [`deny.toml`](deny.toml) (`cargo deny check licenses`).
 
 Only `https://github.com/SynapticFour/Ferrum.git` (pinned `ferrum-core`). Other git dependencies require an explicit policy update.
 
+## Accepted advisories
+
+Explicit `cargo deny` ignore entries (see [`deny.toml`](deny.toml) `[advisories].ignore`).
+Each row is an accepted-risk record — not a silent suppress.
+
+| Advisory | Crate | Accepted | Reason | Revisit when |
+|----------|-------|----------|--------|--------------|
+| [RUSTSEC-2023-0071](https://rustsec.org/advisories/RUSTSEC-2023-0071) (Marvin Attack: RSA timing sidechannel) | `rsa` 0.9.x | 2026-07-25 | Transitive only: `rsa` ← `jsonwebtoken` ← git-pinned `ferrum-core` ← `solum-crypto` / `solum-core` / `solum-profiles`. Used for RSA-signed JWT verification in Ferrum shared types — **not** Solum’s Crypt4GH field encryption path (`crypt4gh` / `sodiumoxide` / `libsodium-sys`). No safe upgrade available upstream yet. | `ferrum-core` migrates off RSA-based JWT, or a patched `rsa` crate ships; then drop the ignore and re-run `cargo deny check advisories`. |
+
+Analogous posture to the SynapticFour `crypt4gh` fork replacing unmaintained `rust-crypto` ([RUSTSEC-2022-0011](https://rustsec.org/advisories/RUSTSEC-2022-0011)): document the blast radius, keep the ignore narrow, and track upstream rather than vendoring a one-off JWT stack in Solum.
+
 ## Verification
 
 ```bash
 cargo deny check licenses
 cargo deny check sources
+cargo deny check advisories
 ```
