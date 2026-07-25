@@ -4,11 +4,19 @@
 //! Synaptic Four portfolio. This crate prepares a stable JSON export shape
 //! so HELIOS (or an equivalent) can consume Solum audit trails without
 //! embedding HELIOS as a Rust dependency.
+//!
+//! Two log types are available: [`AuditLog`] is an in-memory buffer (tests,
+//! short-lived processes); [`FileAuditStore`] is the durable, hash-chained,
+//! tamper-evident log intended for real deployments — see its own docs and
+//! `docs/architecture.md`.
 
 #![forbid(unsafe_code)]
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+mod store;
+pub use store::{AuditRecord, AuditStoreError, FileAuditStore, GENESIS_HASH};
 
 /// A single auditable event required by jurisdiction profiles.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

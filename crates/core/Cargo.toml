@@ -21,3 +21,7 @@ solum-crypto.workspace = true
 solum-audit.workspace = true
 solum-fhir.workspace = true
 solum-openehr.workspace = true
+solum-consent.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

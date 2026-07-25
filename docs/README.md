@@ -4,7 +4,7 @@ Solum is the **clinical-data compliance layer** in the Synaptic Four portfolio: 
 
 | Product | Domain |
 |---------|--------|
-| **[Ferrum](https://github.com/SynapticFour/Ferrum)** | Genomic / -omic data, GA4GH APIs, Crypt4GH-style sovereignty |
+| **[Ferrum](https://github.com/SynapticFour/Ferrum)** | Genomic / -omic data, GA4GH APIs, Crypt4GH for genomic objects |
 | **Solum** | Clinical data (FHIR / openEHR), jurisdiction profiles (EU EHDS + African regimes) |
 
 Shared philosophy: customer-held keys, residency enforcement, auditable access — **separate brands, repos, and regulatory boundaries**.
@@ -18,6 +18,7 @@ Shared philosophy: customer-held keys, residency enforcement, auditable access �
 | [roadmap.md](roadmap.md) | Stage 1 vs stage 2 |
 | [profiles.md](profiles.md) | Jurisdiction TOML schema and planned files |
 | [ferrum.md](ferrum.md) | What is reused vs linked from Ferrum |
+| [CRYPTO.md](CRYPTO.md) | Crypt4GH (Ferrum) vs Solum field envelopes |
 | [helios.md](helios.md) | Evidence / HELIOS boundary |
 | [ECOSYSTEM.md](ECOSYSTEM.md) | Synaptic Four related projects (Solum · Ferrum · HELIOS · Lab Kit) |
 | [LICENSE](../LICENSE) | BUSL-1.1 ([notes](LICENSE-OPTIONS.md)) |

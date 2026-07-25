@@ -5,12 +5,12 @@
                     │            solum-core               │
                     │  startup validation · orchestration │
                     └───────────────┬─────────────────────┘
-           ┌────────────┬───────────┼───────────┬────────────┐
-           ▼            ▼           ▼           ▼            ▼
-     solum-profiles  solum-crypto  solum-fhir  solum-openehr  solum-audit
-     (TOML juris-    (ferrum-core  (stage 1)   (stage 2       (evidence /
-      diction         git pin)                  scaffold)      HELIOS export)
-      profiles)
+     ┌──────────────┬────────────┬───────────┬────────────┬─────────────┬──────────────┐
+     ▼              ▼            ▼           ▼            ▼             ▼
+solum-profiles  solum-crypto  solum-fhir  solum-openehr  solum-audit  solum-consent
+(TOML juris-    (ferrum-core  (stage 1)   (stage 2       (hash-chained (grant/revoke,
+ diction         git pin)                  scaffold)      file log,     purpose
+ profiles)                                                HELIOS export) binding)
 ```
 
 Solum is a **compliance layer**: it enforces policy, transforms interchange formats, and produces evidence. It is not the system of record for durable clinical storage.
@@ -23,7 +23,9 @@ Stage 1 targets operator-controlled deployments. A SaaS path may follow in stage
 
 ### Customer-held keys
 
-Encryption posture assumes keys remain under customer control from day one (not a later retrofit). Shared sovereignty primitives come from git-pinned [`ferrum-core`](ferrum.md); clinical field policy and custody checks live in `solum-crypto`.
+Encryption posture assumes keys remain under customer control from day one (not a later retrofit). Shared types/config come from git-pinned [`ferrum-core`](ferrum.md); clinical **field** envelopes, KEK providers, and custody checks live in `solum-crypto`.
+
+Ferrum’s Crypt4GH layer remains the path for genomic file objects. Solum deliberately uses a compact field envelope instead — rationale in [CRYPTO.md](CRYPTO.md).
 
 ### Honest zero-knowledge path
 
@@ -51,10 +53,13 @@ Chosen for consistency with Ferrum-core and direct reuse of existing Rust buildi
 |-------|------|
 | `solum-core` | Product orchestration + `solum` CLI (`check`) |
 | `solum-profiles` | Load/validate jurisdiction TOML profiles |
-| `solum-crypto` | Key custody policy; pins `ferrum-core` |
+| `solum-crypto` | Field-envelope AEAD + key custody; pins `ferrum-core` |
 | `solum-fhir` | FHIR adapter (stage 1 focus) |
 | `solum-openehr` | openEHR adapter (stage 2 scaffold) |
-| `solum-audit` | Audit events + HELIOS-oriented JSON export |
+| `solum-audit` | Audit events; `FileAuditStore` persists a hash-chained, tamper-evident log + HELIOS-oriented JSON export |
+| `solum-consent` | Grant/revoke consent per `(subject, purpose)`; purpose validated against the active profile; full history persisted |
+
+`solum-core::Deployment` bundles a validated profile with its `FileAuditStore` and `ConsentStore` so consent decisions and their audit trail cannot drift apart — see its rustdoc in `crates/core/src/lib.rs`.
 
 ## Related
 

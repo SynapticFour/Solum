@@ -10,6 +10,7 @@ Solum is licensed under BUSL-1.1 (aligned with Ferrum / Ferrum Lab Kit). Depende
 - ISC
 - Unicode-DFS-2016 / Unicode-3.0
 - Zlib, OpenSSL, CC0-1.0
+- CDLA-Permissive-2.0 (transitive webpki-roots via ferrum-core / reqwest)
 - BUSL-1.1 (workspace crates and git-pinned `ferrum-core`)
 
 ## Explicitly forbidden dependency licenses

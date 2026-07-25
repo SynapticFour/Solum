@@ -7,6 +7,7 @@ members = [
     "crates/openehr",
     "crates/audit",
     "crates/crypto",
+    "crates/consent",
 ]
 
 [workspace.package]
@@ -25,6 +26,9 @@ thiserror = "1.0"
 toml = "0.8"
 tracing = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4", "serde"] }
+tempfile = "3"
 
 # Internal crates
 solum-core = { path = "crates/core" }
@@ -33,3 +37,4 @@ solum-fhir = { path = "crates/fhir" }
 solum-openehr = { path = "crates/openehr" }
 solum-audit = { path = "crates/audit" }
 solum-crypto = { path = "crates/crypto" }
+solum-consent = { path = "crates/consent" }

@@ -21,7 +21,7 @@ Solum **does not own durable clinical storage**. It enforces policy, translates 
 | Domain | Genomic / -omic | Clinical (EHR-oriented) |
 | Role | GA4GH data platform | Compliance layer (enforce · translate · evidence) |
 | Interop focus | [GA4GH](https://github.com/SynapticFour/Ferrum) (see Ferrum docs) | FHIR (stage 1), openEHR (stage 2) |
-| Crypto posture | Crypt4GH-style, customer-held keys | Same philosophy via git-pinned `ferrum-core`; policy in `crates/crypto` |
+| Crypto | Crypt4GH for genomic DRS objects; customer-held keys | Compact ChaCha20-Poly1305 **field** envelopes + customer-held KEKs (`crates/crypto`); see [docs/CRYPTO.md](docs/CRYPTO.md) |
 
 Working title **Solum** — final brand name may change. Markets: **EU and Africa as equal cores**, modelled as jurisdiction profile data (not hard-coded special cases).
 
@@ -36,8 +36,9 @@ Solum/
     profiles/   # jurisdiction TOML profiles + startup validation
     fhir/       # FHIR adapter (stage 1)
     openehr/    # openEHR adapter (stage 2 scaffold)
-    audit/      # audit events, HELIOS export prepared
+    audit/      # audit events; persistent hash-chained log, HELIOS export prepared
     crypto/     # encryption / key custody; pins ferrum-core
+    consent/    # consent & access-rights engine (grant/revoke, purpose binding)
   config/profiles/
   docs/
 ```

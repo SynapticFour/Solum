@@ -51,10 +51,15 @@ Optional license/source policy check (requires [cargo-deny](https://github.com/E
 make deny
 ```
 
-Bump the Ferrum pin by updating **both**:
+Bump the Ferrum pin with Lab Kit’s workflow:
 
-1. `ferrum-core` `rev` in `crates/crypto/Cargo.toml`
-2. `config/ci/ferrum-revision.txt`
+```bash
+./scripts/bump-ferrum.sh              # or pass a full 40-char SHA
+cargo update -p ferrum-core
+./scripts/verify.sh
+```
+
+(Updates `crates/crypto/Cargo.toml`, `FERRUM_GIT_REV` in `crates/crypto/src/lib.rs`, and `config/ci/ferrum-revision.txt`.)
 
 **Dependencies:** do not enable Dependabot. Bump crates deliberately and review license impact (`deny.toml` / [LICENSE-COMPATIBILITY.md](LICENSE-COMPATIBILITY.md)).
 

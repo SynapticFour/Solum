@@ -1,6 +1,6 @@
 [package]
-name = "solum-audit"
-description = "Solum audit log and evidence generation (HELIOS export prepared)"
+name = "solum-consent"
+description = "Solum consent and access-rights engine (grant/revoke with purpose binding, EEHRxF individual rights)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,9 +12,10 @@ anyhow.workspace = true
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
+solum-profiles.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

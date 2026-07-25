@@ -24,6 +24,8 @@ allow = [
     "Zlib",
     "OpenSSL",
     "CC0-1.0",
+    # Transitive via ferrum-core → reqwest → hyper-rustls → webpki-roots
+    "CDLA-Permissive-2.0",
 ]
 
 [licenses.private]
