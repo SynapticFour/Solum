@@ -46,10 +46,12 @@ echo "== 4. test =="
 cargo test --workspace --all-targets
 cargo test --workspace --doc
 
-echo "== 5. cargo-deny (licenses + sources) =="
+echo "== 5. cargo-deny (licenses + sources + bans + advisories) =="
 if command -v cargo-deny >/dev/null 2>&1; then
   cargo deny check licenses
   cargo deny check sources
+  cargo deny check bans
+  cargo deny check advisories
 else
   echo "skip: cargo-deny not installed (cargo install cargo-deny)"
 fi
