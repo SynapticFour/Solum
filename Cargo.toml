@@ -17,6 +17,8 @@ license = "BUSL-1.1"
 repository = "https://github.com/SynapticFour/Solum"
 rust-version = "1.91.1"
 authors = ["Synaptic Four <hello@synapticfour.com>"]
+# Internal workspace only — not published to crates.io (enables cargo-deny allow-wildcard-paths).
+publish = false
 
 [workspace.dependencies]
 anyhow = "1.0"
