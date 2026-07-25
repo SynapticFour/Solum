@@ -23,10 +23,8 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
-    "Unicode-DFS-2016",
     "Unicode-3.0",
     "Zlib",
-    "OpenSSL",
     "CC0-1.0",
     # Transitive via ferrum-core → reqwest → hyper-rustls → webpki-roots
     "CDLA-Permissive-2.0",
@@ -41,15 +39,19 @@ expression    = "ISC AND MIT AND OpenSSL"
 license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 
 [bans]
-multiple-versions = "warn"
-wildcards         = "deny"
-highlight         = "all"
-deny              = []
-skip              = []
+multiple-versions     = "warn"
+wildcards             = "deny"
+# Internal workspace `{ path = "crates/..." }` deps omit versions; allow those wildcards.
+allow-wildcard-paths  = true
+highlight             = "all"
+deny                  = []
+skip                  = []
 
 [sources]
 unknown-registry = "deny"
 unknown-git      = "deny"
-allow-registry   = ["https://github.com/crates.io-index", "https://github.com/rust-lang/crates.io-index"]
-# Git-pinned ferrum-core (Lab Kit pattern) — only Synaptic Four Ferrum.
+# crates.io index URL used by cargo (legacy github.com/crates.io-index unused).
+allow-registry   = ["https://github.com/rust-lang/crates.io-index"]
+# Git-pinned ferrum-core (Lab Kit / CI). Unmatched locally when `.cargo/config.toml`
+# path-patches Ferrum; keep for clean clones without the path override.
 allow-git        = ["https://github.com/SynapticFour/Ferrum.git"]
