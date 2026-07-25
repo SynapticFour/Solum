@@ -49,6 +49,10 @@ jobs:
         with:
           languages: ${{ matrix.language }}
 
+      # Autobuild runs cargo; crypt4gh needs libsodium headers (libsodium-sys).
+      - name: Install libsodium
+        run: sudo apt-get update && sudo apt-get install -y libsodium-dev pkg-config
+
       - name: Autobuild
         uses: github/codeql-action/autobuild@v4
 

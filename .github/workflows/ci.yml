@@ -27,6 +27,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Format
         run: cargo fmt --all -- --check
+      # crypt4gh → sodiumoxide → libsodium-sys (not preinstalled on ubuntu-latest)
+      - name: Install libsodium
+        run: sudo apt-get update && sudo apt-get install -y libsodium-dev pkg-config
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test

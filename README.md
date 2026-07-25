@@ -45,6 +45,8 @@ Solum/
 
 ## Quick start
 
+**Prerequisites:** Rust 1.91.1 (via [`rust-toolchain.toml`](rust-toolchain.toml) / rustup) and **libsodium** (e.g. `brew install libsodium` on macOS, `apt install libsodium-dev` on Linux) — required by Crypt4GH (`libsodium-sys`).
+
 ```bash
 cargo test --workspace
 cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml

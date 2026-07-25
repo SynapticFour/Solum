@@ -36,6 +36,8 @@ PR template: [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.
 
 ## Development
 
+**Prerequisites:** Rust 1.91.1 (honoured by [`rust-toolchain.toml`](rust-toolchain.toml) when using rustup) and **libsodium** (e.g. `brew install libsodium` on macOS, `apt install libsodium-dev` on Linux) for Crypt4GH / `libsodium-sys`.
+
 ```bash
 pre-commit install   # once per clone (shared Synaptic Four Rust hook set)
 make check           # fmt + clippy + test

@@ -2,11 +2,22 @@
 # Baseline verification — run this FIRST in Cursor / any dev machine, before
 # building on top of the current state. Requires rustup (not just system
 # cargo/rustc) so the pin in rust-toolchain.toml is actually honoured.
+# Also needs libsodium headers (crypt4gh → sodiumoxide → libsodium-sys);
+# missing libsodium is warned, not a hard fail — cargo will error later.
 #
 # Usage: ./scripts/verify.sh
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+
+# Soft check: Crypt4GH pulls libsodium-sys; CI installs libsodium-dev on Ubuntu.
+if command -v pkg-config >/dev/null 2>&1; then
+  if ! pkg-config --exists libsodium; then
+    echo "warning: libsodium not found (pkg-config). Install it first — e.g. brew install libsodium / apt install libsodium-dev"
+  fi
+else
+  echo "warning: pkg-config not found; cannot verify libsodium. Install libsodium if cargo build fails on libsodium-sys."
+fi
 
 PINNED_REV="$(grep -v '^#' config/ci/ferrum-revision.txt | head -1 | tr -d '[:space:]')"
 CARGO_REV="$(grep -o 'rev = "[a-f0-9]*"' crates/crypto/Cargo.toml | grep -o '[a-f0-9]\{40\}')"
