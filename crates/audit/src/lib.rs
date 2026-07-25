@@ -37,6 +37,9 @@ pub enum AuditOutcome {
     Success,
     Denied,
     Error,
+    /// Operation was attempted but failed (e.g. decrypt with wrong key).
+    /// Distinct from [`Denied`] (policy refusal) and [`Error`] (infrastructure).
+    Failure,
 }
 
 /// In-memory audit buffer (replace with durable store in later stages).
