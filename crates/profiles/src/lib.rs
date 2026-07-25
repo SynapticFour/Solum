@@ -336,4 +336,53 @@ mod tests {
         let err = validate_startup(&p, &runtime).expect_err("must refuse missing audit events");
         assert!(matches!(err, ProfileError::StartupRefused { .. }));
     }
+
+    fn kenya_dpa() -> JurisdictionProfile {
+        load_profile(profiles_dir().join("kenya-dpa.toml")).expect("kenya-dpa.toml must load")
+    }
+
+    #[test]
+    fn loads_kenya_dpa_profile() {
+        let p = kenya_dpa();
+        assert_eq!(p.meta.profile, "kenya-dpa");
+        assert_eq!(p.meta.jurisdiction, "KE");
+        assert_eq!(p.schema_version, PROFILE_SCHEMA_VERSION);
+        assert!(p.storage.allowed_regions.iter().any(|r| r == "KE"));
+        assert!(p.storage.enforce_residency);
+        assert_eq!(p.consent.workflow, ConsentWorkflow::GdprGranular);
+        assert!(!p.encryption.required_field_categories.is_empty());
+        assert!(!p.audit.mandatory_events.is_empty());
+        assert!(!p.regulatory.annex_requirements.is_empty());
+        assert!(p.retention.default_retention_days >= 7300);
+    }
+
+    #[test]
+    fn conforming_kenya_config_starts() {
+        let p = kenya_dpa();
+        let mut runtime = conforming_runtime(&p);
+        runtime.key_management.provider = Some("customer-hsm-ke".into());
+        assert!(validate_startup(&p, &runtime).is_ok());
+    }
+
+    #[test]
+    fn refuses_non_ke_storage_region() {
+        let p = kenya_dpa();
+        let mut runtime = conforming_runtime(&p);
+        runtime.storage_region = "eu-central-1".into();
+        let err = validate_startup(&p, &runtime).expect_err("must refuse non-KE storage");
+        match err {
+            ProfileError::StartupRefused { profile, reason } => {
+                assert_eq!(profile, "kenya-dpa");
+                assert!(
+                    reason.contains("storage_region"),
+                    "reason should mention storage_region: {reason}"
+                );
+                assert!(
+                    reason.contains("EU-CENTRAL-1") || reason.contains("eu-central-1"),
+                    "reason should mention the bad region: {reason}"
+                );
+            }
+            other => panic!("expected StartupRefused, got {other:?}"),
+        }
+    }
 }

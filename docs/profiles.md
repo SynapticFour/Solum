@@ -18,9 +18,21 @@ Profiles live in [`config/profiles/`](../config/profiles/). Each file is a juris
 | File | Status |
 |------|--------|
 | `eu-ehds.toml` | Present — EU EHDS Annex II orientation |
-| `kenya-dpa.toml` | Planned |
+| `kenya-dpa.toml` | Present (draft — pending legal review, see regulatory.notes) — Kenya DPA 2019 + Digital Health Act 2023 |
 | `nigeria-ndpa.toml` | Planned |
 | `south-africa-popia.toml` | Planned |
+
+### Kenya draft
+
+`kenya-dpa.toml` is a **draft** profile (not production-ready). Open legal-review items are recorded in that file’s `regulatory.notes` and in the header `STATUS: DRAFT` comment, including:
+
+- retention periods (7300 days / Digital Health Act s.25 vs DPA s.39 for private deployments)
+- audit-log retention (no ODPC-specified figure found)
+- `required_purposes` catalogue (guidance-directed, not a statutory list)
+- cross-border transfer basis (KE primary residency only; DPA Part VI / DHA s.47 not modelled)
+- Digital Health Act serving-copy / national Health Data Bank obligations (outside current schema)
+
+Do not use this profile for a real deployment until those items are closed.
 
 Adding a jurisdiction: copy an existing TOML, adjust fields, drop it in the directory. `load_profiles_dir` picks up every `*.toml` without a code change (unless the schema itself is extended).
 

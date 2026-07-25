@@ -1,0 +1,128 @@
+# Solum jurisdiction profile — Kenya Data Protection Act 2019 + Digital Health Act 2023
+#
+# Primary legal anchors: DPA 2019 (sensitive personal data / health; consent;
+# cross-border transfer; strategic-interest localisation) and Digital Health
+# Act 2023 (integrated health information system retention, consent to process
+# sensitive health data, health-tourism disclosure limits). Supervisory
+# authority for the DPA: Office of the Data Protection Commissioner (ODPC).
+#
+# Same schema_version as eu-ehds.toml — data-only extension.
+#
+# STATUS: DRAFT — not production-ready. See regulatory.notes below and
+# docs/profiles.md "Kenya draft" section for open legal-review items
+# (retention periods, required_purposes catalogue, cross-border transfer
+# basis) before using this profile for a real deployment.
+
+schema_version = 1
+
+[meta]
+profile = "kenya-dpa"
+jurisdiction = "KE"
+description = "Kenya DPA 2019 + Digital Health Act 2023 compliance posture for clinical electronic health data (sensitive personal data; KE primary residency)"
+references = [
+    "Data Protection Act, 2019 (Kenya) — Act No. 24 of 2019",
+    "Data Protection (General) Regulations, 2021",
+    "Digital Health Act, 2023 (Kenya) — Act No. 15 of 2023",
+    "ODPC Guidance Note on the Processing of Health Data (2024)",
+    "ODPC Guidance Note on Cross-border Data Transfers (2026)",
+]
+
+[encryption]
+# Clinical field categories (same clinical set as eu-ehds; not jurisdiction-specific).
+required_field_categories = [
+    "patient_identifier",
+    "patient_summary",
+    "e_prescription",
+    "e_dispensation",
+    "medical_images",
+    "medical_image_reports",
+    "laboratory_results",
+    "discharge_reports",
+    "clinical_notes",
+    "consent_record",
+]
+allowed_key_custody = ["customer_held"]
+
+[audit]
+# DPA security obligations + Digital Health Act s.24 audit-trail expectation.
+mandatory_events = [
+    "access.granted",
+    "access.denied",
+    "data.read",
+    "data.export",
+    "data.receive_eehrxf",
+    "consent.granted",
+    "consent.revoked",
+    "identity.authenticated",
+    "key.use",
+    "residency.transfer_attempt",
+]
+helios_export_prepared = true
+
+[retention]
+# Digital Health Act 2023 s.25(1): data held in the comprehensive integrated
+# health information system — minimum twenty years. Used here as the Solum
+# clinical floor for KE deployments that align with that system posture.
+# DPA 2019 s.39: retain only as reasonably necessary unless a longer lawful
+# basis applies (see regulatory.notes for operator-specific caveats).
+default_retention_days = 7300          # 20 years
+audit_log_retention_days = 7300        # match clinical floor pending sector guidance
+
+[retention.category_overrides_days]
+consent_record = 7300
+access_log = 7300
+laboratory_results = 7300
+
+[storage]
+# Conservative primary residency: Kenya only.
+# Rationale: (1) DPA s.50 / General Regulations reg.26 treat provision of
+# primary or secondary health care in-country as a strategic-interest
+# processing purpose that requires processing on a Kenyan server/data centre
+# or at least one serving copy in Kenya; (2) Digital Health Act 2023 s.47
+# narrowly frames disclosure of personal health information to persons
+# outside Kenya (health tourism). Cross-border transfer under DPA Part VI
+# (safeguards / consent / derogations) remains possible for non-primary
+# pathways and must be documented outside Solum — not encoded as an allowed
+# primary region here. EAC-wide primary storage is NOT listed (no clear
+# statutory adequacy / free-circulation basis found for this profile).
+allowed_regions = ["KE"]
+enforce_residency = true
+
+[consent]
+# DPA 2019: consent must be express, free, specific, informed, and purpose-
+# limited, with withdrawal (ss.2, 30–32). ODPC Health Data Guidance mirrors
+# GDPR-style granular consent. Workflow id `gdpr_granular` is the closest
+# existing enum variant — not an EU-law claim.
+workflow = "gdpr_granular"
+required_purposes = [
+    "care_provision",
+    "emergency_access",
+    "research",
+    "public_health",
+    "quality_improvement",
+    "health_insurance",
+]
+
+[regulatory]
+annex_requirements = [
+    "DPA 2019 s.25 — Principles of data protection (incl. purpose limitation; transfer only with safeguards or consent)",
+    "DPA 2019 ss.30–32 — Lawful processing and conditions of consent (purpose-specific; withdrawable)",
+    "DPA 2019 ss.44–46 — Sensitive personal data; health data processing by/under healthcare provider or professional secrecy",
+    "DPA 2019 ss.48–49 — Cross-border transfer; sensitive data transfer requires consent + appropriate safeguards",
+    "DPA 2019 s.50 — Localisation for strategic interests of the State (incl. primary/secondary health care per General Regulations)",
+    "Digital Health Act 2023 s.24 — Security, privacy and confidentiality (authN, RBAC, audit trails, encrypted backup)",
+    "Digital Health Act 2023 s.25 — Retention minimum twenty years for data held in the integrated health information system",
+    "Digital Health Act 2023 ss.31–33 — Consent to process sensitive personal data; withdrawal; safeguards",
+    "Digital Health Act 2023 ss.46–47 — Health tourism transfers / disclosure of personal health information outside Kenya",
+]
+notes = [
+    "Supervisory authority (DPA): Office of the Data Protection Commissioner (ODPC), https://www.odpc.go.ke/",
+    "Solum is a compliance layer for clinical data — not a medical device by default.",
+    "Features that interpret clinical data for diagnosis/therapy support require an MDCG-style boundary review (see CONTRIBUTING.md).",
+    "Genomic / -omic exchange remains Ferrum's domain; Solum does not re-implement GA4GH.",
+    "Retention periods (7300 days) follow Digital Health Act s.25 for the integrated system; for standalone private deployments outside that system, DPA s.39 basis is an assumption pending legal review.",
+    "Audit-log retention (7300 days) has no ODPC-specified figure found; aligned to clinical retention floor as a conservative assumption.",
+    "required_purposes (research, public_health, health_insurance) follow ODPC health guidance direction, not a codified statutory list — pending legal review.",
+    "Cross-border transfer: this profile enforces KE-only primary residency (enforce_residency = true, allowed_regions = ['KE']). DPA Part VI safeguards-based transfer and Digital Health Act s.47 'health tourism' pathway are NOT modelled — schema currently lacks a transfer-basis concept beyond primary residency. Do not rely on this profile to permit or forbid cross-border transfers; that requires a schema extension (tracked separately, not in this profile).",
+    "Digital Health Act 'serving copy' / national Health Data Bank submission obligations are not represented in this schema — operator responsibility outside Solum's current scope.",
+]
