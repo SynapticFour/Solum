@@ -1,15 +1,28 @@
-//! FHIR R4/R5 adapter surface for Solum (stage 1).
+//! FHIR R4 adapter surface for Solum (stage 1).
 //!
-//! Placeholder crate: wire HL7 FHIR resources into jurisdiction-aware
-//! encryption and audit policies. No clinical interpretation logic here —
-//! see CONTRIBUTING.md (MDCG boundary).
+//! Stage-1 binding starts with a minimal HL7 International Patient Summary
+//! (IPS)–oriented [`PatientSummary`] document unit, encryptable as field
+//! category `patient_summary` via Crypt4GH. This is not a full FHIR client /
+//! validator and performs no clinical interpretation — see CONTRIBUTING.md
+//! (MDCG boundary).
 
 #![forbid(unsafe_code)]
 
-/// Stage marker for roadmap / capability reporting.
-pub const STAGE: &str = "1-scaffold";
+mod patient_summary;
 
-/// Placeholder handle for a future FHIR client / validator binding.
+pub use patient_summary::{
+    decrypt_patient_summary, encrypt_patient_summary, to_fhir_bundle, AllergyEntry, FhirError,
+    HumanName, Identifier, MedicationEntry, PatientInfo, PatientSummary, ProblemEntry,
+    PATIENT_SUMMARY_CATEGORY,
+};
+
+/// Stage marker for roadmap / capability reporting.
+///
+/// `1-patient-summary` = IPS-oriented Patient Summary model + Bundle export +
+/// Crypt4GH encrypt/decrypt helpers. Full IPS IG conformance remains open.
+pub const STAGE: &str = "1-patient-summary";
+
+/// Optional FHIR base URL handle for a future client binding.
 #[derive(Debug, Default, Clone)]
 pub struct FhirAdapter {
     pub base_url: Option<String>,
@@ -32,9 +45,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn scaffold_constructs() {
+    fn adapter_constructs_and_stage_reports_patient_summary() {
         let a = FhirAdapter::with_base_url("https://fhir.example.org/r4");
         assert!(a.base_url.is_some());
-        assert_eq!(STAGE, "1-scaffold");
+        assert_eq!(STAGE, "1-patient-summary");
     }
 }
