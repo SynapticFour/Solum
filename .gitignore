@@ -9,3 +9,5 @@
 !.env.example
 # Local Ferrum path override (see .cargo/config.toml.example)
 .cargo/config.toml
+# CLI demo key sidecars (raw private key bytes — never commit)
+*.ephemeral-keypair.json

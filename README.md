@@ -57,6 +57,53 @@ SOLUM_STORAGE_REGION=us-east-1 cargo run -p solum-core -- check --profile config
 
 `ferrum-core` is git-pinned like [Ferrum Lab Kit](https://github.com/SynapticFour/Ferrum-Lab-Kit) (`crates/crypto` + `config/ci/ferrum-revision.txt`). For a local Ferrum sibling checkout, see `.cargo/config.toml.example`.
 
+## CLI usage
+
+The `solum` binary (crate `solum-core`) exposes jurisdiction check plus Deployment-backed consent, crypto, and audit subcommands. Paths below are examples; use a dedicated working directory for stores.
+
+```bash
+PROFILE=config/profiles/eu-ehds.toml
+AUDIT=/tmp/solum-demo/audit.jsonl
+CONSENT=/tmp/solum-demo/consent.jsonl
+mkdir -p /tmp/solum-demo
+
+# 1. Profile / runtime conformance (unchanged)
+cargo run -p solum-core -- check --profile "$PROFILE"
+
+# 2–4. Consent
+cargo run -p solum-core -- consent grant \
+  --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
+  --subject patient/42 --purpose care_provision --actor practitioner/7 \
+  --scope patient_summary
+cargo run -p solum-core -- consent status \
+  --profile "$PROFILE" --consent-store "$CONSENT" \
+  --subject patient/42 --purpose care_provision
+# → granted | revoked | unknown  (no --audit required; read-only)
+cargo run -p solum-core -- consent revoke \
+  --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
+  --subject patient/42 --purpose care_provision --actor patient/42
+
+# 5–6. Field encrypt / decrypt (demo keys only)
+echo 'demo-summary' > /tmp/solum-demo/plain.txt
+cargo run -p solum-core -- crypto encrypt \
+  --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
+  --category patient_summary --key-ref ephemeral/demo-1 --actor practitioner/7 \
+  --in /tmp/solum-demo/plain.txt --out /tmp/solum-demo/field.json
+cargo run -p solum-core -- crypto decrypt \
+  --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
+  --key-ref ephemeral/demo-1 --actor practitioner/7 \
+  --in /tmp/solum-demo/field.json --out /tmp/solum-demo/plain-out.txt
+
+# 7–8. Audit
+cargo run -p solum-core -- audit export --audit "$AUDIT" --out /tmp/solum-demo/helios.json
+cargo run -p solum-core -- audit verify --audit "$AUDIT"
+# → ok
+```
+
+> **⚠ EphemeralTestKeyProvider (crypto subcommands)**
+> Crypto encrypt/decrypt print and rely on a **demo** key path: keys are **not** suitable for real patient data, and production key custody (CustomerHeld / HSM-backed) is **not** yet wired into the CLI. Encrypt writes a sibling `*.ephemeral-keypair.json` beside `--out` so local decrypt can round-trip across process restarts; that sidecar **contains raw private key bytes in plaintext** (0600 permissions on Unix, no equivalent protection on Windows) — demo-only, not an HSM.
+
+
 ## Jurisdiction profiles
 
 Initial profile: [`config/profiles/eu-ehds.toml`](config/profiles/eu-ehds.toml) (EHDS Annex II–oriented). Further profiles (Kenya, Nigeria, South Africa, …) are data files — no code change required. Startup **refuses** to run when runtime storage, key custody, audit, or consent contradicts the active profile.

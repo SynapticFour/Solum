@@ -276,6 +276,36 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
     }
 }
 
+/// Current consent decision for CLI / read-only callers: `granted`, `revoked`,
+/// or `unknown` (no history for that pair).
+///
+/// # Design decision (`solum consent status` — no `--audit` path)
+///
+/// [`Deployment::open`] requires an audit path because grant/revoke always
+/// co-write audit events. Status is a pure consent-store read and must not
+/// force operators to invent a throwaway audit file. This helper therefore
+/// validates the profile via [`start_with_profile`], opens
+/// [`solum_consent::ConsentStore`] alone, and maps
+/// [`solum_consent::ConsentStore::status`] — without constructing a
+/// [`Deployment`] or touching the audit log. Mutating consent commands still
+/// go through [`Deployment::open`].
+pub fn query_consent_status(
+    profile_path: impl AsRef<Path>,
+    runtime: &RuntimeConfig,
+    consent_path: impl AsRef<Path>,
+    subject_id: &str,
+    purpose: &str,
+) -> Result<&'static str, SolumError> {
+    let _profile = start_with_profile(profile_path, runtime)?;
+    let store = solum_consent::ConsentStore::open(consent_path)
+        .map_err(|e| SolumError::Message(format!("consent store: {e}")))?;
+    Ok(match store.status(subject_id, purpose) {
+        Some(solum_consent::ConsentStatus::Granted) => "granted",
+        Some(solum_consent::ConsentStatus::Revoked) => "revoked",
+        None => "unknown",
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
