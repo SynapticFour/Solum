@@ -1,11 +1,11 @@
-# Stage 1 baseline (transfer)
+# Stage 1 baseline (FHIR Patient Summary)
 
 | | |
 |---|---|
 | **Date** | 2026-07-26 |
-| **Verified commit** | `a4b27c417616e4c12a97253e1c21ada29c9b4c7b` |
-| **Tag** | `stage1-baseline-transfer-2026-07-26` |
-| **Supersedes** | `stage1-baseline-2026-07-25` (`f0a4d22`) |
+| **Verified commit** | `32fd0f4b225a91b1f121ed0ca8f9c7d1395aa2fd` |
+| **Tag** | `stage1-baseline-fhir-2026-07-26` |
+| **Supersedes** | `stage1-baseline-transfer-2026-07-26` (`a4b27c4`) |
 
 This document freezes the Solum workspace state that passed local `./scripts/verify.sh` and green GitHub Actions (CI, CodeQL, Secret Scan, Quality Gate) on that commit. Descriptions below are taken from crate `lib.rs` module docs, profile TOML, `deny.toml`, `.gitleaks.toml`, and `docs/` — not from aspirational product copy.
 
@@ -18,23 +18,18 @@ This document freezes the Solum workspace state that passed local `./scripts/ver
 | `solum-crypto` | implementiert | 8 | Crypt4GH envelopes for clinical field categories; customer-held key providers; same format as Ferrum genomic objects. |
 | `solum-audit` | implementiert | 6 | Audit event recording and HELIOS-oriented evidence export hooks; in-memory `AuditLog` plus durable hash-chained `FileAuditStore`. |
 | `solum-consent` | implementiert | 7 | Consent and access-rights engine: grant/revoke per `(subject, purpose)` with full history for EEHRxF-style individual rights. |
-| `solum-fhir` | Scaffold | 1 | FHIR R4/R5 adapter surface (stage 1); placeholder handle for a future FHIR client / validator binding (`STAGE = "1-scaffold"`). |
+| `solum-fhir` | implementiert | 6 | IPS-oriented Patient Summary: FHIR R4 Bundle export inkl. bdl-9/bdl-10-Invarianten, Composition.author, Crypt4GH encrypt/decrypt über `solum-crypto` (`STAGE = "1-patient-summary"`). |
 | `solum-openehr` | Scaffold | 1 | openEHR adapter surface (stage 2 scaffold); intentionally minimal while stage 1 focuses on FHIR (`STAGE = "2-scaffold"`). |
 
-Total lib unit tests in this baseline run: **43** (plus empty doc-test suites).
+Total lib unit tests in this baseline run: **48** (plus empty doc-test suites).
 
-## Seit `stage1-baseline-2026-07-25` hinzugekommen
+## Seit `stage1-baseline-transfer-2026-07-26` hinzugekommen
 
-- **Kenya DPA/DHA jurisdiction profile** (`config/profiles/kenya-dpa.toml`) — **draft, pending legal review** (see that file’s `STATUS: DRAFT` header and `regulatory.notes`). Loaded and validated like `eu-ehds`; not production-ready.
-- **`TransferPolicy`** on `JurisdictionProfile` (additive, `#[serde(default)]`, restrictive-by-default):
-  - `TransferMechanism`: `safeguards_based`, `hdab_mediated`, `statutory_exception`
-  - `validate_transfer(profile, mechanism, destination)` — runtime request check; **not** part of `validate_startup`
-  - Applied in `eu-ehds.toml`: `hdab_mediated` → destinations `EU` / `EEA` (EHDS secondary use via HDABs; MyHealth@EU primary use stays under `[storage]`)
-  - Applied in `kenya-dpa.toml`: `safeguards_based` + `statutory_exception`, `requires_serving_copy = true`, `permitted_destinations = []` (empty until ODPC case-by-case guidance)
+- **`solum-fhir`:** erste echte FHIR-Resource-Bindung (Patient Summary, IPS-orientiert), Bundle-Export, Verschlüsselung des Solum-Modells (nicht des Bundle-JSON — Bundle ist deterministisch daraus ableitbar), Cross-Profile-Test dass `patient_summary` in `eu-ehds.toml` UND `kenya-dpa.toml` als `required_field_category` geführt wird.
 
 ## Verifizierter Zustand
 
-All six `./scripts/verify.sh` sections passed on 2026-07-26 against commit `a4b27c417616e4c12a97253e1c21ada29c9b4c7b` (exit 0). Full log was 2344 lines; section 5 emitted a long series of `cargo deny` `warning[duplicate]` trees (not failures) that are omitted below.
+All six `./scripts/verify.sh` sections passed on 2026-07-26 against commit `32fd0f4b225a91b1f121ed0ca8f9c7d1395aa2fd` (exit 0). Section 5 emitted a long series of `cargo deny` `warning[duplicate]` trees (not failures) that are omitted below.
 
 ```
 == 0. Sanity: ferrum-core pin consistency ==
@@ -48,7 +43,7 @@ solum-audit: 6 passed
 solum-consent: 7 passed
 solum-core: 8 passed
 solum-crypto: 8 passed
-solum-fhir: 1 passed
+solum-fhir: 6 passed
 solum-openehr: 1 passed
 solum-profiles: 12 passed
 == 5. cargo-deny (licenses + sources + bans + advisories) ==
@@ -69,10 +64,10 @@ All baseline checks passed.
 
 | Workflow | Run ID | URL |
 |----------|--------|-----|
-| CI | 30186146861 | https://github.com/SynapticFour/Solum/actions/runs/30186146861 |
-| CodeQL | 30186146868 | https://github.com/SynapticFour/Solum/actions/runs/30186146868 |
-| Secret Scan | 30186146877 | https://github.com/SynapticFour/Solum/actions/runs/30186146877 |
-| Quality Gate | 30186146874 | https://github.com/SynapticFour/Solum/actions/runs/30186146874 |
+| CI | 30208129857 | https://github.com/SynapticFour/Solum/actions/runs/30208129857 |
+| CodeQL | 30208129861 | https://github.com/SynapticFour/Solum/actions/runs/30208129861 |
+| Secret Scan | 30208129863 | https://github.com/SynapticFour/Solum/actions/runs/30208129863 |
+| Quality Gate | 30208129868 | https://github.com/SynapticFour/Solum/actions/runs/30208129868 |
 
 ## Bewusst akzeptierte Risiken
 
@@ -106,6 +101,17 @@ From [`.gitleaks.toml`](../.gitleaks.toml) (`private-key` rule allowlist, `condi
 
 `permitted_destinations = []` in `kenya-dpa.toml`. `validate_transfer` therefore **rejects every concrete destination** even when the mechanism is listed — until ODPC case-by-case guidance fills the list. Do not treat a listed mechanism as an executable transfer permit.
 
+### IPS / FHIR structural assumptions (`solum-fhir` Patient Summary)
+
+From `crates/fhir/src/patient_summary.rs` (`ANNAHME` markers). These are stage-1 structural choices, **not** claimed IPS IG conformance — fachlich durch FHIR/IPS-erfahrene Person zu prüfen, bevor production-ready:
+
+1. **Composition.type LOINC** `60591-5` (“Patient summary Document”) as IPS document type code.
+2. **Section LOINCs:** Allergies `48765-2`, Medications `10160-0`, Problems `11450-4`.
+3. **Empty required sections** use FHIR `emptyReason` (`nilknown`) rather than IPS-preferred “known absent” / “not known” clinical resources.
+4. **Medications** emit `MedicationStatement` only (no `MedicationRequest` path in this binding).
+5. **No terminology binding** to IPS value sets (e.g. SNOMED) — clinical codes are display/text only.
+6. **`author_display`** maps to Composition.author as a display-only `Reference` (no `reference` URL / Organization entry).
+
 ## Explizit außerhalb dieser Baseline
 
 Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md), [helios.md](helios.md), [architecture.md](architecture.md), and scaffold markers in crate docs:
@@ -113,25 +119,26 @@ Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFI
 | Item | Source |
 |------|--------|
 | Remaining jurisdiction profiles (`nigeria-ndpa.toml`, `south-africa-popia.toml`) | `config/profiles/README.md`, `docs/profiles.md` — still **Planned** (`kenya-dpa.toml` is draft-Present, not listed here) |
-| `solum-fhir`: real HL7 FHIR resource / client / validator binding | `crates/fhir/src/lib.rs` — `Placeholder crate`, `STAGE = "1-scaffold"` |
+| `solum-fhir`: Vollständige IPS IG-Konformität, Terminologie-Bindung (SNOMED/LOINC-ValueSets), MedicationRequest-Unterstützung, FHIR-Validator-Integration bleiben offen | `crates/fhir/src/lib.rs` — `STAGE = "1-patient-summary"`; `patient_summary.rs` module docs |
 | `solum-openehr`: composition / archetype / CDR / AQL binding | `crates/openehr/src/lib.rs` — stage 2 scaffold; `docs/roadmap.md` stage 2 |
-| FHIR / IHE EEHRxF priority-category depth (patient summary, labs, discharge, imaging, prescriptions) | `docs/roadmap.md` stage 2 |
+| FHIR / IHE EEHRxF priority-category depth beyond minimal Patient Summary (labs, discharge, imaging, prescriptions) | `docs/roadmap.md` stage 2 |
 | SaaS operating model | `docs/roadmap.md` stage 2; `docs/architecture.md` / PRODUCT-DEFINITION — on-premise first |
 | Live HELIOS CLI/API signing integration | `docs/helios.md` — export envelope prepared; wiring is open |
 | Multi-writer durable audit backend | `crates/audit/src/store.rs` — single-writer assumption for stage 1; multi-writer called stage-2 scope |
 | Clinical interpretation / diagnosis / therapy support | Out of scope both stages — `docs/roadmap.md`, CONTRIBUTING MDCG boundary |
 | Kenya production-ready legal closure | Draft profile inside baseline; see “Bewusst akzeptierte Risiken” — not a closed jurisdiction package |
+| Wire Patient Summary encrypt/decrypt into `Deployment` / product CLI surface | Stage-1 binding lives in `solum-fhir`; core orchestration wiring remains open |
 
-Note: `docs/roadmap.md` stage-1 bullet still says “actual field-level encryption still open”; that sentence remains **stale** — Crypt4GH field encrypt/decrypt is inside this baseline (and the prior one).
+Note: `docs/roadmap.md` stage-1 bullet still says “actual field-level encryption still open”; that sentence remains **stale** — Crypt4GH field encrypt/decrypt is inside this baseline (and prior ones).
 
 ## Wie diese Baseline reproduziert wird
 
 ```bash
-git fetch origin tag stage1-baseline-transfer-2026-07-26
-git checkout stage1-baseline-transfer-2026-07-26
+git fetch origin tag stage1-baseline-fhir-2026-07-26
+git checkout stage1-baseline-fhir-2026-07-26
 # Prerequisites: Rust 1.91.1 (rust-toolchain.toml) and libsodium
 # (e.g. brew install libsodium / apt install libsodium-dev)
 ./scripts/verify.sh
 ```
 
-Expect all six sections to pass. This document may live on `main` at or after the tag; the tag itself points at the verified code commit listed in the header. Prior freeze: `stage1-baseline-2026-07-25`.
+Expect all six sections to pass. This document may live on `main` at or after the tag; the tag itself points at the verified code commit listed in the header. Prior freezes: `stage1-baseline-transfer-2026-07-26`, `stage1-baseline-2026-07-25`.
