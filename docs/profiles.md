@@ -11,6 +11,7 @@ Profiles live in [`config/profiles/`](../config/profiles/). Each file is a juris
 | `retention` | Default / audit / per-category retention (days) |
 | `storage` | Allowed regions + residency enforcement |
 | `consent` | Workflow variant + required purposes |
+| `transfer` | Permitted transfer mechanisms + destinations + serving-copy flag |
 | `regulatory` | Annex / statute references (documentation aids) |
 
 ## Present and planned files
@@ -29,12 +30,26 @@ Profiles live in [`config/profiles/`](../config/profiles/). Each file is a juris
 - retention periods (7300 days / Digital Health Act s.25 vs DPA s.39 for private deployments)
 - audit-log retention (no ODPC-specified figure found)
 - `required_purposes` catalogue (guidance-directed, not a statutory list)
-- cross-border transfer basis (KE primary residency only; DPA Part VI / DHA s.47 not modelled)
-- Digital Health Act serving-copy / national Health Data Bank obligations (outside current schema)
+- cross-border transfer **partially** modelled via `[transfer]` (mechanisms + `requires_serving_copy`); `permitted_destinations` still empty pending ODPC case-by-case guidance
+- national Health Data Bank submission obligations remain outside Solum’s current scope
 
 Do not use this profile for a real deployment until those items are closed.
 
 Adding a jurisdiction: copy an existing TOML, adjust fields, drop it in the directory. `load_profiles_dir` picks up every `*.toml` without a code change (unless the schema itself is extended).
+
+## Transfer policy
+
+`[transfer]` is additive beside `[storage]`:
+
+| Field | Meaning |
+|-------|---------|
+| `permitted_mechanisms` | `safeguards_based`, `hdab_mediated`, and/or `statutory_exception` |
+| `permitted_destinations` | Destination labels (`EU`, `EEA`, `KE`, …); empty = not enumerable → every concrete check fails |
+| `requires_serving_copy` | Declarative flag (e.g. Kenya strategic-interest serving copy) |
+
+Missing `[transfer]` defaults to **no** mechanisms and **no** destinations (restrictive-by-default). Use `validate_transfer` for a concrete runtime request — it is **not** part of `validate_startup`.
+
+EU-internal EHDS primary-use exchange (MyHealth@EU) is residency / data-space traffic under `[storage]`, not a third-country `TransferMechanism`. EHDS secondary use via HDABs is `hdab_mediated`.
 
 ## Startup validation
 

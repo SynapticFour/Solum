@@ -31,6 +31,9 @@ pub struct JurisdictionProfile {
     pub retention: RetentionPolicy,
     pub storage: StoragePolicy,
     pub consent: ConsentPolicy,
+    /// Cross-border / secondary-use transfer rules (additive; default = none permitted).
+    #[serde(default)]
+    pub transfer: TransferPolicy,
     /// Optional Annex / regulation references for documentation and audits.
     #[serde(default)]
     pub regulatory: RegulatoryRefs,
@@ -105,6 +108,38 @@ pub struct ConsentPolicy {
     pub required_purposes: Vec<String>,
 }
 
+/// Legal / procedural basis for a concrete cross-border or secondary-use transfer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransferMechanism {
+    /// Adequacy / SCC / BCR-style safeguards (e.g. GDPR Ch. V, Kenya DPA Part VI).
+    SafeguardsBased,
+    /// Secondary-use pathway via a health data access body (HDAB-style).
+    HdabMediated,
+    /// Narrow statutory exception (e.g. Kenya Digital Health Act s.47 health tourism).
+    StatutoryException,
+}
+
+/// Declared transfer posture for a jurisdiction profile.
+///
+/// Default (missing `[transfer]` section) is restrictive: no mechanisms and no
+/// destinations are permitted. Primary residency remains under [`StoragePolicy`];
+/// this policy is for runtime transfer *requests*, not startup boot checks.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct TransferPolicy {
+    #[serde(default)]
+    pub permitted_mechanisms: Vec<TransferMechanism>,
+    /// Destination labels in the same style as [`StoragePolicy::allowed_regions`]
+    /// (e.g. `EU`, `EEA`, `KE`). Empty means destinations are not enumerable here
+    /// — every concrete destination check fails until filled.
+    #[serde(default)]
+    pub permitted_destinations: Vec<String>,
+    /// If true, a lawful transfer still requires a serving copy in an allowed
+    /// residency region (declarative flag; not checked by [`validate_startup`]).
+    #[serde(default)]
+    pub requires_serving_copy: bool,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RegulatoryRefs {
     /// e.g. EHDS Annex II section identifiers.
@@ -146,6 +181,14 @@ pub enum ProfileError {
         "startup refused: configuration contradicts jurisdiction profile '{profile}': {reason}"
     )]
     StartupRefused { profile: String, reason: String },
+    #[error(
+        "transfer not permitted: mechanism={mechanism:?}, destination={destination}: {reason}"
+    )]
+    TransferNotPermitted {
+        mechanism: TransferMechanism,
+        destination: String,
+        reason: String,
+    },
 }
 
 /// Load a jurisdiction profile from a TOML file.
@@ -247,6 +290,52 @@ pub fn validate_startup(
         return Err(refuse(format!(
             "consent workflow {:?} does not match profile requirement {:?}",
             runtime.consent_workflow, profile.consent.workflow
+        )));
+    }
+
+    Ok(())
+}
+
+/// Validate a concrete transfer request against a jurisdiction profile.
+///
+/// Succeeds only if `mechanism` is listed in
+/// [`TransferPolicy::permitted_mechanisms`] **and** `destination` matches an
+/// entry in [`TransferPolicy::permitted_destinations`] (case-insensitive).
+/// Missing `[transfer]` sections default to empty lists → every request fails
+/// (restrictive-by-default). Not part of [`validate_startup`].
+pub fn validate_transfer(
+    profile: &JurisdictionProfile,
+    mechanism: &TransferMechanism,
+    destination: &str,
+) -> Result<(), ProfileError> {
+    let refuse = |reason: String| ProfileError::TransferNotPermitted {
+        mechanism: mechanism.clone(),
+        destination: destination.to_string(),
+        reason,
+    };
+
+    if !profile
+        .transfer
+        .permitted_mechanisms
+        .iter()
+        .any(|m| m == mechanism)
+    {
+        return Err(refuse(format!(
+            "mechanism {mechanism:?} is not in permitted_mechanisms {:?}",
+            profile.transfer.permitted_mechanisms
+        )));
+    }
+
+    let dest = destination.to_uppercase();
+    let allowed: Vec<String> = profile
+        .transfer
+        .permitted_destinations
+        .iter()
+        .map(|d| d.to_uppercase())
+        .collect();
+    if !allowed.iter().any(|d| d == &dest) {
+        return Err(refuse(format!(
+            "destination '{dest}' is not in permitted_destinations {allowed:?}"
         )));
     }
 
@@ -383,6 +472,111 @@ mod tests {
                 );
             }
             other => panic!("expected StartupRefused, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_transfer_allows_permitted_mechanism_and_destination() {
+        let p = eu_ehds();
+        assert!(validate_transfer(&p, &TransferMechanism::HdabMediated, "EU").is_ok());
+        assert!(validate_transfer(&p, &TransferMechanism::HdabMediated, "eea").is_ok());
+    }
+
+    #[test]
+    fn validate_transfer_rejects_disallowed_mechanism() {
+        let p = eu_ehds();
+        let err = validate_transfer(&p, &TransferMechanism::SafeguardsBased, "EU")
+            .expect_err("must refuse safeguards_based on eu-ehds");
+        match err {
+            ProfileError::TransferNotPermitted {
+                mechanism,
+                destination,
+                reason,
+            } => {
+                assert_eq!(mechanism, TransferMechanism::SafeguardsBased);
+                assert_eq!(destination, "EU");
+                assert!(
+                    reason.contains("mechanism"),
+                    "reason should mention mechanism: {reason}"
+                );
+            }
+            other => panic!("expected TransferNotPermitted, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_transfer_rejects_disallowed_destination() {
+        let p = eu_ehds();
+        let err = validate_transfer(&p, &TransferMechanism::HdabMediated, "US")
+            .expect_err("must refuse US destination even with hdab_mediated");
+        match err {
+            ProfileError::TransferNotPermitted {
+                mechanism,
+                destination,
+                reason,
+            } => {
+                assert_eq!(mechanism, TransferMechanism::HdabMediated);
+                assert_eq!(destination, "US");
+                assert!(
+                    reason.contains("destination"),
+                    "reason should mention destination: {reason}"
+                );
+            }
+            other => panic!("expected TransferNotPermitted, got {other:?}"),
+        }
+    }
+
+    /// Minimal valid profile TOML with no `[transfer]` section — proves additive default.
+    const PROFILE_WITHOUT_TRANSFER: &str = r#"
+schema_version = 1
+
+[meta]
+profile = "fixture-no-transfer"
+jurisdiction = "XX"
+description = "Fixture without transfer section"
+references = []
+
+[encryption]
+required_field_categories = ["patient_identifier"]
+allowed_key_custody = ["customer_held"]
+
+[audit]
+mandatory_events = ["access.granted"]
+helios_export_prepared = false
+
+[retention]
+default_retention_days = 365
+audit_log_retention_days = 365
+
+[storage]
+allowed_regions = ["XX"]
+enforce_residency = true
+
+[consent]
+workflow = "gdpr_granular"
+required_purposes = ["care_provision"]
+"#;
+
+    #[test]
+    fn profile_without_transfer_section_loads_and_rejects_all_mechanisms() {
+        let p = parse_profile_str(PROFILE_WITHOUT_TRANSFER, "fixture-no-transfer.toml")
+            .expect("profile without [transfer] must still parse");
+        assert_eq!(p.transfer, TransferPolicy::default());
+        assert!(p.transfer.permitted_mechanisms.is_empty());
+        assert!(p.transfer.permitted_destinations.is_empty());
+        assert!(!p.transfer.requires_serving_copy);
+
+        for mechanism in [
+            TransferMechanism::SafeguardsBased,
+            TransferMechanism::HdabMediated,
+            TransferMechanism::StatutoryException,
+        ] {
+            let err = validate_transfer(&p, &mechanism, "XX")
+                .expect_err("default transfer policy must refuse every mechanism");
+            assert!(
+                matches!(err, ProfileError::TransferNotPermitted { .. }),
+                "expected TransferNotPermitted for {mechanism:?}, got {err:?}"
+            );
         }
     }
 }

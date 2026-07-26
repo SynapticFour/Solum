@@ -77,6 +77,15 @@ required_purposes = [
     "quality_improvement",
 ]
 
+[transfer]
+# EHDS secondary use via Health Data Access Bodies (HealthData@EU).
+# Primary-use cross-border exchange (MyHealth@EU) is EU/EEA internal-market
+# data-space traffic — not a third-country TransferMechanism; residency stays
+# under [storage]. See regulatory.notes.
+permitted_mechanisms = ["hdab_mediated"]
+permitted_destinations = ["EU", "EEA"]
+requires_serving_copy = false
+
 [regulatory]
 annex_requirements = [
     "II.1 — General requirements (intended performance, patient safety, rights of natural persons)",
@@ -87,4 +96,5 @@ notes = [
     "Solum is a compliance layer for clinical data — not a medical device by default.",
     "Features that interpret clinical data for diagnosis/therapy support require an MDCG boundary review (see CONTRIBUTING.md).",
     "Genomic / -omic exchange remains Ferrum's domain; Solum does not re-implement GA4GH.",
+    "EHDS primary-use cross-border exchange (MyHealth@EU) is EU/EEA internal-market data-space traffic, not a third-country transfer. It is enforced via storage.allowed_regions / enforce_residency, not via TransferMechanism. [transfer] models HDAB-mediated secondary use only (hdab_mediated). GDPR Ch. V safeguards_based is intentionally omitted here — third-country transfers remain outside this profile's enumerated mechanisms until separately scoped.",
 ]
