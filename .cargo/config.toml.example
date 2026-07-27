@@ -7,3 +7,4 @@
 
 [patch."https://github.com/SynapticFour/Ferrum.git"]
 ferrum-core = { path = "../Ferrum/crates/ferrum-core" }
+ferrum-storage = { path = "../Ferrum/crates/ferrum-storage" }

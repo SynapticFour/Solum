@@ -1,9 +1,13 @@
-//! Mode B — Ferrum-companion reference (Sprint 1).
+//! Mode B — Ferrum-companion reference (Sprint 1 + optional Sprint 4 storage).
 //!
 //! Proves Crypt4GH format compatibility between a Ferrum-style direct
 //! `crypt4gh` encrypt path and Solum's `encrypt_field` for the same key
 //! material, plus a zero-logic smoke that `ferrum_core::auth::AuthClaims`
 //! is constructible at the pinned revision.
+//!
+//! With `--features storage-backend`: also proves
+//! `Deployment::encrypt_field_and_store` / `read_and_decrypt_field` against
+//! Ferrum `LocalStorage` (async API; runtime only in this binary).
 
 use std::collections::HashSet;
 use std::io::Cursor;
@@ -19,8 +23,9 @@ use solum_crypto::{
 };
 use solum_profiles::load_profile;
 
+#[cfg(not(feature = "storage-backend"))]
 fn main() -> ExitCode {
-    match run() {
+    match run_sync() {
         Ok(()) => {
             println!("ok: ferrum-companion reference deployment (Mode B) passed");
             ExitCode::SUCCESS
@@ -32,9 +37,87 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> Result<(), String> {
+#[cfg(feature = "storage-backend")]
+#[tokio::main]
+async fn main() -> ExitCode {
+    match run_async().await {
+        Ok(()) => {
+            println!("ok: ferrum-companion reference deployment (Mode B) passed");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("fatal: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run_sync() -> Result<(), String> {
     smoke_auth_claims()?;
     crypt4gh_format_interop()?;
+    Ok(())
+}
+
+#[cfg(feature = "storage-backend")]
+async fn run_async() -> Result<(), String> {
+    run_sync()?;
+    storage_round_trip().await?;
+    Ok(())
+}
+
+/// Sprint 4: encrypt → Ferrum LocalStorage → read → decrypt via Deployment.
+#[cfg(feature = "storage-backend")]
+async fn storage_round_trip() -> Result<(), String> {
+    use ferrum_storage::LocalStorage;
+    use solum_core::crypto::EphemeralTestKeyProvider;
+    use solum_core::{example_eu_runtime, Deployment};
+
+    let work = tempfile::tempdir().map_err(|e| e.to_string())?;
+    let profile_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/profiles/eu-ehds.toml");
+    let key_ref = KeyRef::new("companion/storage-1");
+    let mut keys = EphemeralTestKeyProvider::new();
+    keys.generate_test_keypair(key_ref.clone())
+        .map_err(|e| e.to_string())?;
+
+    let local = LocalStorage::new(work.path().join("objects")).map_err(|e| e.to_string())?;
+    let mut deployment = Deployment::open(
+        &profile_path,
+        &example_eu_runtime(),
+        work.path().join("audit.jsonl"),
+        work.path().join("consent.jsonl"),
+        keys,
+    )
+    .map_err(|e| e.to_string())?
+    .with_storage(local);
+
+    let plain = b"patient-summary-ferrum-storage-demo";
+    let storage_key = "fields/patient_summary/companion-1.json";
+    deployment
+        .encrypt_field_and_store(
+            "patient_summary",
+            plain,
+            &key_ref,
+            "ferrum:passport:researcher@example.org",
+            storage_key,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    let out = deployment
+        .read_and_decrypt_field(
+            storage_key,
+            &key_ref,
+            "ferrum:passport:researcher@example.org",
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    if out != plain {
+        return Err("storage round-trip plaintext mismatch".into());
+    }
+
+    println!(
+        "ok: LocalStorage encrypt_field_and_store ↔ read_and_decrypt_field for patient_summary"
+    );
     Ok(())
 }
 

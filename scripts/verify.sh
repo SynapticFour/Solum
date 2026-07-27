@@ -66,11 +66,23 @@ else
 fi
 
 echo "== 7. Reference deployments =="
+# Default workspace resolve must NOT pull optional ferrum-storage (Mode A / unfeatured builds).
+if cargo tree --workspace --edges normal,build 2>/dev/null | grep -E 'ferrum-storage' >/dev/null; then
+  echo "FAIL: ferrum-storage appears in default (no --features) dependency tree"
+  exit 1
+fi
+echo "ok: default workspace tree has no ferrum-storage"
+
 # Mode A — standalone CLI against a fictional EHR/DB (no Ferrum).
 ./examples/standalone/run.sh
 # Mode B — Crypt4GH format interop + AuthClaims smoke (git-pinned ferrum-core).
 cargo run -p solum-example-ferrum-companion
 echo "ok: both reference deployments passed"
+
+echo "== 7b. Ferrum-storage backend (feature-gated) =="
+cargo test -p solum-core --features ferrum-storage-backend --lib
+cargo run -p solum-example-ferrum-companion --features storage-backend
+echo "ok: ferrum-storage-backend feature path passed"
 
 echo
 echo "All baseline checks passed."

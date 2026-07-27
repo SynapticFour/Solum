@@ -1,6 +1,6 @@
 [package]
 name = "solum-example-ferrum-companion"
-description = "Sprint-1 Mode B reference: shared Crypt4GH format with Ferrum + AuthClaims smoke"
+description = "Mode B reference: Crypt4GH interop + AuthClaims smoke; optional ferrum-storage round-trip"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -17,7 +17,23 @@ publish.workspace = true
 name = "ferrum-companion"
 path = "src/main.rs"
 
+[features]
+default = []
+# Forwards to solum-core's optional Ferrum object-storage reuse (LocalStorage).
+storage-backend = [
+    "solum-core/ferrum-storage-backend",
+    "dep:solum-core",
+    "dep:ferrum-storage",
+    "dep:tokio",
+    "dep:tempfile",
+]
+
 [dependencies]
 crypt4gh = "0.4.1"
 solum-crypto.workspace = true
 solum-profiles.workspace = true
+solum-core = { workspace = true, optional = true }
+# Same pin as crates/crypto ferrum-core / solum-core ferrum-storage-backend.
+ferrum-storage = { git = "https://github.com/SynapticFour/Ferrum.git", rev = "27a6a8e9a719fd1a171da28b20462a777f95cf65", optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
+tempfile = { workspace = true, optional = true }

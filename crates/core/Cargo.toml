@@ -12,6 +12,12 @@ publish.workspace = true
 name = "solum"
 path = "src/main.rs"
 
+[features]
+default = []
+# Optional Ferrum object-storage reuse (LocalStorage first). Default off so Mode A
+# / CLI builds never resolve ferrum-storage or tokio via this crate.
+ferrum-storage-backend = ["dep:ferrum-storage", "dep:tokio"]
+
 [dependencies]
 anyhow.workspace = true
 chrono.workspace = true
@@ -28,7 +34,12 @@ solum-openehr.workspace = true
 solum-consent.workspace = true
 # AuthClaims → SolumActor mapping; ferrum-core itself is already linked via solum-crypto.
 solum-identity = { workspace = true, features = ["ferrum-companion"] }
+# Same git pin as crates/crypto ferrum-core (config/ci/ferrum-revision.txt).
+ferrum-storage = { git = "https://github.com/SynapticFour/Ferrum.git", rev = "27a6a8e9a719fd1a171da28b20462a777f95cf65", optional = true }
+# Only io-util for AsyncReadExt in library code; callers (tests/examples) supply the runtime.
+tokio = { version = "1", optional = true, default-features = false, features = ["io-util"] }
 
 [dev-dependencies]
 assert_cmd.workspace = true
 tempfile.workspace = true
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-util"] }

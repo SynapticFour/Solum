@@ -91,6 +91,13 @@ pub struct Deployment<P: Crypt4ghKeyProvider> {
     audit: solum_audit::FileAuditStore,
     consent: solum_consent::ConsentStore,
     keys: P,
+    /// Optional Ferrum object-storage backend (feature `ferrum-storage-backend`).
+    ///
+    /// Stored as `Arc<dyn ObjectStorage>` so `Deployment` stays generic only over
+    /// the key provider: `ObjectStorage` is object-safe, and callers can pass any
+    /// concrete backend (`LocalStorage` today) without a second type parameter.
+    #[cfg(feature = "ferrum-storage-backend")]
+    storage: Option<std::sync::Arc<dyn ferrum_storage::ObjectStorage>>,
 }
 
 impl<P: Crypt4ghKeyProvider> Deployment<P> {
@@ -115,7 +122,93 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
             audit,
             consent,
             keys,
+            #[cfg(feature = "ferrum-storage-backend")]
+            storage: None,
         })
+    }
+
+    /// Attach a Ferrum [`ferrum_storage::ObjectStorage`] backend (additive).
+    ///
+    /// Uses `Arc<dyn ObjectStorage>` internally so the concrete backend type
+    /// (`LocalStorage`, later S3/OpenDAL) does not become a second generic on
+    /// [`Deployment`]. Requires feature `ferrum-storage-backend`.
+    #[cfg(feature = "ferrum-storage-backend")]
+    pub fn with_storage(mut self, storage: impl ferrum_storage::ObjectStorage + 'static) -> Self {
+        self.storage = Some(std::sync::Arc::new(storage));
+        self
+    }
+
+    /// Encrypt via the existing sync [`Self::encrypt_field`], then persist the
+    /// serialized [`EncryptedField`] with `ObjectStorage::put_bytes`.
+    ///
+    /// Async only at the storage boundary — no `block_on` inside this crate.
+    /// Requires feature `ferrum-storage-backend` and a prior [`Self::with_storage`].
+    #[cfg(feature = "ferrum-storage-backend")]
+    pub async fn encrypt_field_and_store(
+        &mut self,
+        category: &str,
+        plaintext: &[u8],
+        key_ref: &KeyRef,
+        actor: &str,
+        storage_key: &str,
+    ) -> Result<EncryptedField, SolumError> {
+        // Clone the Arc so encrypt_field can take &mut self without overlapping borrows.
+        let storage = self
+            .storage
+            .as_ref()
+            .ok_or_else(|| {
+                SolumError::Message(
+                    "encrypt_field_and_store requires Deployment::with_storage(...)".into(),
+                )
+            })?
+            .clone();
+        let field = self.encrypt_field(category, plaintext, key_ref, actor)?;
+        let bytes = serde_json::to_vec(&field)
+            .map_err(|e| SolumError::Message(format!("serialize EncryptedField: {e}")))?;
+        storage
+            .put_bytes(storage_key, &bytes)
+            .await
+            .map_err(|e| SolumError::Message(format!("storage put_bytes: {e}")))?;
+        Ok(field)
+    }
+
+    /// Load a serialized [`EncryptedField`] via `ObjectStorage::get`, then decrypt
+    /// with the existing sync [`Self::decrypt_field`].
+    ///
+    /// Takes `&mut self` because [`Self::decrypt_field`] co-writes the audit event
+    /// (same as the non-storage path). Requires feature `ferrum-storage-backend`.
+    #[cfg(feature = "ferrum-storage-backend")]
+    pub async fn read_and_decrypt_field(
+        &mut self,
+        storage_key: &str,
+        key_ref: &KeyRef,
+        actor: &str,
+    ) -> Result<Vec<u8>, SolumError> {
+        use tokio::io::AsyncReadExt;
+
+        // Clone the Arc; drop the reader before decrypt_field (&mut self + audit).
+        let storage = self
+            .storage
+            .as_ref()
+            .ok_or_else(|| {
+                SolumError::Message(
+                    "read_and_decrypt_field requires Deployment::with_storage(...)".into(),
+                )
+            })?
+            .clone();
+        let mut reader = storage
+            .get(storage_key)
+            .await
+            .map_err(|e| SolumError::Message(format!("storage get: {e}")))?;
+        let mut bytes = Vec::new();
+        reader
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|e| SolumError::Message(format!("storage read: {e}")))?;
+        drop(reader);
+        let field: EncryptedField = serde_json::from_slice(&bytes)
+            .map_err(|e| SolumError::Message(format!("deserialize EncryptedField: {e}")))?;
+        self.decrypt_field(&field, key_ref, actor)
     }
 
     /// Grant consent for `(subject_id, purpose)` — rejecting purposes the
@@ -575,6 +668,41 @@ mod tests {
         assert_eq!(a.actor, "ferrum:passport:researcher@example.org");
         assert_eq!(b.actor, "standalone:practitioner/7");
         assert_ne!(a.actor, b.actor);
+        assert!(deployment.verify_audit_chain().is_ok());
+    }
+
+    #[cfg(feature = "ferrum-storage-backend")]
+    #[tokio::test]
+    async fn encrypt_field_and_store_round_trips_via_local_storage() {
+        let dir = tempfile::tempdir().unwrap();
+        let (deployment, key_ref) = open_deployment(&dir);
+        let local = ferrum_storage::LocalStorage::new(dir.path().join("objects"))
+            .expect("LocalStorage::new");
+        let mut deployment = deployment.with_storage(local);
+
+        let plain = b"patient-summary-storage-demo";
+        let storage_key = "fields/patient_summary/demo-1.json";
+        let enc = deployment
+            .encrypt_field_and_store(
+                "patient_summary",
+                plain,
+                &key_ref,
+                "practitioner/7",
+                storage_key,
+            )
+            .await
+            .expect("encrypt_field_and_store");
+        assert_eq!(enc.category, "patient_summary");
+
+        let out = deployment
+            .read_and_decrypt_field(storage_key, &key_ref, "practitioner/7")
+            .await
+            .expect("read_and_decrypt_field");
+        assert_eq!(out, plain);
+
+        let events = deployment.audit_events().unwrap();
+        assert!(events.iter().any(|r| r.event.event_type == "data.encrypt"));
+        assert!(events.iter().any(|r| r.event.event_type == "data.decrypt"));
         assert!(deployment.verify_audit_chain().is_ok());
     }
 }
