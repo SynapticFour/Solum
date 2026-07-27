@@ -1,0 +1,23 @@
+[package]
+name = "solum-example-ferrum-companion"
+description = "Sprint-1 Mode B reference: shared Crypt4GH format with Ferrum + AuthClaims smoke"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+# Choice: dedicated workspace member under examples/ferrum-companion/ (not
+# `cargo run --example` on solum-core). Keeps the binary out of the product
+# crate, mirrors the roadmap path examples/ferrum-companion/, and lets
+# verify.sh invoke `cargo run -p solum-example-ferrum-companion` cleanly.
+
+[[bin]]
+name = "ferrum-companion"
+path = "src/main.rs"
+
+[dependencies]
+crypt4gh = "0.4.1"
+solum-crypto.workspace = true
+solum-profiles.workspace = true

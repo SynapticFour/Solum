@@ -65,5 +65,12 @@ else
   echo "ok: non-EU storage region correctly refused"
 fi
 
+echo "== 7. Reference deployments =="
+# Mode A — standalone CLI against a fictional EHR/DB (no Ferrum).
+./examples/standalone/run.sh
+# Mode B — Crypt4GH format interop + AuthClaims smoke (git-pinned ferrum-core).
+cargo run -p solum-example-ferrum-companion
+echo "ok: both reference deployments passed"
+
 echo
 echo "All baseline checks passed."

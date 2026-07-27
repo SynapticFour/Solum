@@ -3014,6 +3014,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "solum-example-ferrum-companion"
+version = "0.1.0"
+dependencies = [
+ "crypt4gh",
+ "solum-crypto",
+ "solum-profiles",
+]
+
+[[package]]
 name = "solum-fhir"
 version = "0.1.0"
 dependencies = [

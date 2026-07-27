@@ -8,6 +8,7 @@ members = [
     "crates/audit",
     "crates/crypto",
     "crates/consent",
+    "examples/ferrum-companion",
 ]
 
 [workspace.package]
