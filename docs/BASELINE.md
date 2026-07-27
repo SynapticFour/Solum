@@ -1,11 +1,11 @@
-# Stage 1 baseline (Sprint 2 SolumActor identity adapter)
+# Stage 1 baseline (Sprint 3 FHIR/MII boundary)
 
 | | |
 |---|---|
 | **Date** | 2026-07-27 |
-| **Verified commit** | `c72e71de24f1a616bd2146f6c6423c12831faf88` |
-| **Tag** | `stage1-baseline-sprint2-2026-07-27` |
-| **Supersedes** | `stage1-baseline-sprint1-2026-07-26` (`e3f15c4`) |
+| **Verified commit** | `af6317cfd30beeecd1fcee62b4b15ef53e09b96e` |
+| **Tag** | `stage1-baseline-sprint3-2026-07-27` |
+| **Supersedes** | `stage1-baseline-sprint2-2026-07-27` (`c72e71d`) |
 
 This document freezes the Solum workspace state that passed local `./scripts/verify.sh` and green GitHub Actions (CI, CodeQL, Secret Scan, Quality Gate) on that commit. Descriptions below are taken from crate `lib.rs` module docs, profile TOML, `deny.toml`, `.gitleaks.toml`, and `docs/` — not from aspirational product copy.
 
@@ -19,21 +19,21 @@ This document freezes the Solum workspace state that passed local `./scripts/ver
 | `solum-crypto` | implementiert | lib: 8 | Crypt4GH envelopes for clinical field categories; customer-held key providers; same format as Ferrum genomic objects. |
 | `solum-audit` | implementiert | lib: 6 | Audit event recording and HELIOS-oriented evidence export hooks; in-memory `AuditLog` plus durable hash-chained `FileAuditStore`. |
 | `solum-consent` | implementiert | lib: 7 | Consent and access-rights engine: grant/revoke per `(subject, purpose)` with full history for EEHRxF-style individual rights. |
-| `solum-fhir` | implementiert | lib: 6 | IPS-oriented Patient Summary: FHIR R4 Bundle export inkl. bdl-9/bdl-10-Invarianten, Composition.author, Crypt4GH encrypt/decrypt über `solum-crypto` (`STAGE = "1-patient-summary"`). |
+| `solum-fhir` | implementiert | lib: **8** | IPS-oriented Patient Summary: FHIR R4 Bundle export inkl. bdl-9/bdl-10-Invarianten, Composition.author, Crypt4GH encrypt/decrypt über `solum-crypto` (`STAGE = "1-patient-summary"`); optionales `mii_validation_ref`-Passthrough-Feld (Composition.extension, Solum-internes ANNAHME-Provisorium für die Extension-URL). |
 | `solum-openehr` | Scaffold | lib: 1 | openEHR adapter surface (stage 2 scaffold); intentionally minimal while stage 1 focuses on FHIR (`STAGE = "2-scaffold"`). |
 | `solum-example-ferrum-companion` | Referenz (kein Produktcode) | binary smoke (via `verify.sh` §7) | Sprint-1 Mode-B-Referenz, beweist bidirektionale Crypt4GH-Formatkompatibilität mit Ferrum + AuthClaims-Konstruktions-Smoke, kein Produktcode. |
 
-Total lib unit tests in this baseline run: **53**. Plus `solum-core` integration tests: **7** CLI (`assert_cmd`) + **1** AuthClaims smoke + **2** SolumActor auth. Combined automated count referenced above: **63** (plus empty doc-test suites). Reference deployments in `verify.sh` §7 are additional living checks (not counted in the lib unit total).
+Total lib unit tests in this baseline run: **55**. Plus `solum-core` integration tests: **7** CLI (`assert_cmd`) + **1** AuthClaims smoke + **2** SolumActor auth. Combined automated count referenced above: **65** (plus empty doc-test suites). Reference deployments in `verify.sh` §7 are additional living checks (not counted in the lib unit total).
 
-## Seit `stage1-baseline-sprint1-2026-07-26` hinzugekommen
+## Seit `stage1-baseline-sprint2-2026-07-27` hinzugekommen
 
-- **Sprint 2 abgeschlossen:** `solum-identity` Crate, `SolumActor`/`ActorSource`, `TryFrom<&AuthClaims>` hinter Feature `ferrum-companion`, `Deployment::grant_consent_as` / `revoke_consent_as` / `encrypt_field_as` / `decrypt_field_as` (additiv, bestehende `&str`-APIs unverändert).
-- **Bewiesen:** FerrumPassport- und Standalone-Actor erzeugen identisch strukturierte Audit-Events (gleicher `event_type` / `data_category` / `outcome` / `details`, nur `actor`-String unterscheidet sich) — Test `grant_consent_as_ferrum_and_standalone_same_audit_shape`.
-- **Bewiesen:** `SolumActor::from(String)::to_audit_string()` ist bit-identisch zum Original-String — Rückwärtskompatibilität mit allen bisherigen Baselines/Audit-Exports.
+- **Sprint 3 abgeschlossen:** FHIR/MII-Grenze zu Ferrum in `docs/architecture.md` dokumentiert (Absicht/Grenze, keine getestete Integration — Solum ruft `ferrum-mii-connect` nicht auf).
+- **`PatientSummary.mii_validation_ref`:** optionales, additives Passthrough-Feld, Rückwärtskompatibilität bewiesen (legacy JSON ohne Feld deserialisiert weiterhin korrekt).
+- **Bewusste Design-Korrektur während des Sprints:** ein initial vorgeschlagener `encrypt_patient_summary_with_audit`-Pfad wurde verworfen, weil er Events nur in die in-memory `AuditLog` statt den persistenten `FileAuditStore` geschrieben hätte — ein zweiter, von `Deployment` unabhängiger Audit-Pfad mit irreführendem Persistenz-Anschein. Persistenter Audit für Patient-Summary-Verschlüsselung bleibt bewusst offen für eine künftige Deployment-Integration.
 
 ## Verifizierter Zustand
 
-All seven `./scripts/verify.sh` sections passed on 2026-07-27 against commit `c72e71de24f1a616bd2146f6c6423c12831faf88` (exit 0). Section 5 emitted a long series of `cargo deny` `warning[duplicate]` trees (not failures) that are omitted below.
+All seven `./scripts/verify.sh` sections passed on 2026-07-27 against commit `af6317cfd30beeecd1fcee62b4b15ef53e09b96e` (exit 0). Section 5 emitted a long series of `cargo deny` `warning[duplicate]` trees (not failures) that are omitted below.
 
 ```
 == 0. Sanity: ferrum-core pin consistency ==
@@ -50,7 +50,7 @@ solum-core tests/cli.rs: 7 passed
 solum-core tests/ferrum_auth_smoke.rs: 1 passed
 solum-core tests/solum_actor_auth.rs: 2 passed
 solum-crypto: 8 passed
-solum-fhir: 6 passed
+solum-fhir: 8 passed
 solum-identity: 4 passed
 solum-openehr: 1 passed
 solum-profiles: 12 passed
@@ -78,10 +78,10 @@ All baseline checks passed.
 
 | Workflow | Run ID | URL |
 |----------|--------|-----|
-| CI | 30242011672 | https://github.com/SynapticFour/Solum/actions/runs/30242011672 |
-| CodeQL | 30242011717 | https://github.com/SynapticFour/Solum/actions/runs/30242011717 |
-| Secret Scan | 30242011744 | https://github.com/SynapticFour/Solum/actions/runs/30242011744 |
-| Quality Gate | 30242011706 | https://github.com/SynapticFour/Solum/actions/runs/30242011706 |
+| CI | 30250154662 | https://github.com/SynapticFour/Solum/actions/runs/30250154662 |
+| CodeQL | 30250154665 | https://github.com/SynapticFour/Solum/actions/runs/30250154665 |
+| Secret Scan | 30250154673 | https://github.com/SynapticFour/Solum/actions/runs/30250154673 |
+| Quality Gate | 30250154654 | https://github.com/SynapticFour/Solum/actions/runs/30250154654 |
 
 ## Bewusst akzeptierte Risiken
 
@@ -144,7 +144,8 @@ Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFI
 | `solum-fhir`: Vollständige IPS IG-Konformität, Terminologie-Bindung (SNOMED/LOINC-ValueSets), MedicationRequest-Unterstützung, FHIR-Validator-Integration bleiben offen | `crates/fhir/src/lib.rs` — `STAGE = "1-patient-summary"`; `patient_summary.rs` module docs |
 | `solum-openehr` bleibt bewusst zurückgestellt (siehe Konversationsverlauf 2026-07-26: openEHR-Archetype-Unsicherheit); composition / archetype / CDR / AQL binding | `crates/openehr/src/lib.rs` — stage 2 scaffold; `docs/roadmap.md` stage 2 |
 | Produktions-Key-Custody in der CLI (CustomerHeld / HSM-backed provisioning) | CLI crypto is EphemeralTestKeyProvider + demo sidecar only — see “Bewusst akzeptierte Risiken” |
-| Sprint 3–6 aus `docs/INTEGRATION-ROADMAP.md` (FHIR/MII-Grenze, Storage-Wiederverwendung, Live-Auth-Verifikation, Turnkey-Modus) | `docs/INTEGRATION-ROADMAP.md` — Sprint 1–2 only are inside this baseline |
+| Sprint 4–6 aus `docs/INTEGRATION-ROADMAP.md` (Storage-Wiederverwendung, Live-Auth-Verifikation, Turnkey-Modus) | `docs/INTEGRATION-ROADMAP.md` — Sprint 1–3 only are inside this baseline |
+| Patient Summary encrypt/decrypt über `Deployment` (mit `FileAuditStore`, nicht `AuditLog`) — explizit noch offen, siehe Sprint-3-Designentscheidung oben | Sprint-3 design note; `docs/architecture.md` FHIR/MII-Grenze |
 | FHIR / IHE EEHRxF priority-category depth beyond minimal Patient Summary (labs, discharge, imaging, prescriptions) | `docs/roadmap.md` stage 2 |
 | SaaS operating model | `docs/roadmap.md` stage 2; `docs/architecture.md` / PRODUCT-DEFINITION — on-premise first |
 | Live HELIOS CLI/API signing integration | `docs/helios.md` — export envelope prepared; wiring is open |
@@ -158,11 +159,11 @@ Note: `docs/roadmap.md` stage-1 bullet still says “actual field-level encrypti
 ## Wie diese Baseline reproduziert wird
 
 ```bash
-git fetch origin tag stage1-baseline-sprint2-2026-07-27
-git checkout stage1-baseline-sprint2-2026-07-27
+git fetch origin tag stage1-baseline-sprint3-2026-07-27
+git checkout stage1-baseline-sprint3-2026-07-27
 # Prerequisites: Rust 1.91.1 (rust-toolchain.toml) and libsodium
 # (e.g. brew install libsodium / apt install libsodium-dev)
 ./scripts/verify.sh
 ```
 
-Expect all seven sections to pass (including §7 reference deployments). This document may live on `main` at or after the tag; the tag itself points at the verified code commit listed in the header. Prior freezes: `stage1-baseline-sprint1-2026-07-26`, `stage1-baseline-cli-2026-07-26`, `stage1-baseline-fhir-2026-07-26`, `stage1-baseline-transfer-2026-07-26`, `stage1-baseline-2026-07-25`.
+Expect all seven sections to pass (including §7 reference deployments). This document may live on `main` at or after the tag; the tag itself points at the verified code commit listed in the header. Prior freezes: `stage1-baseline-sprint2-2026-07-27`, `stage1-baseline-sprint1-2026-07-26`, `stage1-baseline-cli-2026-07-26`, `stage1-baseline-fhir-2026-07-26`, `stage1-baseline-transfer-2026-07-26`, `stage1-baseline-2026-07-25`.
