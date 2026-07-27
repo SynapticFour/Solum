@@ -8,6 +8,7 @@ members = [
     "crates/audit",
     "crates/crypto",
     "crates/consent",
+    "crates/identity",
     "examples/ferrum-companion",
 ]
 
@@ -43,6 +44,7 @@ solum-openehr = { path = "crates/openehr" }
 solum-audit = { path = "crates/audit" }
 solum-crypto = { path = "crates/crypto" }
 solum-consent = { path = "crates/consent" }
+solum-identity = { path = "crates/identity" }
 
 [patch.crates-io]
 # SynapticFour crypt4gh fork (same lineage as Ferrum/third_party/crypt4gh):

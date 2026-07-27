@@ -2991,6 +2991,7 @@ dependencies = [
  "solum-consent",
  "solum-crypto",
  "solum-fhir",
+ "solum-identity",
  "solum-openehr",
  "solum-profiles",
  "tempfile",
@@ -3033,6 +3034,14 @@ dependencies = [
  "solum-profiles",
  "thiserror 1.0.69",
  "tracing",
+]
+
+[[package]]
+name = "solum-identity"
+version = "0.1.0"
+dependencies = [
+ "solum-crypto",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

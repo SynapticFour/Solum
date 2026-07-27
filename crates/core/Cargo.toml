@@ -26,6 +26,8 @@ solum-audit.workspace = true
 solum-fhir.workspace = true
 solum-openehr.workspace = true
 solum-consent.workspace = true
+# AuthClaims → SolumActor mapping; ferrum-core itself is already linked via solum-crypto.
+solum-identity = { workspace = true, features = ["ferrum-companion"] }
 
 [dev-dependencies]
 assert_cmd.workspace = true

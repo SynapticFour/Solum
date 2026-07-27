@@ -23,8 +23,11 @@ pub use solum_audit as audit;
 pub use solum_consent as consent;
 pub use solum_crypto as crypto;
 pub use solum_fhir as fhir;
+pub use solum_identity as identity;
 pub use solum_openehr as openehr;
 pub use solum_profiles as profiles;
+
+pub use solum_identity::{ActorSource, SolumActor};
 
 #[derive(Debug, Error)]
 pub enum SolumError {
@@ -144,6 +147,19 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
         Ok(record)
     }
 
+    /// [`grant_consent`] with a structured [`SolumActor`] (maps via
+    /// [`SolumActor::to_audit_string`]). Existing `&str` API unchanged.
+    pub fn grant_consent_as(
+        &mut self,
+        subject_id: &str,
+        purpose: &str,
+        scope: Vec<String>,
+        actor: &SolumActor,
+    ) -> Result<solum_consent::ConsentRecord, SolumError> {
+        let actor_s = actor.to_audit_string();
+        self.grant_consent(subject_id, purpose, scope, &actor_s)
+    }
+
     /// Revoke consent for `(subject_id, purpose)` (the EEHRxF revocation
     /// right) and emit the matching `consent.revoked` audit event.
     pub fn revoke_consent(
@@ -167,6 +183,17 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
             })
             .map_err(|e| SolumError::Message(e.to_string()))?;
         Ok(record)
+    }
+
+    /// [`revoke_consent`] with a structured [`SolumActor`].
+    pub fn revoke_consent_as(
+        &mut self,
+        subject_id: &str,
+        purpose: &str,
+        actor: &SolumActor,
+    ) -> Result<solum_consent::ConsentRecord, SolumError> {
+        let actor_s = actor.to_audit_string();
+        self.revoke_consent(subject_id, purpose, &actor_s)
     }
 
     /// Encrypt one clinical field category with Crypt4GH and emit a
@@ -216,6 +243,18 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
         }
     }
 
+    /// [`encrypt_field`] with a structured [`SolumActor`].
+    pub fn encrypt_field_as(
+        &mut self,
+        category: &str,
+        plaintext: &[u8],
+        key_ref: &KeyRef,
+        actor: &SolumActor,
+    ) -> Result<EncryptedField, SolumError> {
+        let actor_s = actor.to_audit_string();
+        self.encrypt_field(category, plaintext, key_ref, &actor_s)
+    }
+
     /// Decrypt a Crypt4GH field and emit a `data.decrypt` audit event.
     /// Failed attempts (wrong key, tampered ciphertext, …) still write the
     /// event with [`AuditOutcome::Failure`] — a failed access must appear
@@ -254,6 +293,17 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
                 Err(SolumError::Message(e.to_string()))
             }
         }
+    }
+
+    /// [`decrypt_field`] with a structured [`SolumActor`].
+    pub fn decrypt_field_as(
+        &mut self,
+        field: &EncryptedField,
+        key_ref: &KeyRef,
+        actor: &SolumActor,
+    ) -> Result<Vec<u8>, SolumError> {
+        let actor_s = actor.to_audit_string();
+        self.decrypt_field(field, key_ref, &actor_s)
     }
 
     /// Whether `subject_id` currently has an active grant for `purpose`.
@@ -479,6 +529,52 @@ mod tests {
             events[1].event.data_category.as_deref(),
             Some("clinical_notes")
         );
+        assert!(deployment.verify_audit_chain().is_ok());
+    }
+
+    #[test]
+    fn grant_consent_as_ferrum_and_standalone_same_audit_shape() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut deployment, _) = open_deployment(&dir);
+
+        let ferrum_actor = SolumActor {
+            subject_id: "researcher@example.org".into(),
+            display: None,
+            source: ActorSource::FerrumPassport,
+            scopes: vec!["drs.read".into(), "ferrum:analyst".into()],
+        };
+        let standalone_actor =
+            SolumActor::standalone("practitioner/7", vec!["patient/*.read".into()]);
+
+        deployment
+            .grant_consent_as(
+                "patient/100",
+                "care_provision",
+                vec!["patient_summary".into()],
+                &ferrum_actor,
+            )
+            .unwrap();
+        deployment
+            .grant_consent_as(
+                "patient/101",
+                "care_provision",
+                vec!["patient_summary".into()],
+                &standalone_actor,
+            )
+            .unwrap();
+
+        let events = deployment.audit_events().unwrap();
+        assert_eq!(events.len(), 2);
+        let a = &events[0].event;
+        let b = &events[1].event;
+
+        assert_eq!(a.event_type, b.event_type);
+        assert_eq!(a.data_category, b.data_category);
+        assert_eq!(a.outcome, b.outcome);
+        assert_eq!(a.details, b.details);
+        assert_eq!(a.actor, "ferrum:passport:researcher@example.org");
+        assert_eq!(b.actor, "standalone:practitioner/7");
+        assert_ne!(a.actor, b.actor);
         assert!(deployment.verify_audit_chain().is_ok());
     }
 }

@@ -1,0 +1,21 @@
+[package]
+name = "solum-identity"
+description = "Solum actor identity (in-memory auth adapter; storage remains String)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+# Compiles AuthClaims → SolumActor mapping only. Does **not** control whether
+# ferrum-core is linked into the Solum workspace: that hard dependency lives
+# in solum-crypto (Crypt4GH / shared pin). This feature only gates the
+# TryFrom mapping code in this crate.
+ferrum-companion = ["dep:solum-crypto"]
+
+[dependencies]
+thiserror.workspace = true
+solum-crypto = { workspace = true, optional = true }
