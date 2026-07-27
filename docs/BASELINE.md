@@ -1,11 +1,11 @@
-# Stage 1 baseline (Sprint 4 ferrum-storage-backend)
+# Stage 1 baseline (Sprint 5 standalone JWT/JWKS verification)
 
 | | |
 |---|---|
 | **Date** | 2026-07-27 |
-| **Verified commit** | `0f004ed3d8c1bc820e08efecb813b181715e97fb` |
-| **Tag** | `stage1-baseline-sprint4-2026-07-27` |
-| **Supersedes** | `stage1-baseline-sprint3-2026-07-27` (`af6317c`) |
+| **Verified commit** | `2ccd2c9c5c6cf095de7a1723d3d1f03e9593935f` |
+| **Tag** | `stage1-baseline-sprint5-2026-07-27` |
+| **Supersedes** | `stage1-baseline-sprint4-2026-07-27` (`0f004ed`) |
 
 This document freezes the Solum workspace state that passed local `./scripts/verify.sh` and green GitHub Actions (CI, CodeQL, Secret Scan, Quality Gate) on that commit. Descriptions below are taken from crate `lib.rs` module docs, profile TOML, `deny.toml`, `.gitleaks.toml`, and `docs/` — not from aspirational product copy.
 
@@ -15,6 +15,7 @@ This document freezes the Solum workspace state that passed local `./scripts/ver
 |-------|--------|-------|------------------------------------------------|
 | `solum-core` | implementiert | lib: **9** (+1 feature-gated: **10** statt 9 mit `ferrum-storage-backend`); `tests/cli.rs`: **7**; `tests/ferrum_auth_smoke.rs`: **1**; `tests/solum_actor_auth.rs`: **2** | Product orchestration: wires jurisdiction profiles, crypto posture, audit, and clinical interchange adapters (FHIR first; openEHR staged); `Deployment` owns consent + Crypt4GH field encrypt/decrypt with matching audit events. Additive `*_as` methods accept [`SolumActor`](../crates/identity/src/lib.rs) and delegate to the unchanged `&str` APIs. Optional feature `ferrum-storage-backend`: `Deployment::with_storage` / `encrypt_field_and_store` / `read_and_decrypt_field` against Ferrum `LocalStorage` (async, kein `block_on` in der Library — Runtime bleibt beim Aufrufer); Default-Build bleibt ferrum-storage-frei. The `solum` CLI is a real tool: `consent grant` / `revoke` / `status`, `crypto encrypt` / `decrypt` (EphemeralTestKeyProvider, demo-only, Unix 0600 sidecar), `audit export` / `verify` — integration-tested via `assert_cmd`. |
 | `solum-identity` | implementiert | lib: **4** | Structured actor identity adapter (`SolumActor`/`ActorSource`: FerrumPassport/Standalone/LocalDev); persisted `actor: String` format unchanged, `SolumActor` maps onto it via `to_audit_string()`. |
+| `solum-auth-verify` | implementiert | lib: **6** | Standalone JWT/JWKS-Verifikation (jsonwebtoken RS256/ES256), unabhängig von privaten ferrum-core-Decode-Pfaden (keine öffentliche verify()-API in ferrum-core vorgefunden — dokumentierter Sprint-5-Rechercheergebnis); `VerifyConfig::for_ferrum_passport()` / `for_standalone_oidc()`; optionales Feature `http` für `JwksVerifier::from_url` (default aus, Offline-Pfad `from_jwks_json` zieht kein reqwest); `VerifiedClaims::into_solum_actor()` nutzt `solum-identity::ActorSource` ohne Duplikat-Enum. |
 | `solum-profiles` | implementiert | lib: 12 | Jurisdiction profile loader and startup conformance checks; TOML under `config/profiles/`; mismatches refuse to start; additive `TransferPolicy` + `validate_transfer` for cross-border / secondary-use requests (restrictive-by-default). |
 | `solum-crypto` | implementiert | lib: 8 | Crypt4GH envelopes for clinical field categories; customer-held key providers; same format as Ferrum genomic objects. |
 | `solum-audit` | implementiert | lib: 6 | Audit event recording and HELIOS-oriented evidence export hooks; in-memory `AuditLog` plus durable hash-chained `FileAuditStore`. |
@@ -23,18 +24,18 @@ This document freezes the Solum workspace state that passed local `./scripts/ver
 | `solum-openehr` | Scaffold | lib: 1 | openEHR adapter surface (stage 2 scaffold); intentionally minimal while stage 1 focuses on FHIR (`STAGE = "2-scaffold"`). |
 | `solum-example-ferrum-companion` | Referenz (kein Produktcode) | binary smoke (via `verify.sh` §7 / §7b) | Mode-B-Referenz: bidirektionale Crypt4GH-Formatkompatibilität mit Ferrum + AuthClaims-Konstruktions-Smoke; optional `--features storage-backend` beweist LocalStorage Round-Trip über `Deployment` async APIs. Kein Produktcode. |
 
-Total lib unit tests in this baseline run (default features): **55**. Plus `solum-core` integration tests: **7** CLI (`assert_cmd`) + **1** AuthClaims smoke + **2** SolumActor auth. Combined automated count referenced above: **65** (plus empty doc-test suites). With `--features ferrum-storage-backend`, `solum-core` lib is **10** (+1 LocalStorage round-trip). Reference deployments in `verify.sh` §7 / §7b are additional living checks (not counted in the lib unit total).
+Total lib unit tests in this baseline run (default features): **61**. Plus `solum-core` integration tests: **7** CLI (`assert_cmd`) + **1** AuthClaims smoke + **2** SolumActor auth. Combined automated count referenced above: **71** (plus empty doc-test suites). With `--features ferrum-storage-backend`, `solum-core` lib is **10** (+1 LocalStorage round-trip). Reference deployments in `verify.sh` §7 / §7b are additional living checks (not counted in the lib unit total).
 
-## Seit `stage1-baseline-sprint3-2026-07-27` hinzugekommen
+## Seit `stage1-baseline-sprint4-2026-07-27` hinzugekommen
 
-- **Sprint 4 abgeschlossen:** optionales Cargo-Feature `ferrum-storage-backend` (default aus), Wiederverwendung von Ferrums `ObjectStorage`/`LocalStorage` statt einer neuen `solum-storage`-Crate.
-- **Design-Entscheidung während des Sprints:** async-Methoden statt `block_on`-in-Library (Antipattern vermieden — Runtime-Kontrolle bleibt beim Aufrufer, nicht in `Deployment` versteckt).
-- **Live-API-Abweichung von der ursprünglichen Roadmap-Beschreibung dokumentiert:** tatsächliche Ferrum-API ist async `ObjectStorage` (nicht sync `Storage` put/get wie ursprünglich angenommen) — Roadmap-Text war Repo-Review, keine Live-API-Prüfung.
-- **Bewiesen:** Standard-Workspace-Build (ohne `--features`) zieht weiterhin kein `ferrum-storage` (`verify.sh` §7, `cargo-tree`-Check); Feature-Pfad funktioniert end-to-end (`verify.sh` §7b, Round-Trip in `solum-core`-Tests und `ferrum-companion`-Beispiel).
+- **Sprint 5 abgeschlossen:** eigenständige JWT/JWKS-Verifikation für beide Auth-Welten (FerrumPassport, Standalone/SMART-on-FHIR-artig).
+- **Design-Entscheidung:** bewusst KEINE Wiederverwendung von ferrum-core-internem Verifikationscode (existiert nicht öffentlich) — stattdessen unabhängige, standardkonforme Implementierung; begründet über Kryptografie-Eigenschaft (asymmetrische Signaturen sind offline gegen den öffentlichen Key prüfbar, kein Format-Lock-in wie bei Crypt4GH) und Defense-in-Depth (unabhängige Implementierungen teilen keine versteckten Schwächen).
+- **Bewusst NICHT repliziert:** Ferrums iat-basierter max-token-age-Check (A07, 24h Default) und NTP-Uhrzeit-Skew-Probe (nicht Teil von JWT-Decode bei Ferrum) — dokumentierte, akzeptierte Abweichung.
+- **RUSTSEC-2023-0071-Begründung** in `deny.toml` / `LICENSE-COMPATIBILITY.md` präzisiert: jetzt zwei Bezugsquellen (ferrum-core transitiv + solum-auth-verify direkt), dieselbe Advisory-ID, kein neues Risiko.
 
 ## Verifizierter Zustand
 
-All `./scripts/verify.sh` sections (including §7 and §7b) passed on 2026-07-27 against commit `0f004ed3d8c1bc820e08efecb813b181715e97fb` (exit 0). Section 5 emitted a long series of `cargo deny` `warning[duplicate]` trees (not failures) that are omitted below.
+All `./scripts/verify.sh` sections (including §7 and §7b) passed on 2026-07-27 against commit `2ccd2c9c5c6cf095de7a1723d3d1f03e9593935f` (exit 0). Section 5 emitted a long series of `cargo deny` `warning[duplicate]` trees (not failures) that are omitted below.
 
 ```
 == 0. Sanity: ferrum-core pin consistency ==
@@ -45,6 +46,7 @@ ok: both pin 27a6a8e9a719fd1a171da28b20462a777f95cf65
 == 3. clippy (deny warnings) ==
 == 4. test ==
 solum-audit: 6 passed
+solum-auth-verify: 6 passed
 solum-consent: 7 passed
 solum-core lib: 9 passed
 solum-core tests/cli.rs: 7 passed
@@ -85,10 +87,10 @@ All baseline checks passed.
 
 | Workflow | Run ID | URL |
 |----------|--------|-----|
-| CI | 30253043219 | https://github.com/SynapticFour/Solum/actions/runs/30253043219 |
-| CodeQL | 30253043203 | https://github.com/SynapticFour/Solum/actions/runs/30253043203 |
-| Secret Scan | 30253043248 | https://github.com/SynapticFour/Solum/actions/runs/30253043248 |
-| Quality Gate | 30253042022 | https://github.com/SynapticFour/Solum/actions/runs/30253042022 |
+| CI | 30295152734 | https://github.com/SynapticFour/Solum/actions/runs/30295152734 |
+| CodeQL | 30295152875 | https://github.com/SynapticFour/Solum/actions/runs/30295152875 |
+| Secret Scan | 30295153326 | https://github.com/SynapticFour/Solum/actions/runs/30295153326 |
+| Quality Gate | 30295152687 | https://github.com/SynapticFour/Solum/actions/runs/30295152687 |
 
 ## Bewusst akzeptierte Risiken
 
@@ -97,7 +99,7 @@ All baseline checks passed.
 From [`deny.toml`](../deny.toml) `[advisories].ignore` and [LICENSE-COMPATIBILITY.md](../LICENSE-COMPATIBILITY.md):
 
 - **ID:** RUSTSEC-2023-0071
-- **Reason (deny.toml):** Transitive via `jsonwebtoken` ← `ferrum-core` (RSA-signed JWT verification), not via `solum-crypto`'s own Crypt4GH field encryption. No upstream fix available yet. Tracked upstream in Ferrum.
+- **Reason (deny.toml):** Same rsa advisory via two jsonwebtoken paths: (1) transitive jsonwebtoken ← ferrum-core (RSA-signed JWT verification); (2) direct jsonwebtoken dependency of solum-auth-verify (rust_crypto feature, RS256 path). Not via solum-crypto's own Crypt4GH field encryption. No new risk — one advisory ID, two reference sources. No upstream fix available yet. Tracked upstream in Ferrum; revisit when ferrum-core migrates away from RSA-based JWT or a patched rsa crate ships. See LICENSE-COMPATIBILITY.md / this entry for the accepted-risk record.
 - **Revisit when:** `ferrum-core` migrates away from RSA-based JWT, or a patched `rsa` crate ships — then drop the ignore and re-run `cargo deny check advisories`.
 
 ### Gitleaks allowlist — Crypt4GH PEM armor headers
@@ -145,6 +147,10 @@ CLI crypto subcommands use EphemeralTestKeyProvider exclusively; the `*.ephemera
 
 `ferrum-storage-backend` zieht das AWS S3 SDK transitiv (auch wenn nur `LocalStorage` genutzt wird) — Feature bleibt bewusst default-aus, damit Standalone-Builds davon unberührt bleiben. CI testet aktuell nur den Default-Pfad (ohne `--features`); der Feature-Pfad ist bisher nur lokal verifiziert, nicht durch GitHub Actions abgedeckt.
 
+### `solum-auth-verify` — unabhängige Implementierung / kein Live-Broker in CI
+
+`solum-auth-verify` ist eine eigenständige Implementierung, kann von Ferrums tatsächlichem privaten Verifikationsverhalten abdriften, da kein öffentlicher Vergleichspunkt existiert. Kein Live-Broker-Test in CI (nur Offline-JWKS-Fixtures, analog zu Ferrums eigenem `jwks_decode.rs`-Testmuster).
+
 ## Explizit außerhalb dieser Baseline
 
 Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md), [helios.md](helios.md), [architecture.md](architecture.md), [INTEGRATION-ROADMAP.md](INTEGRATION-ROADMAP.md), and scaffold markers in crate docs:
@@ -155,7 +161,9 @@ Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFI
 | `solum-fhir`: Vollständige IPS IG-Konformität, Terminologie-Bindung (SNOMED/LOINC-ValueSets), MedicationRequest-Unterstützung, FHIR-Validator-Integration bleiben offen | `crates/fhir/src/lib.rs` — `STAGE = "1-patient-summary"`; `patient_summary.rs` module docs |
 | `solum-openehr` bleibt bewusst zurückgestellt (siehe Konversationsverlauf 2026-07-26: openEHR-Archetype-Unsicherheit); composition / archetype / CDR / AQL binding | `crates/openehr/src/lib.rs` — stage 2 scaffold; `docs/roadmap.md` stage 2 |
 | Produktions-Key-Custody in der CLI (CustomerHeld / HSM-backed provisioning) | CLI crypto is EphemeralTestKeyProvider + demo sidecar only — see “Bewusst akzeptierte Risiken” |
-| Sprint 5–6 aus `docs/INTEGRATION-ROADMAP.md` (Live-Auth-Verifikation, Turnkey-Modus) | `docs/INTEGRATION-ROADMAP.md` — Sprint 1–4 only are inside this baseline |
+| Sprint 6 aus `docs/INTEGRATION-ROADMAP.md` (Turnkey-Modus) | `docs/INTEGRATION-ROADMAP.md` — Sprint 1–5 only are inside this baseline |
+| JWKS-TTL-Refresh für `from_url` (aktuell einmaliger Fetch pro Verifier-Instanz) | Sprint-5 scope; offline `from_jwks_json` path is covered; URL fetch is one-shot |
+| CLI-/Deployment-Wiring für `solum-auth-verify` (aktuell nur die Verify-Crate selbst, keine Integration in Deployment/CLI) | Sprint-5 constraint; verify crate is standalone |
 | S3/OpenDAL-Backends (nur LocalStorage in Sprint 4 verdrahtet) | Sprint-4 scope; Ferrum `ObjectStorage` trait is broader |
 | CLI-Wiring für Storage (bewusst nicht Teil von Sprint 4) | Sprint-4 constraint; CLI `main.rs` untouched |
 | CI-Abdeckung für `ferrum-storage-backend`-Feature-Pfad | Local/`verify.sh` §7b only — see “Bewusst akzeptierte Risiken” |
@@ -173,11 +181,11 @@ Note: `docs/roadmap.md` stage-1 bullet still says “actual field-level encrypti
 ## Wie diese Baseline reproduziert wird
 
 ```bash
-git fetch origin tag stage1-baseline-sprint4-2026-07-27
-git checkout stage1-baseline-sprint4-2026-07-27
+git fetch origin tag stage1-baseline-sprint5-2026-07-27
+git checkout stage1-baseline-sprint5-2026-07-27
 # Prerequisites: Rust 1.91.1 (rust-toolchain.toml) and libsodium
 # (e.g. brew install libsodium / apt install libsodium-dev)
 ./scripts/verify.sh
 ```
 
-Expect all sections to pass (including §7 reference deployments and §7b feature-gated storage). This document may live on `main` at or after the tag; the tag itself points at the verified code commit listed in the header. Prior freezes: `stage1-baseline-sprint3-2026-07-27`, `stage1-baseline-sprint2-2026-07-27`, `stage1-baseline-sprint1-2026-07-26`, `stage1-baseline-cli-2026-07-26`, `stage1-baseline-fhir-2026-07-26`, `stage1-baseline-transfer-2026-07-26`, `stage1-baseline-2026-07-25`.
+Expect all sections to pass (including §7 reference deployments and §7b feature-gated storage). This document may live on `main` at or after the tag; the tag itself points at the verified code commit listed in the header. Prior freezes: `stage1-baseline-sprint4-2026-07-27`, `stage1-baseline-sprint3-2026-07-27`, `stage1-baseline-sprint2-2026-07-27`, `stage1-baseline-sprint1-2026-07-26`, `stage1-baseline-cli-2026-07-26`, `stage1-baseline-fhir-2026-07-26`, `stage1-baseline-transfer-2026-07-26`, `stage1-baseline-2026-07-25`.
