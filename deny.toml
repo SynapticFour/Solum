@@ -8,7 +8,7 @@ unmaintained = "workspace"
 # cargo-deny 0.20: ignore is an array of advisory ids or { id, reason } tables
 # (see cargo-deny deny.template.toml). Document accepted risk in LICENSE-COMPATIBILITY.md.
 ignore = [
-    { id = "RUSTSEC-2023-0071", reason = "Transitive via jsonwebtoken <- ferrum-core (RSA-signed JWT verification), not via solum-crypto's own Crypt4GH field encryption. No upstream fix available yet. Tracked upstream in Ferrum; revisit when ferrum-core migrates away from RSA-based JWT or a patched rsa crate ships. See LICENSE-COMPATIBILITY.md / this entry for the accepted-risk record." },
+    { id = "RUSTSEC-2023-0071", reason = "Same rsa advisory via two jsonwebtoken paths: (1) transitive jsonwebtoken <- ferrum-core (RSA-signed JWT verification); (2) direct jsonwebtoken dependency of solum-auth-verify (rust_crypto feature, RS256 path). Not via solum-crypto's own Crypt4GH field encryption. No new risk — one advisory ID, two reference sources. No upstream fix available yet. Tracked upstream in Ferrum; revisit when ferrum-core migrates away from RSA-based JWT or a patched rsa crate ships. See LICENSE-COMPATIBILITY.md / this entry for the accepted-risk record." },
 ]
 
 [licenses]
