@@ -19,6 +19,14 @@ use thiserror::Error;
 /// Solum field-category id for Patient Summary blobs (must match profile TOML).
 pub const PATIENT_SUMMARY_CATEGORY: &str = "patient_summary";
 
+/// Provisional Composition.extension URL for [`PatientSummary::mii_validation_ref`].
+///
+/// ANNAHME: not a standardised / jointly agreed FHIR StructureDefinition URL —
+/// Solum-internal placeholder until Ferrum/Solum align on a real extension
+/// (or drop the extension in favour of Bundle.meta / Provenance).
+const MII_VALIDATION_REF_EXTENSION_URL: &str =
+    "https://synapticfour.com/fhir/StructureDefinition/solum-mii-validation-ref";
+
 /// IPS Composition.type coding (LOINC).
 ///
 /// ANNAHME, bitte gegen aktuelle IPS-Spec prüfen: LOINC `60591-5`
@@ -65,6 +73,13 @@ pub struct PatientSummary {
     pub medications: Vec<MedicationEntry>,
     /// IPS Problems section entries (may be empty).
     pub problems: Vec<ProblemEntry>,
+    /// Optional reference to a prior structural FHIR validation report
+    /// (e.g. from Ferrum's `ferrum-mii-connect`), when running in
+    /// Ferrum-companion mode. Solum does not perform or replicate that
+    /// validation itself — this is a passthrough marker only. `None` in
+    /// standalone mode (no Ferrum involved) or when no such report exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mii_validation_ref: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -219,7 +234,7 @@ pub fn to_fhir_bundle(summary: &PatientSummary) -> Result<Value, FhirError> {
     sections.push(problem_section);
     entries.extend(problem_entries);
 
-    let composition = json!({
+    let mut composition = json!({
         "resourceType": "Composition",
         "id": composition_id,
         "status": "final",
@@ -238,6 +253,12 @@ pub fn to_fhir_bundle(summary: &PatientSummary) -> Result<Value, FhirError> {
         "title": "International Patient Summary (Solum minimal)",
         "section": sections
     });
+    if let Some(mii_ref) = &summary.mii_validation_ref {
+        composition["extension"] = json!([{
+            "url": MII_VALIDATION_REF_EXTENSION_URL,
+            "valueString": mii_ref
+        }]);
+    }
 
     let mut patient_resource = json!({
         "resourceType": "Patient",
@@ -356,6 +377,11 @@ where
 /// Serialises the Solum summary model (not the FHIR Bundle) so decrypt yields
 /// the same typed structure. Callers that need Bundle shape use
 /// [`to_fhir_bundle`] before or after decryption.
+///
+/// Persistent audit for Patient Summary encryption is not handled here — that
+/// waits on a future `Deployment` integration (see `docs/BASELINE.md`
+/// “Explizit außerhalb dieser Baseline” / `docs/INTEGRATION-ROADMAP.md`), not
+/// a `solum-fhir`-owned audit write path.
 pub fn encrypt_patient_summary(
     gate: &FieldCategoryGate<'_>,
     summary: &PatientSummary,
@@ -423,6 +449,7 @@ mod tests {
                 id: "prb-1".into(),
                 condition_display: "Hypertension".into(),
             }],
+            mii_validation_ref: None,
         }
     }
 
@@ -560,5 +587,50 @@ mod tests {
                 .any(|c| c == PATIENT_SUMMARY_CATEGORY),
             "kenya-dpa.toml must list patient_summary"
         );
+    }
+
+    #[test]
+    fn mii_validation_ref_none_serde_omits_field_and_roundtrips() {
+        let summary = sample_summary();
+        assert_eq!(summary.mii_validation_ref, None);
+        let json = serde_json::to_string(&summary).unwrap();
+        assert!(
+            !json.contains("miiValidationRef"),
+            "None must be skipped for backward-compatible JSON: {json}"
+        );
+        let back: PatientSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, summary);
+
+        // Legacy payload without the field deserialises to None.
+        let legacy = r#"{
+            "date":"2026-07-26T10:00:00Z",
+            "authorDisplay":"Solum Compliance Layer (stage-1, non-clinical)",
+            "patient":{
+                "id":"pat-1",
+                "identifier":[{"system":"urn:oid:2.16.840.1.113883.2.4.6.3","value":"999999001"}],
+                "name":[{"family":"Doe","given":["Jane"]}],
+                "birthDate":"1980-05-01"
+            },
+            "allergies":[{"id":"alg-1","substanceDisplay":"Penicillin"}],
+            "medications":[{"id":"med-1","medicationDisplay":"Lisinopril 10mg"}],
+            "problems":[{"id":"prb-1","conditionDisplay":"Hypertension"}]
+        }"#;
+        let from_legacy: PatientSummary = serde_json::from_str(legacy).unwrap();
+        assert_eq!(from_legacy.mii_validation_ref, None);
+        assert_eq!(from_legacy, summary);
+    }
+
+    #[test]
+    fn mii_validation_ref_appears_on_composition_extension() {
+        let mut summary = sample_summary();
+        summary.mii_validation_ref = Some("mii-report:fixture-42".into());
+        let bundle = to_fhir_bundle(&summary).expect("bundle");
+        let composition = &bundle["entry"][0]["resource"];
+        let ext = composition["extension"]
+            .as_array()
+            .expect("Composition.extension present when mii_validation_ref set");
+        assert_eq!(ext.len(), 1);
+        assert_eq!(ext[0]["url"], MII_VALIDATION_REF_EXTENSION_URL);
+        assert_eq!(ext[0]["valueString"], "mii-report:fixture-42");
     }
 }
