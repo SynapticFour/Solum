@@ -1,0 +1,30 @@
+[package]
+name = "solum-auth-verify"
+description = "Standalone JWT/JWKS verification for Solum (Sprint 5; independent of ferrum-core decode paths)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+# Optional HTTP JWKS fetch (`JwksVerifier::from_url`). Offline callers that only
+# use `from_jwks_json` (tests, air-gapped Mode A) never resolve reqwest.
+http = ["dep:reqwest"]
+
+[dependencies]
+# Same major line as ferrum-core's jsonwebtoken pin (RSA/EC JWT verify).
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+solum-identity.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"], optional = true }
+
+[dev-dependencies]
+base64 = "0.22"
+rand = "0.8"
+rsa = { version = "0.9", features = ["pem"] }
+sha2.workspace = true
