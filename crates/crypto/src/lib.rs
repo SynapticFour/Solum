@@ -48,7 +48,13 @@ pub use ferrum_core;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum KeyCustody {
-    /// Keys never leave the customer's HSM / KMS boundary.
+    /// Customer-controlled KMS/HSM protects keys at rest.
+    ///
+    /// Brief in-process plaintext during encrypt/decrypt is inherent to the
+    /// [honest zero-knowledge path](../../../docs/architecture.md#honest-zero-knowledge-path)
+    /// (this crate already documents that encrypt/decrypt touch plaintext in
+    /// memory). Full confidential-computing isolation (TEE) is a documented
+    /// future direction, not current behaviour.
     CustomerHeld,
     /// Keys managed by Solum operator on behalf of the customer (restricted).
     OperatorHeld,
