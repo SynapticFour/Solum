@@ -15,6 +15,15 @@
 //! A slim identity crate owns the adapter; audit and consent keep writing
 //! plain `actor: String` values produced by callers (typically `Deployment`).
 //!
+//! # Capability checks (GTM-1)
+//!
+//! [`require_capability`] and the `CAP_*` constants live here because they are
+//! pure data logic over [`SolumActor::scopes`] — no network, crypto, audit, or
+//! consent dependencies. `Deployment` in `solum-core` consumes them at the
+//! start of each `*_as` method; placing the check in `solum-audit` or
+//! `solum-consent` would couple evidence/consent storage to an auth policy
+//! they do not own.
+//!
 //! # Feature `ferrum-companion`
 //!
 //! Gates only whether [`TryFrom`]`<&ferrum_core::auth::AuthClaims>` is
@@ -84,6 +93,35 @@ impl From<String> for SolumActor {
 impl From<&str> for SolumActor {
     fn from(subject_id: &str) -> Self {
         Self::from(subject_id.to_string())
+    }
+}
+
+/// Capability strings required by Deployment's `*_as` operations.
+/// Exact-match against [`SolumActor::scopes`] — kein Wildcard-Support in
+/// diesem Schritt (offener Punkt, siehe GTM-READINESS.md-Nachtrag).
+pub const CAP_CONSENT_GRANT: &str = "solum:consent:grant";
+pub const CAP_CONSENT_REVOKE: &str = "solum:consent:revoke";
+pub const CAP_CRYPTO_ENCRYPT: &str = "solum:crypto:encrypt";
+pub const CAP_CRYPTO_DECRYPT: &str = "solum:crypto:decrypt";
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum AuthorizationError {
+    #[error("actor '{subject_id}' lacks required capability '{capability}'")]
+    MissingCapability {
+        subject_id: String,
+        capability: String,
+    },
+}
+
+/// Fail-closed: no match in scopes → denied. Empty scopes → always denied.
+pub fn require_capability(actor: &SolumActor, capability: &str) -> Result<(), AuthorizationError> {
+    if actor.scopes.iter().any(|s| s == capability) {
+        Ok(())
+    } else {
+        Err(AuthorizationError::MissingCapability {
+            subject_id: actor.subject_id.clone(),
+            capability: capability.to_string(),
+        })
     }
 }
 
@@ -176,5 +214,25 @@ mod tests {
             actor.to_audit_string(),
             "ferrum:passport:researcher@example.org"
         );
+    }
+
+    #[test]
+    fn require_capability_exact_match_only() {
+        let actor = SolumActor::standalone("p/1", vec![CAP_CONSENT_GRANT.into()]);
+        assert!(require_capability(&actor, CAP_CONSENT_GRANT).is_ok());
+        assert_eq!(
+            require_capability(&actor, CAP_CONSENT_REVOKE),
+            Err(AuthorizationError::MissingCapability {
+                subject_id: "p/1".into(),
+                capability: CAP_CONSENT_REVOKE.into(),
+            })
+        );
+    }
+
+    #[test]
+    fn require_capability_empty_scopes_denied() {
+        let actor = SolumActor::from("p/1");
+        assert!(actor.scopes.is_empty());
+        assert!(require_capability(&actor, CAP_CRYPTO_ENCRYPT).is_err());
     }
 }
