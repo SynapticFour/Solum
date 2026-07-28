@@ -1,11 +1,11 @@
-# Stage 1 baseline (GTM-3 AWS KMS key provider)
+# Stage 1 baseline (GTM-1 capability-based authorization)
 
 | | |
 |---|---|
 | **Date** | 2026-07-28 |
-| **Verified commit** | `1f68e5994ae955aaefdaf2ebfd7f8ef4455c7ba0` |
-| **Tag** | `stage1-baseline-gtm3-2026-07-28` |
-| **Supersedes** | `stage1-baseline-sprint5-2026-07-27` (`2ccd2c9`) |
+| **Verified commit** | `3d822b7ec52acae348115efd8a56a86f8f14941d` |
+| **Tag** | `stage1-baseline-gtm1-2026-07-28` |
+| **Supersedes** | `stage1-baseline-gtm3-2026-07-28` (`1f68e59`) |
 
 This document freezes the Solum workspace state that passed local `./scripts/verify.sh` and green GitHub Actions (CI, CodeQL, Secret Scan, Quality Gate) on that commit. Descriptions below are taken from crate `lib.rs` module docs, profile TOML, `deny.toml`, `.gitleaks.toml`, and `docs/` — not from aspirational product copy.
 
@@ -13,8 +13,8 @@ This document freezes the Solum workspace state that passed local `./scripts/ver
 
 | Crate | Status | Tests | Description (from crate docs / CLI / examples) |
 |-------|--------|-------|------------------------------------------------|
-| `solum-core` | implementiert | lib: **9** (+1 feature-gated: **10** statt 9 mit `ferrum-storage-backend`); `tests/cli.rs`: **7**; `tests/ferrum_auth_smoke.rs`: **1**; `tests/solum_actor_auth.rs`: **2** | Product orchestration: wires jurisdiction profiles, crypto posture, audit, and clinical interchange adapters (FHIR first; openEHR staged); `Deployment` owns consent + Crypt4GH field encrypt/decrypt with matching audit events. Additive `*_as` methods accept [`SolumActor`](../crates/identity/src/lib.rs) and delegate to the unchanged `&str` APIs. Optional feature `ferrum-storage-backend`: `Deployment::with_storage` / `encrypt_field_and_store` / `read_and_decrypt_field` against Ferrum `LocalStorage` (async, kein `block_on` in der Library — Runtime bleibt beim Aufrufer); Default-Build bleibt ferrum-storage-frei. The `solum` CLI is a real tool: `consent grant` / `revoke` / `status`, `crypto encrypt` / `decrypt` (EphemeralTestKeyProvider, demo-only, Unix 0600 sidecar), `audit export` / `verify` — integration-tested via `assert_cmd`. |
-| `solum-identity` | implementiert | lib: **4** | Structured actor identity adapter (`SolumActor`/`ActorSource`: FerrumPassport/Standalone/LocalDev); persisted `actor: String` format unchanged, `SolumActor` maps onto it via `to_audit_string()`. |
+| `solum-core` | implementiert | lib: **17** (+1 feature-gated: **18** statt 17 mit `ferrum-storage-backend`); `tests/cli.rs`: **7**; `tests/ferrum_auth_smoke.rs`: **1**; `tests/solum_actor_auth.rs`: **2** | Product orchestration: wires jurisdiction profiles, crypto posture, audit, and clinical interchange adapters (FHIR first; openEHR staged); `Deployment` owns consent + Crypt4GH field encrypt/decrypt with matching audit events. Additive `*_as` methods accept [`SolumActor`](../crates/identity/src/lib.rs) and delegate to the unchanged `&str` APIs. `Deployment::*_as`-Methoden erzwingen jetzt Capability-Checks (`CAP_CONSENT_GRANT` / `CAP_CONSENT_REVOKE` / `CAP_CRYPTO_ENCRYPT` / `CAP_CRYPTO_DECRYPT`), fail-closed, Verweigerung schreibt `authorization.denied`-Audit-Event mit `AuditOutcome::Failure`; Legacy-`&str`-Methoden bleiben bewusst ungeprüft. Optional feature `ferrum-storage-backend`: `Deployment::with_storage` / `encrypt_field_and_store` / `read_and_decrypt_field` against Ferrum `LocalStorage` (async, kein `block_on` in der Library — Runtime bleibt beim Aufrufer); Default-Build bleibt ferrum-storage-frei. The `solum` CLI is a real tool: `consent grant` / `revoke` / `status`, `crypto encrypt` / `decrypt` (EphemeralTestKeyProvider, demo-only, Unix 0600 sidecar), `audit export` / `verify` — integration-tested via `assert_cmd`. |
+| `solum-identity` | implementiert | lib: **6** | Structured actor identity adapter (`SolumActor`/`ActorSource`: FerrumPassport/Standalone/LocalDev); persisted `actor: String` format unchanged, `SolumActor` maps onto it via `to_audit_string()`. `CAP_*` Konstanten, `AuthorizationError`, `require_capability()` (fail-closed, exact-match gegen `SolumActor.scopes`). |
 | `solum-auth-verify` | implementiert | lib: **6** | Standalone JWT/JWKS-Verifikation (jsonwebtoken RS256/ES256), unabhängig von privaten ferrum-core-Decode-Pfaden (keine öffentliche verify()-API in ferrum-core vorgefunden — dokumentierter Sprint-5-Rechercheergebnis); `VerifyConfig::for_ferrum_passport()` / `for_standalone_oidc()`; optionales Feature `http` für `JwksVerifier::from_url` (default aus, Offline-Pfad `from_jwks_json` zieht kein reqwest); `VerifiedClaims::into_solum_actor()` nutzt `solum-identity::ActorSource` ohne Duplikat-Enum. |
 | `solum-profiles` | implementiert | lib: 12 | Jurisdiction profile loader and startup conformance checks; TOML under `config/profiles/`; mismatches refuse to start; additive `TransferPolicy` + `validate_transfer` for cross-border / secondary-use requests (restrictive-by-default). |
 | `solum-crypto` | implementiert | lib: 8 +2 (feature-gated: separates Integrationstest-Target `tests/aws_kms.rs`, gemockt via aws-smithy-mocks, kein Live-AWS) | Crypt4GH envelopes for clinical field categories; customer-held key providers; same format as Ferrum genomic objects. Optional feature `aws-kms`: `AwsKmsKeyProvider` (KMS-Envelope für Crypt4GH-X25519-Seeds, asynchrones Unwrap-once beim Konstruieren, synchrones `Crypt4ghKeyProvider`-Trait unverändert — kein `block_on`); Default-Build bleibt AWS-frei, auch für Test-Targets (`required-features`-Muster). |
@@ -24,19 +24,17 @@ This document freezes the Solum workspace state that passed local `./scripts/ver
 | `solum-openehr` | Scaffold | lib: 1 | openEHR adapter surface (stage 2 scaffold); intentionally minimal while stage 1 focuses on FHIR (`STAGE = "2-scaffold"`). |
 | `solum-example-ferrum-companion` | Referenz (kein Produktcode) | binary smoke (via `verify.sh` §7 / §7b) | Mode-B-Referenz: bidirektionale Crypt4GH-Formatkompatibilität mit Ferrum + AuthClaims-Konstruktions-Smoke; optional `--features storage-backend` beweist LocalStorage Round-Trip über `Deployment` async APIs. Kein Produktcode. |
 
-Total lib unit tests in this baseline run (default features): **61**. Plus `solum-core` integration tests: **7** CLI (`assert_cmd`) + **1** AuthClaims smoke + **2** SolumActor auth. Combined automated count referenced above: **71** (plus empty doc-test suites). With `--features ferrum-storage-backend`, `solum-core` lib is **10** (+1 LocalStorage round-trip). With `--features aws-kms`, `solum-crypto` adds **+2** mocked KMS integration tests (`tests/aws_kms.rs`). Reference deployments in `verify.sh` §7 / §7b are additional living checks (not counted in the lib unit total).
+Total lib unit tests in this baseline run (default features): **71**. Plus `solum-core` integration tests: **7** CLI (`assert_cmd`) + **1** AuthClaims smoke + **2** SolumActor auth. Combined automated count referenced above: **81** (plus empty doc-test suites). With `--features ferrum-storage-backend`, `solum-core` lib is **18** (+1 LocalStorage round-trip). With `--features aws-kms`, `solum-crypto` adds **+2** mocked KMS integration tests (`tests/aws_kms.rs`). Reference deployments in `verify.sh` §7 / §7b are additional living checks (not counted in the lib unit total).
 
-## Seit `stage1-baseline-sprint5-2026-07-27` hinzugekommen
+## Seit `stage1-baseline-gtm3-2026-07-28` hinzugekommen
 
-- **docs/GTM-READINESS.md:** 4-Sprint-Plan für Verkaufsreife.
-- **GTM-2 (Recherche) + GTM-3 (Implementierung) abgeschlossen:** AWS KMS unterstützt kein X25519 direkt (bestätigt); Envelope-Modell (direktes KMS Encrypt/Decrypt des 32-Byte-Seeds); neuer eigenständiger `AwsKmsKeyProvider` (`CustomerHeldKeyProvider` unverändert).
-- **KeyCustody::CustomerHeld-Doku präzisiert** (honest zero-knowledge statt absolutem "never leaves boundary").
-- **CI-Lehre:** `[dev-dependencies]` können NICHT über Cargo-Features bedingt eingebunden werden — `required-features` auf `[[test]]`-Targets ist der korrekte Mechanismus, um schwere Test-Only-Deps (hier: aws-sdk-kms MSRV-Konflikt) vom Default-Build fernzuhalten; KMS-Tests leben jetzt als separates Integrationstest-Target `tests/aws_kms.rs` statt inline.
-- **Aufräum-Nachtrag:** ungenutzte `aws-config`/`tokio`-Feature-Abhängigkeiten entfernt.
+- **GTM-1 abgeschlossen:** rollenbasierte Autorisierung für alle vier `*_as`-Methoden (`grant_consent_as` / `revoke_consent_as` / `encrypt_field_as` / `decrypt_field_as`), fail-closed (leere Scopes = immer verweigert), jede Verweigerung wird auditiert (`authorization.denied` / `AuditOutcome::Failure`).
+- **Bewiesen:** Encrypt-Capability impliziert **nicht** Decrypt-Capability (separater Test) — keine implizite Rechte-Vererbung zwischen Operationen.
+- **Bewiesen:** Verweigerung erzeugt keine Seiteneffekte (kein Consent-Grant, keine Ver-/Entschlüsselung bei fehlender Capability).
 
 ## Verifizierter Zustand
 
-All `./scripts/verify.sh` sections (including §7 and §7b) passed on 2026-07-28 against commit `1f68e5994ae955aaefdaf2ebfd7f8ef4455c7ba0` (exit 0). Section 5 emitted a long series of `cargo deny` `warning[duplicate]` trees (not failures) that are omitted below.
+All `./scripts/verify.sh` sections (including §7 and §7b) passed on 2026-07-28 against commit `3d822b7ec52acae348115efd8a56a86f8f14941d` (exit 0). Section 5 emitted a long series of `cargo deny` `warning[duplicate]` trees (not failures) that are omitted below.
 
 ```
 == 0. Sanity: ferrum-core pin consistency ==
@@ -49,13 +47,13 @@ ok: both pin 27a6a8e9a719fd1a171da28b20462a777f95cf65
 solum-audit: 6 passed
 solum-auth-verify: 6 passed
 solum-consent: 7 passed
-solum-core lib: 9 passed
+solum-core lib: 17 passed
 solum-core tests/cli.rs: 7 passed
 solum-core tests/ferrum_auth_smoke.rs: 1 passed
 solum-core tests/solum_actor_auth.rs: 2 passed
 solum-crypto: 8 passed
 solum-fhir: 8 passed
-solum-identity: 4 passed
+solum-identity: 6 passed
 solum-openehr: 1 passed
 solum-profiles: 12 passed
 == 5. cargo-deny (licenses + sources + bans + advisories) ==
@@ -76,7 +74,7 @@ ok: Crypt4GH interop (Ferrum-path ↔ Solum encrypt_field) for patient_summary
 ok: ferrum-companion reference deployment (Mode B) passed
 ok: both reference deployments passed
 == 7b. Ferrum-storage backend (feature-gated) ==
-solum-core --features ferrum-storage-backend --lib: 10 passed
+solum-core --features ferrum-storage-backend --lib: 18 passed
 ok: LocalStorage encrypt_field_and_store ↔ read_and_decrypt_field for patient_summary
 ok: ferrum-companion reference deployment (Mode B) passed
 ok: ferrum-storage-backend feature path passed
@@ -88,10 +86,10 @@ All baseline checks passed.
 
 | Workflow | Run ID | URL |
 |----------|--------|-----|
-| CI | 30331176026 | https://github.com/SynapticFour/Solum/actions/runs/30331176026 |
-| CodeQL | 30331176024 | https://github.com/SynapticFour/Solum/actions/runs/30331176024 |
-| Secret Scan | 30331176021 | https://github.com/SynapticFour/Solum/actions/runs/30331176021 |
-| Quality Gate | 30331176017 | https://github.com/SynapticFour/Solum/actions/runs/30331176017 |
+| CI | 30390550791 | https://github.com/SynapticFour/Solum/actions/runs/30390550791 |
+| CodeQL | 30390550736 | https://github.com/SynapticFour/Solum/actions/runs/30390550736 |
+| Secret Scan | 30390550785 | https://github.com/SynapticFour/Solum/actions/runs/30390550785 |
+| Quality Gate | 30390550762 | https://github.com/SynapticFour/Solum/actions/runs/30390550762 |
 
 ## Bewusst akzeptierte Risiken
 
@@ -156,6 +154,10 @@ CLI crypto subcommands use EphemeralTestKeyProvider exclusively; the `*.ephemera
 
 `AwsKmsKeyProvider` hält den entschlüsselten Seed als normalen `Vec<u8>` ohne explizites Zeroize-on-Drop — identisch zum bestehenden Verhalten von `CustomerHeldKeyProvider`. Keine KMS-EncryptionContext-Bindung (AAD) für zusätzliche Integritäts-/Policy-Bindung. Keine Live-AWS-Tests in CI (nur aws-smithy-mocks).
 
+### Legacy `&str`-Methoden ohne Capability-Check / keine Capability-Wildcards
+
+Legacy `&str`-Methoden (`grant_consent`, `revoke_consent`, `encrypt_field`, `decrypt_field`) bleiben bewusst ohne Capability-Check — Autorisierung ist nur auf den `*_as`-Pfaden erzwungen. Jeder Aufrufer, der den Legacy-Pfad nutzt, umgeht GTM-1 vollständig. Das ist eine bewusste Design-Entscheidung (siehe Doc-Kommentare an den vier Methoden), aber eine reale offene Flanke, bis ein Migrationspfad zu den `*_as`-Methoden existiert. Keine Wildcard-/Hierarchie-Unterstützung in Capabilities (nur exaktes String-Match) — z.B. kein `solum:*`-Superuser-Scope.
+
 ## Explizit außerhalb dieser Baseline
 
 Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md), [helios.md](helios.md), [architecture.md](architecture.md), [INTEGRATION-ROADMAP.md](INTEGRATION-ROADMAP.md), [GTM-READINESS.md](GTM-READINESS.md), and scaffold markers in crate docs:
@@ -180,7 +182,10 @@ Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFI
 | Clinical interpretation / diagnosis / therapy support | Out of scope both stages — `docs/roadmap.md`, CONTRIBUTING MDCG boundary |
 | Kenya production-ready legal closure | Draft profile inside baseline; see “Bewusst akzeptierte Risiken” — not a closed jurisdiction package |
 | Wire Patient Summary encrypt/decrypt into `Deployment` / typed FHIR CLI surface | Stage-1 binding lives in `solum-fhir`; generic field encrypt/decrypt is on the CLI, typed Patient Summary path remains open |
-| GTM-1 (rollenbasierte Autorisierung), GTM-4 (Kunden-Doku) | `docs/GTM-READINESS.md` — GTM-2+3 inside this baseline; GTM-1/4 remain open |
+| GTM-4 (Kunden-Doku) | `docs/GTM-READINESS.md` — GTM-1–3 inside this baseline; GTM-4 remains open |
+| Migrationspfad / Deprecation für die Legacy-`&str`-Methoden | GTM-1 design: `*_as` enforced, `&str` legacy intentionally unchecked — see accepted-risk note |
+| Capability-Hierarchien oder Wildcards | GTM-1 exact-match only; no `solum:*` hierarchy |
+| Autorisierung in der CLI verdrahten (`main.rs` unverändert, CLI nutzt weiterhin nur die Legacy-Methoden) | GTM-1 library surface on `*_as` only; CLI wiring deferred |
 | Zeroize-on-Drop für Schlüsselmaterial | Accepted-risk note above; not implemented for CustomerHeld or AwsKms |
 | KMS-Provisioning-CLI (`wrap_seed` ist nur Bibliotheks-API) | GTM-3 library surface only; no CLI wrapper |
 | KMS EncryptionContext/AAD-Bindung | See accepted-risk note; not wired |
@@ -190,11 +195,11 @@ Note: `docs/roadmap.md` stage-1 bullet still says “actual field-level encrypti
 ## Wie diese Baseline reproduziert wird
 
 ```bash
-git fetch origin tag stage1-baseline-gtm3-2026-07-28
-git checkout stage1-baseline-gtm3-2026-07-28
+git fetch origin tag stage1-baseline-gtm1-2026-07-28
+git checkout stage1-baseline-gtm1-2026-07-28
 # Prerequisites: Rust 1.91.1 (rust-toolchain.toml) and libsodium
 # (e.g. brew install libsodium / apt install libsodium-dev)
 ./scripts/verify.sh
 ```
 
-Expect all sections to pass (including §7 reference deployments and §7b feature-gated storage). This document may live on `main` at or after the tag; the tag itself points at the verified code commit listed in the header. Prior freezes: `stage1-baseline-sprint5-2026-07-27`, `stage1-baseline-sprint4-2026-07-27`, `stage1-baseline-sprint3-2026-07-27`, `stage1-baseline-sprint2-2026-07-27`, `stage1-baseline-sprint1-2026-07-26`, `stage1-baseline-cli-2026-07-26`, `stage1-baseline-fhir-2026-07-26`, `stage1-baseline-transfer-2026-07-26`, `stage1-baseline-2026-07-25`.
+Expect all sections to pass (including §7 reference deployments and §7b feature-gated storage). This document may live on `main` at or after the tag; the tag itself points at the verified code commit listed in the header. Prior freezes: `stage1-baseline-gtm3-2026-07-28`, `stage1-baseline-sprint5-2026-07-27`, `stage1-baseline-sprint4-2026-07-27`, `stage1-baseline-sprint3-2026-07-27`, `stage1-baseline-sprint2-2026-07-27`, `stage1-baseline-sprint1-2026-07-26`, `stage1-baseline-cli-2026-07-26`, `stage1-baseline-fhir-2026-07-26`, `stage1-baseline-transfer-2026-07-26`, `stage1-baseline-2026-07-25`.
