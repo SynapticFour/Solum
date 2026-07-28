@@ -11,11 +11,13 @@ publish.workspace = true
 [features]
 default = []
 # Optional AWS KMS wrap/unwrap for Crypt4GH X25519 seeds (GTM-3). Default off so
-# Mode A / non-AWS builds never resolve aws-sdk-kms, aws-config, or tokio via this crate.
+# Mode A / non-AWS builds never resolve aws-sdk-kms via this crate.
 # aws-smithy-mocks + test-util are included so tests/aws_kms.rs (required-features)
 # can drive Encrypt/Decrypt without listing those crates in always-on [dev-dependencies]
 # (which would break MSRV 1.91.1 CI via cargo clippy --all-targets).
-aws-kms = ["dep:aws-sdk-kms", "dep:aws-config", "dep:tokio", "dep:aws-smithy-mocks"]
+# Caller constructs KmsClient and provides the async runtime; aws-config/tokio
+# are not feature deps (tokio stays in [dev-dependencies] for #[tokio::test]).
+aws-kms = ["dep:aws-sdk-kms", "dep:aws-smithy-mocks"]
 
 [dependencies]
 anyhow.workspace = true
@@ -33,11 +35,7 @@ ferrum-core = { git = "https://github.com/SynapticFour/Ferrum.git", rev = "27a6a
 # Feature-gated AWS KMS client (symmetric Encrypt/Decrypt of 32-byte seeds).
 # test-util: only pulled when aws-kms is enabled (for smithy mocks in tests/aws_kms.rs).
 aws-sdk-kms = { version = "1", optional = true, default-features = false, features = ["behavior-version-latest", "rt-tokio", "default-https-client", "test-util"] }
-aws-config = { version = "1", optional = true, default-features = false, features = ["behavior-version-latest", "rt-tokio", "default-https-client"] }
 aws-smithy-mocks = { version = "0.2", optional = true }
-# Runtime stays with the caller for async wrap/unwrap; listed so the feature
-# surface matches ferrum-storage-backend (tokio only when aws-kms is on).
-tokio = { version = "1", optional = true, default-features = false, features = ["rt"] }
 
 [dev-dependencies]
 solum-profiles = { workspace = true }
