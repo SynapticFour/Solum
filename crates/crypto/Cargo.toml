@@ -8,6 +8,12 @@ repository.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
+[features]
+default = []
+# Optional AWS KMS wrap/unwrap for Crypt4GH X25519 seeds (GTM-3). Default off so
+# Mode A / non-AWS builds never resolve aws-sdk-kms, aws-config, or tokio via this crate.
+aws-kms = ["dep:aws-sdk-kms", "dep:aws-config", "dep:tokio"]
+
 [dependencies]
 anyhow.workspace = true
 serde.workspace = true
@@ -21,7 +27,20 @@ crypt4gh = "0.4.1"
 # Pin must stay in sync with config/ci/ferrum-revision.txt (full git SHA).
 ferrum-core = { git = "https://github.com/SynapticFour/Ferrum.git", rev = "27a6a8e9a719fd1a171da28b20462a777f95cf65" }
 
+# Feature-gated AWS KMS client (symmetric Encrypt/Decrypt of 32-byte seeds).
+aws-sdk-kms = { version = "1", optional = true, default-features = false, features = ["behavior-version-latest", "rt-tokio", "default-https-client"] }
+aws-config = { version = "1", optional = true, default-features = false, features = ["behavior-version-latest", "rt-tokio", "default-https-client"] }
+# Runtime stays with the caller for async wrap/unwrap; listed so the feature
+# surface matches ferrum-storage-backend (tokio only when aws-kms is on).
+tokio = { version = "1", optional = true, default-features = false, features = ["rt"] }
+
 [dev-dependencies]
 solum-profiles = { workspace = true }
 serde_json.workspace = true
 tempfile.workspace = true
+# Official AWS SDK for Rust mock harness (docs.aws.amazon.com/sdk-for-rust/.../testing-smithy-mocks.html).
+# Only referenced from `#[cfg(feature = "aws-kms")]` tests.
+aws-smithy-mocks = "0.2"
+# test-util only for test targets; Cargo unifies with the optional [dependencies] entry.
+aws-sdk-kms = { version = "1", default-features = false, features = ["behavior-version-latest", "rt-tokio", "default-https-client", "test-util"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

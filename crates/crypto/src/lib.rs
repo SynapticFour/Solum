@@ -24,6 +24,9 @@
 
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "aws-kms")]
+pub mod aws_kms;
+
 use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
 
