@@ -1,11 +1,11 @@
-# Stage 1 baseline (GTM-1 capability-based authorization)
+# Stage 1 baseline (GTM-4 customer docs — GTM-READINESS plan complete)
 
 | | |
 |---|---|
-| **Date** | 2026-07-28 |
-| **Verified commit** | `3d822b7ec52acae348115efd8a56a86f8f14941d` |
-| **Tag** | `stage1-baseline-gtm1-2026-07-28` |
-| **Supersedes** | `stage1-baseline-gtm3-2026-07-28` (`1f68e59`) |
+| **Date** | 2026-07-29 |
+| **Verified commit** | `eae6380ee81ac670aee8f634f6d886e56448ef53` |
+| **Tag** | `stage1-baseline-gtm4-2026-07-28` |
+| **Supersedes** | `stage1-baseline-gtm1-2026-07-28` (`3d822b7`) |
 
 This document freezes the Solum workspace state that passed local `./scripts/verify.sh` and green GitHub Actions (CI, CodeQL, Secret Scan, Quality Gate) on that commit. Descriptions below are taken from crate `lib.rs` module docs, profile TOML, `deny.toml`, `.gitleaks.toml`, and `docs/` — not from aspirational product copy.
 
@@ -26,15 +26,14 @@ This document freezes the Solum workspace state that passed local `./scripts/ver
 
 Total lib unit tests in this baseline run (default features): **71**. Plus `solum-core` integration tests: **7** CLI (`assert_cmd`) + **1** AuthClaims smoke + **2** SolumActor auth. Combined automated count referenced above: **81** (plus empty doc-test suites). With `--features ferrum-storage-backend`, `solum-core` lib is **18** (+1 LocalStorage round-trip). With `--features aws-kms`, `solum-crypto` adds **+2** mocked KMS integration tests (`tests/aws_kms.rs`). Reference deployments in `verify.sh` §7 / §7b are additional living checks (not counted in the lib unit total).
 
-## Seit `stage1-baseline-gtm3-2026-07-28` hinzugekommen
+## Seit `stage1-baseline-gtm1-2026-07-28` hinzugekommen
 
-- **GTM-1 abgeschlossen:** rollenbasierte Autorisierung für alle vier `*_as`-Methoden (`grant_consent_as` / `revoke_consent_as` / `encrypt_field_as` / `decrypt_field_as`), fail-closed (leere Scopes = immer verweigert), jede Verweigerung wird auditiert (`authorization.denied` / `AuditOutcome::Failure`).
-- **Bewiesen:** Encrypt-Capability impliziert **nicht** Decrypt-Capability (separater Test) — keine implizite Rechte-Vererbung zwischen Operationen.
-- **Bewiesen:** Verweigerung erzeugt keine Seiteneffekte (kein Consent-Grant, keine Ver-/Entschlüsselung bei fehlender Capability).
+- **GTM-4 abgeschlossen:** [`docs/customer/SECURITY-OVERVIEW.md`](customer/SECURITY-OVERVIEW.md) + [`docs/customer/DEPLOYMENT-RUNBOOK.md`](customer/DEPLOYMENT-RUNBOOK.md) — vollständig aus bestehender Doku abgeleitet, keine neuen Tatsachenbehauptungen, alle bekannten Einschränkungen aus dieser Baseline kundenlesbar übernommen.
+- **`docs/GTM-READINESS.md` ist damit vollständig umgesetzt (GTM-1 bis GTM-4)** — kompletter Vier-Sprint-Plan von „was fehlt bis verkaufbar“ abgeschlossen (Autorisierung, AWS-KMS-Recherche/-Envelope, Kundendoku).
 
 ## Verifizierter Zustand
 
-All `./scripts/verify.sh` sections (including §7 and §7b) passed on 2026-07-28 against commit `3d822b7ec52acae348115efd8a56a86f8f14941d` (exit 0). Section 5 emitted a long series of `cargo deny` `warning[duplicate]` trees (not failures) that are omitted below.
+All `./scripts/verify.sh` sections (including §7 and §7b) passed on 2026-07-29 against commit `eae6380ee81ac670aee8f634f6d886e56448ef53` (exit 0). Section 5 emitted a long series of `cargo deny` `warning[duplicate]` trees (not failures) that are omitted below.
 
 ```
 == 0. Sanity: ferrum-core pin consistency ==
@@ -86,10 +85,10 @@ All baseline checks passed.
 
 | Workflow | Run ID | URL |
 |----------|--------|-----|
-| CI | 30390550791 | https://github.com/SynapticFour/Solum/actions/runs/30390550791 |
-| CodeQL | 30390550736 | https://github.com/SynapticFour/Solum/actions/runs/30390550736 |
-| Secret Scan | 30390550785 | https://github.com/SynapticFour/Solum/actions/runs/30390550785 |
-| Quality Gate | 30390550762 | https://github.com/SynapticFour/Solum/actions/runs/30390550762 |
+| CI | 30421457274 | https://github.com/SynapticFour/Solum/actions/runs/30421457274 |
+| CodeQL | 30421457288 | https://github.com/SynapticFour/Solum/actions/runs/30421457288 |
+| Secret Scan | 30421457232 | https://github.com/SynapticFour/Solum/actions/runs/30421457232 |
+| Quality Gate | 30421457263 | https://github.com/SynapticFour/Solum/actions/runs/30421457263 |
 
 ## Bewusst akzeptierte Risiken
 
@@ -182,7 +181,7 @@ Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFI
 | Clinical interpretation / diagnosis / therapy support | Out of scope both stages — `docs/roadmap.md`, CONTRIBUTING MDCG boundary |
 | Kenya production-ready legal closure | Draft profile inside baseline; see “Bewusst akzeptierte Risiken” — not a closed jurisdiction package |
 | Wire Patient Summary encrypt/decrypt into `Deployment` / typed FHIR CLI surface | Stage-1 binding lives in `solum-fhir`; generic field encrypt/decrypt is on the CLI, typed Patient Summary path remains open |
-| GTM-4 (Kunden-Doku) | `docs/GTM-READINESS.md` — GTM-1–3 inside this baseline; GTM-4 remains open |
+| `docs/GTM-READINESS.md` (GTM-1 through GTM-4) | **Vollständig umgesetzt** in this baseline — no longer an open GTM readiness gap; remaining Stage‑2 / post-GTM items above stay open |
 | Migrationspfad / Deprecation für die Legacy-`&str`-Methoden | GTM-1 design: `*_as` enforced, `&str` legacy intentionally unchecked — see accepted-risk note |
 | Capability-Hierarchien oder Wildcards | GTM-1 exact-match only; no `solum:*` hierarchy |
 | Autorisierung in der CLI verdrahten (`main.rs` unverändert, CLI nutzt weiterhin nur die Legacy-Methoden) | GTM-1 library surface on `*_as` only; CLI wiring deferred |
@@ -195,11 +194,11 @@ Note: `docs/roadmap.md` stage-1 bullet still says “actual field-level encrypti
 ## Wie diese Baseline reproduziert wird
 
 ```bash
-git fetch origin tag stage1-baseline-gtm1-2026-07-28
-git checkout stage1-baseline-gtm1-2026-07-28
+git fetch origin tag stage1-baseline-gtm4-2026-07-28
+git checkout stage1-baseline-gtm4-2026-07-28
 # Prerequisites: Rust 1.91.1 (rust-toolchain.toml) and libsodium
 # (e.g. brew install libsodium / apt install libsodium-dev)
 ./scripts/verify.sh
 ```
 
-Expect all sections to pass (including §7 reference deployments and §7b feature-gated storage). This document may live on `main` at or after the tag; the tag itself points at the verified code commit listed in the header. Prior freezes: `stage1-baseline-gtm3-2026-07-28`, `stage1-baseline-sprint5-2026-07-27`, `stage1-baseline-sprint4-2026-07-27`, `stage1-baseline-sprint3-2026-07-27`, `stage1-baseline-sprint2-2026-07-27`, `stage1-baseline-sprint1-2026-07-26`, `stage1-baseline-cli-2026-07-26`, `stage1-baseline-fhir-2026-07-26`, `stage1-baseline-transfer-2026-07-26`, `stage1-baseline-2026-07-25`.
+Expect all sections to pass (including §7 reference deployments and §7b feature-gated storage). This document may live on `main` at or after the tag; the tag itself points at the verified code commit listed in the header. Prior freezes: `stage1-baseline-gtm1-2026-07-28`, `stage1-baseline-gtm3-2026-07-28`, `stage1-baseline-sprint5-2026-07-27`, `stage1-baseline-sprint4-2026-07-27`, `stage1-baseline-sprint3-2026-07-27`, `stage1-baseline-sprint2-2026-07-27`, `stage1-baseline-sprint1-2026-07-26`, `stage1-baseline-cli-2026-07-26`, `stage1-baseline-fhir-2026-07-26`, `stage1-baseline-transfer-2026-07-26`, `stage1-baseline-2026-07-25`.
