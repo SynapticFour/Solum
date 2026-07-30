@@ -13,7 +13,8 @@ use solum_core::crypto::{
     Crypt4ghKeyProvider, CustomerHeldKeyProvider, EncryptedField, EphemeralTestKeyProvider, KeyRef,
 };
 use solum_core::{
-    example_eu_runtime, query_consent_status, start_with_profile, Deployment, SolumError,
+    example_eu_runtime, query_consent_status, start_with_profile, ActorSource, Deployment,
+    SolumActor, SolumError,
 };
 
 const EPHEMERAL_KEY_WARNING: &str = "\
@@ -71,9 +72,13 @@ enum ConsentCmd {
         purpose: String,
         #[arg(long)]
         actor: String,
-        /// Optional comma-separated scope categories.
+        /// Optional comma-separated consent data categories (not auth capabilities).
         #[arg(long, value_delimiter = ',')]
         scope: Vec<String>,
+        /// GTM-1 authorization capability (repeatable). Fail-closed: omit → empty
+        /// scopes → denied. Distinct from `--scope` (consent data categories).
+        #[arg(long = "capability", action = clap::ArgAction::Append)]
+        capability: Vec<String>,
     },
     /// Revoke consent and emit a matching audit event.
     Revoke {
@@ -89,6 +94,9 @@ enum ConsentCmd {
         purpose: String,
         #[arg(long)]
         actor: String,
+        /// GTM-1 authorization capability (repeatable). Fail-closed: omit → denied.
+        #[arg(long = "capability", action = clap::ArgAction::Append)]
+        capability: Vec<String>,
     },
     /// Print granted / revoked / unknown (read-only; no audit path required).
     Status {
@@ -119,6 +127,9 @@ enum CryptoCmd {
         key_ref: String,
         #[arg(long)]
         actor: String,
+        /// GTM-1 authorization capability (repeatable). Fail-closed: omit → denied.
+        #[arg(long = "capability", action = clap::ArgAction::Append)]
+        capability: Vec<String>,
         #[arg(long)]
         r#in: PathBuf,
         #[arg(long)]
@@ -136,6 +147,9 @@ enum CryptoCmd {
         key_ref: String,
         #[arg(long)]
         actor: String,
+        /// GTM-1 authorization capability (repeatable). Fail-closed: omit → denied.
+        #[arg(long = "capability", action = clap::ArgAction::Append)]
+        capability: Vec<String>,
         #[arg(long)]
         r#in: PathBuf,
         #[arg(long)]
@@ -232,6 +246,20 @@ fn open_deployment<P: Crypt4ghKeyProvider>(
     Deployment::open(profile, &runtime_config(), audit, consent_store, keys).map_err(fail)
 }
 
+/// CLI actor for GTM-1 `*_as` paths.
+///
+/// `LocalDev` keeps `to_audit_string()` identical to the pre-GTM CLI `&str`
+/// actor (e.g. `"practitioner/7"`), so audit trails stay comparable. Omit
+/// `--capability` → empty scopes → fail-closed denial (option A).
+fn cli_actor(subject_id: String, capabilities: Vec<String>) -> SolumActor {
+    SolumActor {
+        subject_id,
+        display: None,
+        source: ActorSource::LocalDev,
+        scopes: capabilities,
+    }
+}
+
 fn cmd_consent(command: ConsentCmd) -> Result<(), ExitCode> {
     match command {
         ConsentCmd::Grant {
@@ -242,6 +270,7 @@ fn cmd_consent(command: ConsentCmd) -> Result<(), ExitCode> {
             purpose,
             actor,
             scope,
+            capability,
         } => {
             let mut deployment = open_deployment(
                 &profile,
@@ -249,8 +278,9 @@ fn cmd_consent(command: ConsentCmd) -> Result<(), ExitCode> {
                 &consent_store,
                 EphemeralTestKeyProvider::new(),
             )?;
+            let actor = cli_actor(actor, capability);
             let record = deployment
-                .grant_consent(&subject, &purpose, scope, &actor)
+                .grant_consent_as(&subject, &purpose, scope, &actor)
                 .map_err(fail)?;
             print_json(&record)?;
             Ok(())
@@ -262,6 +292,7 @@ fn cmd_consent(command: ConsentCmd) -> Result<(), ExitCode> {
             subject,
             purpose,
             actor,
+            capability,
         } => {
             let mut deployment = open_deployment(
                 &profile,
@@ -269,8 +300,9 @@ fn cmd_consent(command: ConsentCmd) -> Result<(), ExitCode> {
                 &consent_store,
                 EphemeralTestKeyProvider::new(),
             )?;
+            let actor = cli_actor(actor, capability);
             let record = deployment
-                .revoke_consent(&subject, &purpose, &actor)
+                .revoke_consent_as(&subject, &purpose, &actor)
                 .map_err(fail)?;
             print_json(&record)?;
             Ok(())
@@ -306,6 +338,7 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
             category,
             key_ref,
             actor,
+            capability,
             r#in,
             out,
         } => {
@@ -319,8 +352,9 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
                 .map_err(|e| fail_usage(format!("failed to read --in {}: {e}", r#in.display())))?;
 
             let mut deployment = open_deployment(&profile, &audit, &consent_store, keys)?;
+            let actor = cli_actor(actor, capability);
             let field = deployment
-                .encrypt_field(&category, &plaintext, &key_ref, &actor)
+                .encrypt_field_as(&category, &plaintext, &key_ref, &actor)
                 .map_err(fail)?;
 
             write_json(&out, &field)?;
@@ -354,6 +388,7 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
             consent_store,
             key_ref,
             actor,
+            capability,
             r#in,
             out,
         } => {
@@ -381,8 +416,9 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
 
             let field: EncryptedField = read_json(&r#in)?;
             let mut deployment = open_deployment(&profile, &audit, &consent_store, keys)?;
+            let actor = cli_actor(actor, capability);
             let plaintext = deployment
-                .decrypt_field(&field, &key_ref, &actor)
+                .decrypt_field_as(&field, &key_ref, &actor)
                 .map_err(fail)?;
             fs::write(&out, plaintext)
                 .map_err(|e| fail(format!("failed to write --out {}: {e}", out.display())))?;

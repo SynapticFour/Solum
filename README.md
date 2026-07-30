@@ -71,9 +71,12 @@ mkdir -p /tmp/solum-demo
 cargo run -p solum-core -- check --profile "$PROFILE"
 
 # 2–4. Consent
+# --capability is required for mutating consent (GTM-1 fail-closed: omit → denied).
+# --scope remains consent *data categories*, not authorization.
 cargo run -p solum-core -- consent grant \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
   --subject patient/42 --purpose care_provision --actor practitioner/7 \
+  --capability solum:consent:grant \
   --scope patient_summary
 cargo run -p solum-core -- consent status \
   --profile "$PROFILE" --consent-store "$CONSENT" \
@@ -81,17 +84,20 @@ cargo run -p solum-core -- consent status \
 # → granted | revoked | unknown  (no --audit required; read-only)
 cargo run -p solum-core -- consent revoke \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
-  --subject patient/42 --purpose care_provision --actor patient/42
+  --subject patient/42 --purpose care_provision --actor patient/42 \
+  --capability solum:consent:revoke
 
 # 5–6. Field encrypt / decrypt (demo keys only)
 echo 'demo-summary' > /tmp/solum-demo/plain.txt
 cargo run -p solum-core -- crypto encrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
   --category patient_summary --key-ref ephemeral/demo-1 --actor practitioner/7 \
+  --capability solum:crypto:encrypt \
   --in /tmp/solum-demo/plain.txt --out /tmp/solum-demo/field.json
 cargo run -p solum-core -- crypto decrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
   --key-ref ephemeral/demo-1 --actor practitioner/7 \
+  --capability solum:crypto:decrypt \
   --in /tmp/solum-demo/field.json --out /tmp/solum-demo/plain-out.txt
 
 # 7–8. Audit

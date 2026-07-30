@@ -101,7 +101,7 @@ On the structured-actor path (actor identity that carries **scopes / capabilitie
 | **Audited denials** | A denied attempt writes an `authorization.denied` audit event (failure outcome). The underlying consent or crypto side effect does **not** run. |
 | **Exact match only** | Capabilities are compared as exact strings. Hierarchies / wildcards are **not** supported in this baseline. |
 
-**Important asymmetry:** Older call paths that identify the actor only as a plain text string **do not carry scopes and therefore do not enforce these checks**. That is intentional (legacy path) and is an **open security flank** until callers migrate to the capability-checked path. The shipped command-line tool currently uses that legacy path. See §8 and [DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md). ([BASELINE.md](../BASELINE.md))
+**Important asymmetry:** Older **library** call paths that identify the actor only as a plain text string **do not carry scopes and therefore do not enforce these checks**. That is intentional (legacy path) and remains an **open security flank** for any integrator that still calls those APIs. The shipped **CLI** uses the capability-checked path: pass `--capability` (repeatable); omit it → empty scopes → **fail-closed denial**. See §8 and [DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md). ([BASELINE.md](../BASELINE.md))
 
 ---
 
@@ -138,7 +138,7 @@ The following are **accepted or open limitations** of the current baseline, rest
 
 1. **Command-line crypto uses demo keys only.** The CLI encrypt/decrypt path uses an ephemeral test key provider. Sidecar files can hold **raw private key bytes in plaintext** (Unix mode 0600; no equivalent protection called out for Windows). **Not suitable for real patient data.** Production key custody is **not** wired into the CLI. ([BASELINE.md](../BASELINE.md); README CLI warning)
 
-2. **Legacy actor paths skip authorization.** Callers that invoke grant/revoke/encrypt/decrypt with a plain actor string (no scopes) **bypass GTM‑1 capability checks entirely**. The CLI uses this path today. Capability enforcement exists only on the structured-actor APIs. ([BASELINE.md](../BASELINE.md))
+2. **Legacy library actor paths skip authorization.** Callers that invoke grant/revoke/encrypt/decrypt with a plain actor string (no scopes) **bypass GTM‑1 capability checks entirely**. The shipped **CLI** does **not** use that path: it builds a structured actor from `--actor` + `--capability` and calls the checked APIs (omit `--capability` → fail-closed denial). Library integrators that still use the plain-string APIs remain on the unchecked flank. ([BASELINE.md](../BASELINE.md))
 
 3. **No capability wildcards / hierarchies.** Exact string match only — e.g. no `solum:*` superuser scope. ([BASELINE.md](../BASELINE.md))
 

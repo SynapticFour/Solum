@@ -41,6 +41,7 @@ echo "-- consent grant (as if EHR called Solum after clinician request) =="
 cargo run -q -p solum-core -- consent grant \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
   --subject patient/42 --purpose care_provision --actor practitioner/7 \
+  --capability solum:consent:grant \
   --scope patient_summary >/dev/null
 
 echo "-- consent status =="
@@ -54,12 +55,14 @@ echo "-- crypto encrypt (DB blob → Crypt4GH EncryptedField JSON) =="
 cargo run -q -p solum-core -- crypto encrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
   --category patient_summary --key-ref ephemeral/standalone-1 --actor practitioner/7 \
+  --capability solum:crypto:encrypt \
   --in "$PLAIN_IN" --out "$FIELD_OUT" 2>/dev/null
 
 echo "-- crypto decrypt (round-trip back into EHR staging file) =="
 cargo run -q -p solum-core -- crypto decrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
   --key-ref ephemeral/standalone-1 --actor practitioner/7 \
+  --capability solum:crypto:decrypt \
   --in "$FIELD_OUT" --out "$PLAIN_OUT" 2>/dev/null
 cmp -s "$PLAIN_IN" "$PLAIN_OUT" || { echo "FAIL: decrypt mismatch"; exit 1; }
 echo "ok: encrypt/decrypt round-trip"

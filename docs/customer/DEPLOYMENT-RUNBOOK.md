@@ -77,10 +77,13 @@ SOLUM_STORAGE_REGION=us-east-1 cargo run -p solum-core -- check --profile "$PROF
 
 ### Consent (grant / status / revoke)
 
+Mutating consent commands require `--capability` (GTM-1). Omit it → fail-closed denial. `--scope` on grant is still a **consent data category**, not an authorization capability.
+
 ```bash
 cargo run -p solum-core -- consent grant \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
   --subject patient/42 --purpose care_provision --actor practitioner/7 \
+  --capability solum:consent:grant \
   --scope patient_summary
 
 cargo run -p solum-core -- consent status \
@@ -90,7 +93,8 @@ cargo run -p solum-core -- consent status \
 
 cargo run -p solum-core -- consent revoke \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
-  --subject patient/42 --purpose care_provision --actor patient/42
+  --subject patient/42 --purpose care_provision --actor patient/42 \
+  --capability solum:consent:revoke
 ```
 
 ### Field encrypt / decrypt (demo keys — see §4)
@@ -101,11 +105,13 @@ echo 'demo-plaintext' > /tmp/solum-demo/plain.txt
 cargo run -p solum-core -- crypto encrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
   --category patient_summary --key-ref ephemeral/demo-1 --actor practitioner/7 \
+  --capability solum:crypto:encrypt \
   --in /tmp/solum-demo/plain.txt --out /tmp/solum-demo/field.json
 
 cargo run -p solum-core -- crypto decrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
   --key-ref ephemeral/demo-1 --actor practitioner/7 \
+  --capability solum:crypto:decrypt \
   --in /tmp/solum-demo/field.json --out /tmp/solum-demo/plain-out.txt
 ```
 
@@ -154,6 +160,8 @@ Only purposes listed in the active profile’s required-purpose catalogue are ac
 
 When your integration uses the **structured actor** API (actor identity with scopes), assign **exact** capability strings. Fail-closed: missing or empty scopes → deny + audit event; no side effects.
 
+The **CLI** builds that structured actor from `--actor` plus one or more `--capability` flags and always calls the checked APIs. Omit `--capability` → empty scopes → denial (same fail-closed rule).
+
 Documented capability strings in this baseline:
 
 | Capability | Operation gated |
@@ -165,9 +173,9 @@ Documented capability strings in this baseline:
 
 Encrypt does **not** imply decrypt. There is no wildcard hierarchy (e.g. no `solum:*`). ([BASELINE.md](../BASELINE.md))
 
-### Warning — legacy CLI / plain-string actors
+### Warning — legacy library plain-string actors
 
-The shipped CLI identifies actors as plain strings and therefore **does not enforce** capability checks. Any integration that calls the same legacy plain-string APIs likewise **bypasses** GTM‑1 authorization. Treat that as a known open flank until your stack uses only the capability-checked APIs. ([BASELINE.md](../BASELINE.md); [SECURITY-OVERVIEW.md](SECURITY-OVERVIEW.md) §5 and §8)
+Library callers that still invoke grant/revoke/encrypt/decrypt with a plain actor string (no scopes) **bypass** GTM‑1 authorization. The shipped CLI no longer uses that path. Treat remaining library legacy callers as a known open flank until they migrate. ([BASELINE.md](../BASELINE.md); [SECURITY-OVERVIEW.md](SECURITY-OVERVIEW.md) §5 and §8)
 
 **ANNAHME, bitte prüfen:** How your IdP / SMART-on-FHIR or Ferrum Passport scopes are mapped into these exact capability strings is an integration design choice for your project — the baseline freezes the check mechanism, not a full hospital role catalogue.
 
@@ -214,7 +222,7 @@ Do not duplicate the full risk register here. Read **[SECURITY-OVERVIEW.md §8](
 High-signal operational reminders:
 
 - CLI crypto = demo keys only
-- CLI / plain-string actors = no capability enforcement
+- Library plain-string actors = no capability enforcement (CLI uses `--capability`, fail-closed if omitted)
 - Kenya profile = draft only
 - No in-repo binary release channel documented
 - Audit store = single writer

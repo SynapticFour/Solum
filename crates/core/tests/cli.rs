@@ -32,6 +32,8 @@ fn grant(dir: &Path, subject: &str, purpose: &str) {
             purpose,
             "--actor",
             "practitioner/7",
+            "--capability",
+            "solum:consent:grant",
             "--scope",
             "patient_summary",
         ])
@@ -91,12 +93,49 @@ fn consent_grant_revoke_then_status_revoked() {
             "care_provision",
             "--actor",
             "patient/42",
+            "--capability",
+            "solum:consent:revoke",
         ])
         .assert()
         .success();
     assert_eq!(
         status_stdout(dir.path(), "patient/42", "care_provision"),
         "revoked"
+    );
+}
+
+#[test]
+fn consent_grant_without_capability_is_denied() {
+    let dir = tempdir().unwrap();
+    let assert = solum()
+        .args([
+            "consent",
+            "grant",
+            "--profile",
+            eu_profile().to_str().unwrap(),
+            "--audit",
+            dir.path().join("audit.jsonl").to_str().unwrap(),
+            "--consent-store",
+            dir.path().join("consent.jsonl").to_str().unwrap(),
+            "--subject",
+            "patient/42",
+            "--purpose",
+            "care_provision",
+            "--actor",
+            "practitioner/7",
+            "--scope",
+            "patient_summary",
+        ])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert!(
+        stderr.contains("lacks required capability") || stderr.contains("solum:consent:grant"),
+        "fail-closed without --capability: {stderr}"
+    );
+    assert_eq!(
+        status_stdout(dir.path(), "patient/42", "care_provision"),
+        "unknown"
     );
 }
 
@@ -124,6 +163,8 @@ fn crypto_encrypt_decrypt_round_trip() {
             "ephemeral/cli-1",
             "--actor",
             "practitioner/7",
+            "--capability",
+            "solum:crypto:encrypt",
             "--in",
             plain_in.to_str().unwrap(),
             "--out",
@@ -151,6 +192,8 @@ fn crypto_encrypt_decrypt_round_trip() {
             "ephemeral/cli-1",
             "--actor",
             "practitioner/7",
+            "--capability",
+            "solum:crypto:decrypt",
             "--in",
             enc_out.to_str().unwrap(),
             "--out",
@@ -188,6 +231,8 @@ fn crypto_encrypt_sidecar_is_mode_0600() {
             "ephemeral/cli-1",
             "--actor",
             "practitioner/7",
+            "--capability",
+            "solum:crypto:encrypt",
             "--in",
             plain_in.to_str().unwrap(),
             "--out",
@@ -232,6 +277,8 @@ fn audit_verify_ok_after_consent_and_crypto() {
             "ephemeral/cli-1",
             "--actor",
             "practitioner/7",
+            "--capability",
+            "solum:crypto:encrypt",
             "--in",
             plain_in.to_str().unwrap(),
             "--out",
@@ -276,6 +323,8 @@ fn crypto_encrypt_rejects_unknown_category_without_panic() {
             "ephemeral/cli-1",
             "--actor",
             "practitioner/7",
+            "--capability",
+            "solum:crypto:encrypt",
             "--in",
             plain_in.to_str().unwrap(),
             "--out",
