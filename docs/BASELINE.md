@@ -1,11 +1,11 @@
-# Stage 1 baseline (CLI wired to GTM-1 capability authorization)
+# Stage 1 baseline (website product report)
 
 | | |
 |---|---|
 | **Date** | 2026-07-30 |
-| **Verified commit** | `052614102f420a0b46ecb379dd7c13de6f27e64c` |
-| **Tag** | `stage1-baseline-cli-authz-2026-07-29` |
-| **Supersedes** | `stage1-baseline-gtm4-2026-07-28` (`eae6380`) |
+| **Verified commit** | `79570eb7b12b84c1d8a2c5382ff0f28a30d40b4b` |
+| **Tag** | `stage1-baseline-website-2026-07-30` |
+| **Supersedes** | `stage1-baseline-cli-authz-2026-07-29` (`0526141`) |
 
 This document freezes the Solum workspace state that passed local `./scripts/verify.sh` and green GitHub Actions (CI, CodeQL, Secret Scan, Quality Gate) on that commit. Descriptions below are taken from crate `lib.rs` module docs, profile TOML, `deny.toml`, `.gitleaks.toml`, and `docs/` — not from aspirational product copy.
 
@@ -26,15 +26,13 @@ This document freezes the Solum workspace state that passed local `./scripts/ver
 
 Total lib unit tests in this baseline run (default features): **71**. Plus `solum-core` integration tests: **8** CLI (`assert_cmd`) + **1** AuthClaims smoke + **2** SolumActor auth. Combined automated count referenced above: **82** (plus empty doc-test suites). With `--features ferrum-storage-backend`, `solum-core` lib is **18** (+1 LocalStorage round-trip). With `--features aws-kms`, `solum-crypto` adds **+2** mocked KMS integration tests (`tests/aws_kms.rs`). Reference deployments in `verify.sh` §7 / §7b are additional living checks (not counted in the lib unit total).
 
-## Seit `stage1-baseline-gtm4-2026-07-28` hinzugekommen
+## Seit `stage1-baseline-cli-authz-2026-07-29` hinzugekommen
 
-- **Wichtigste identifizierte Lücke geschlossen:** Die CLI nutzte bisher ausschließlich den ungeprüften Legacy-Pfad, obwohl GTM-1 (Autorisierung) bereits existierte — Widerspruch zur eigenen Kundendoku. Jetzt behoben: mutierende CLI-Befehle bauen einen `SolumActor` (`ActorSource::LocalDev`) aus `--actor` + `--capability` und rufen nur noch `*_as` auf.
-- **Breaking Change bewusst in Kauf genommen (Option A, fail-closed):** bestehende Aufrufer müssen `--capability` ergänzen. `examples/standalone/run.sh`, `README.md`, beide Kundendokumente ([SECURITY-OVERVIEW.md](customer/SECURITY-OVERVIEW.md), [DEPLOYMENT-RUNBOOK.md](customer/DEPLOYMENT-RUNBOOK.md)) entsprechend aktualisiert.
-- **SECURITY-OVERVIEW.md / DEPLOYMENT-RUNBOOK.md korrigiert:** „Legacy CLI / plain-string actors“ → „Legacy library plain-string actors“ — die Einschränkung betrifft jetzt nur noch Library-Integratoren, nicht mehr die CLI selbst.
+- **[`docs/WEBSITE-REPORT.md`](WEBSITE-REPORT.md):** Entdeckungs-orientierter Produktreport für die Unternehmens-Website, adressiert beide Zielgruppen (Standalone + Ferrum-Companion), gleiche Ehrlichkeitsregel wie Kundendokumente (kein „production-ready“ wo Entwurf, honest zero-knowledge statt Marketing-Versprechen), keine erfundenen Piloten / Marktzahlen / Konkurrenzvergleiche. Reine Doku-Ergänzung — kein Code-Verhalten geändert.
 
 ## Verifizierter Zustand
 
-All `./scripts/verify.sh` sections (including §7 and §7b) passed on 2026-07-30 against commit `052614102f420a0b46ecb379dd7c13de6f27e64c` (exit 0). Section 5 emitted a long series of `cargo deny` `warning[duplicate]` trees (not failures) that are omitted below. §7 Mode A (`examples/standalone/run.sh`) runs with the new `--capability` flags on grant / encrypt / decrypt.
+All `./scripts/verify.sh` sections (including §7 and §7b) passed on 2026-07-30 against commit `79570eb7b12b84c1d8a2c5382ff0f28a30d40b4b` (exit 0). This commit adds documentation only relative to `stage1-baseline-cli-authz-2026-07-29` (`0526141`); crate behaviour and test counts are unchanged. Section 5 emitted a long series of `cargo deny` `warning[duplicate]` trees (not failures) that are omitted below. §7 Mode A (`examples/standalone/run.sh`) runs with `--capability` flags on grant / encrypt / decrypt.
 
 ```
 == 0. Sanity: ferrum-core pin consistency ==
@@ -87,10 +85,10 @@ All baseline checks passed.
 
 | Workflow | Run ID | URL |
 |----------|--------|-----|
-| CI | 30512286227 | https://github.com/SynapticFour/Solum/actions/runs/30512286227 |
-| CodeQL | 30512286194 | https://github.com/SynapticFour/Solum/actions/runs/30512286194 |
-| Secret Scan | 30512286214 | https://github.com/SynapticFour/Solum/actions/runs/30512286214 |
-| Quality Gate | 30512286233 | https://github.com/SynapticFour/Solum/actions/runs/30512286233 |
+| CI | 30513539609 | https://github.com/SynapticFour/Solum/actions/runs/30513539609 |
+| CodeQL | 30513539605 | https://github.com/SynapticFour/Solum/actions/runs/30513539605 |
+| Secret Scan | 30513539592 | https://github.com/SynapticFour/Solum/actions/runs/30513539592 |
+| Quality Gate | 30513539613 | https://github.com/SynapticFour/Solum/actions/runs/30513539613 |
 
 ## Bewusst akzeptierte Risiken
 
@@ -198,11 +196,11 @@ Note: `docs/roadmap.md` stage-1 bullet still says “actual field-level encrypti
 ## Wie diese Baseline reproduziert wird
 
 ```bash
-git fetch origin tag stage1-baseline-cli-authz-2026-07-29
-git checkout stage1-baseline-cli-authz-2026-07-29
+git fetch origin tag stage1-baseline-website-2026-07-30
+git checkout stage1-baseline-website-2026-07-30
 # Prerequisites: Rust 1.91.1 (rust-toolchain.toml) and libsodium
 # (e.g. brew install libsodium / apt install libsodium-dev)
 ./scripts/verify.sh
 ```
 
-Expect all sections to pass (including §7 reference deployments with `--capability` on the standalone example, and §7b feature-gated storage). This document may live on `main` at or after the tag; the tag itself points at the verified code commit listed in the header. Prior freezes: `stage1-baseline-gtm4-2026-07-28`, `stage1-baseline-gtm1-2026-07-28`, `stage1-baseline-gtm3-2026-07-28`, `stage1-baseline-sprint5-2026-07-27`, `stage1-baseline-sprint4-2026-07-27`, `stage1-baseline-sprint3-2026-07-27`, `stage1-baseline-sprint2-2026-07-27`, `stage1-baseline-sprint1-2026-07-26`, `stage1-baseline-cli-2026-07-26`, `stage1-baseline-fhir-2026-07-26`, `stage1-baseline-transfer-2026-07-26`, `stage1-baseline-2026-07-25`.
+Expect all sections to pass (including §7 reference deployments with `--capability` on the standalone example, and §7b feature-gated storage). This document may live on `main` at or after the tag; the tag itself points at the verified code commit listed in the header. Prior freezes: `stage1-baseline-cli-authz-2026-07-29`, `stage1-baseline-gtm4-2026-07-28`, `stage1-baseline-gtm1-2026-07-28`, `stage1-baseline-gtm3-2026-07-28`, `stage1-baseline-sprint5-2026-07-27`, `stage1-baseline-sprint4-2026-07-27`, `stage1-baseline-sprint3-2026-07-27`, `stage1-baseline-sprint2-2026-07-27`, `stage1-baseline-sprint1-2026-07-26`, `stage1-baseline-cli-2026-07-26`, `stage1-baseline-fhir-2026-07-26`, `stage1-baseline-transfer-2026-07-26`, `stage1-baseline-2026-07-25`.
