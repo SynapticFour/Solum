@@ -35,6 +35,11 @@ use crypt4gh::{decrypt, encrypt, Keys};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// Re-export Crypt4GH key material type used by [`Crypt4ghKeyProvider::private_keys`].
+/// Required so out-of-crate providers (e.g. sidecar shared ephemeral handle) can
+/// implement the trait; previously `Keys` was only reachable inside this crate.
+pub use crypt4gh::Keys as Crypt4ghKeys;
+
 /// Git revision pinned in `Cargo.toml` (mirror `config/ci/ferrum-revision.txt`).
 pub const FERRUM_GIT_REV: &str = "27a6a8e9a719fd1a171da28b20462a777f95cf65";
 

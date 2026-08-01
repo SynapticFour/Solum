@@ -10,6 +10,7 @@ members = [
     "crates/consent",
     "crates/identity",
     "crates/auth-verify",
+    "crates/sidecar",
     "examples/ferrum-companion",
 ]
 
@@ -47,6 +48,7 @@ solum-crypto = { path = "crates/crypto" }
 solum-consent = { path = "crates/consent" }
 solum-identity = { path = "crates/identity" }
 solum-auth-verify = { path = "crates/auth-verify" }
+solum-sidecar = { path = "crates/sidecar" }
 
 [patch.crates-io]
 # SynapticFour crypt4gh fork (same lineage as Ferrum/third_party/crypt4gh):
