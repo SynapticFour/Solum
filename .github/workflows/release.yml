@@ -1,0 +1,113 @@
+name: Release
+
+# Build `solum` CLI binaries on SemVer tags and attach them to a GitHub Release.
+# Do not cut a production `v*` tag until this workflow has been verified green
+# (see RELEASING.md). Stage-1 evaluation customers may still build from source.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  build-binaries:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            asset: solum-x86_64-unknown-linux-gnu
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            asset: solum-aarch64-apple-darwin
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            asset: solum-x86_64-apple-darwin
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@1.91.1
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+
+      - name: Install libsodium (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libsodium-dev pkg-config
+
+      - name: Install libsodium (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libsodium
+
+      - name: Build solum CLI
+        run: cargo build --release -p solum-core --target ${{ matrix.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="target/${{ matrix.target }}/release/solum"
+          test -x "$BIN"
+          if [[ "${{ runner.os }}" != "Windows" ]]; then
+            strip "$BIN" || true
+          fi
+          mkdir -p dist
+          cp "$BIN" "dist/solum"
+          tar -czvf "${{ matrix.asset }}.tar.gz" -C dist solum
+          shasum -a 256 "${{ matrix.asset }}.tar.gz" > "${{ matrix.asset }}.tar.gz.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: |
+            ${{ matrix.asset }}.tar.gz
+            ${{ matrix.asset }}.tar.gz.sha256
+
+  github-release:
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            Stage-1 Solum CLI binaries for supervised evaluation.
+
+            **Install:** extract the archive for your platform and place `solum` on a controlled `PATH`.
+            **Keys:** use CustomerHeld `--keypair` files for evaluations — see [DEPLOYMENT-RUNBOOK.md](docs/customer/DEPLOYMENT-RUNBOOK.md).
+            **HELIOS:** audit export is prepared; live HELIOS signing is **not** productized — see [helios.md](docs/helios.md).
+          files: |
+            release-assets/*.tar.gz
+            release-assets/*.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

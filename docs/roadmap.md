@@ -8,8 +8,9 @@ Spec-independent controls that already have a clear regulatory floor (e.g. EHDS 
 
 - Secure processing environment: encryption at rest / in transit (`solum-crypto` policy layer implemented; actual field-level encryption still open — see below), granular access control, complete audit log (`solum-audit::FileAuditStore` — persistent, hash-chained, implemented)
 - Consent and access-rights management (`solum-consent` — grant/revoke with purpose binding and full history, implemented; anticipating EEHRxF individual rights — access, who accessed, onward sharing, rectification / completion — where implementable without waiting for every implementing act)
-- Signed, reproducible compliance evidence hooks (HELIOS-oriented; `solum-audit` exports a hash-chained JSON envelope today — actual HELIOS signing integration is still open; see [helios.md](helios.md))
-- Jurisdiction [profile system](profiles.md), initially `eu-ehds`, schema ready for further countries
+- Compliance evidence **export hooks** (HELIOS-oriented JSON envelope from `solum-audit` — hash-chained, operator-verifiable). **Live HELIOS signing is deferred / not productized** — see [helios.md](helios.md)
+- Jurisdiction [profile system](profiles.md), initially `eu-ehds`, schema ready for further countries; Kenya remains **DRAFT**
+- CustomerHeld CLI operator path (`crypto keygen` + `--keypair`) for Stage‑1 evaluations; ephemeral keys gated to `dev-local` only
 
 ## Stage 2 — planned
 
@@ -19,6 +20,7 @@ Communicated as evolving with specifications and demand — not implemented as s
 - openEHR layer for deeper clinical semantics and long-lived modelling
 - SaaS operating model built on stage-1 key-custody and audit foundations
 - Additional jurisdiction profiles (e.g. Nigeria, South Africa, others) as data files when needed
+- **Live HELIOS CLI/API signing bridge** (only after HELIOS release + custody story are clear — not claimed in Stage 1)
 
 ## Out of scope for both stages (default)
 

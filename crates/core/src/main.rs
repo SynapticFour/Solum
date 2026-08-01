@@ -10,7 +10,8 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use solum_core::crypto::{
-    Crypt4ghKeyProvider, CustomerHeldKeyProvider, EncryptedField, EphemeralTestKeyProvider, KeyRef,
+    generate_operator_keypair, Crypt4ghKeyProvider, CustomerHeldKeyProvider, EncryptedField,
+    EphemeralTestKeyProvider, KeyCustody, KeyRef,
 };
 use solum_core::{
     example_eu_runtime, query_consent_status, start_with_profile, ActorSource, Deployment,
@@ -19,11 +20,18 @@ use solum_core::{
 
 const EPHEMERAL_KEY_WARNING: &str = "\
 ⚠ Using EphemeralTestKeyProvider — keys are NOT persisted across runs
-and are NOT suitable for real patient data. Production key custody
-(CustomerHeld / HSM-backed) is not yet wired into the CLI.
+and are NOT suitable for real patient data or paid evaluations.
+Requires SOLUM_ALLOW_EPHEMERAL=1 and a profile that allows ephemeral_test
+(e.g. config/profiles/dev-local.toml). Pilot profiles (eu-ehds, kenya-dpa)
+refuse EphemeralTest custody at startup.
 The demo sidecar (*.ephemeral-keypair.json) contains raw private key
 bytes in plaintext; 0600 permissions on Unix, no equivalent protection
 on Windows.";
+
+const CUSTOMER_HELD_KEY_NOTE: &str = "\
+Using CustomerHeld key material from --keypair (operator-supplied file).
+Solum does not mint these keys during encrypt; protect the keypair file
+as you would other secrets (0600 on Unix recommended).";
 
 #[derive(Debug, Parser)]
 #[command(name = "solum", version, about = "Solum clinical compliance CLI")]
@@ -44,7 +52,7 @@ enum Commands {
         #[command(subcommand)]
         command: ConsentCmd,
     },
-    /// Crypt4GH field encrypt / decrypt (demo keys only — see warning).
+    /// Crypt4GH field encrypt / decrypt (CustomerHeld --keypair by default).
     Crypto {
         #[command(subcommand)]
         command: CryptoCmd,
@@ -113,6 +121,16 @@ enum ConsentCmd {
 
 #[derive(Debug, Subcommand)]
 enum CryptoCmd {
+    /// Generate an operator keypair file for CustomerHeld registration.
+    ///
+    /// Writes JSON `{key_ref, pubkey, privkey}` for later `--keypair` use.
+    /// Material is operator-controlled; Solum does not retain it after write.
+    Keygen {
+        #[arg(long)]
+        key_ref: String,
+        #[arg(long)]
+        out: PathBuf,
+    },
     /// Encrypt a file into an EncryptedField JSON document.
     Encrypt {
         #[arg(long)]
@@ -134,6 +152,13 @@ enum CryptoCmd {
         r#in: PathBuf,
         #[arg(long)]
         out: PathBuf,
+        /// CustomerHeld Crypt4GH keypair JSON from `crypto keygen` (required unless `--ephemeral`).
+        #[arg(long, required_unless_present = "ephemeral")]
+        keypair: Option<PathBuf>,
+        /// Dev-only ephemeral keys. Requires `SOLUM_ALLOW_EPHEMERAL=1` and a
+        /// profile that lists `ephemeral_test` (e.g. `dev-local.toml`).
+        #[arg(long, default_value_t = false, conflicts_with = "keypair")]
+        ephemeral: bool,
     },
     /// Decrypt an EncryptedField JSON document to a plaintext file.
     Decrypt {
@@ -154,6 +179,13 @@ enum CryptoCmd {
         r#in: PathBuf,
         #[arg(long)]
         out: PathBuf,
+        /// CustomerHeld Crypt4GH keypair JSON (required unless `--ephemeral`).
+        #[arg(long, required_unless_present = "ephemeral")]
+        keypair: Option<PathBuf>,
+        /// Dev-only ephemeral keys. Requires `SOLUM_ALLOW_EPHEMERAL=1` and a
+        /// profile that lists `ephemeral_test` (e.g. `dev-local.toml`).
+        #[arg(long, default_value_t = false, conflicts_with = "keypair")]
+        ephemeral: bool,
     },
 }
 
@@ -173,16 +205,13 @@ enum AuditCmd {
     },
 }
 
-/// Demo-only key material written beside EncryptedField JSON so CLI encrypt →
-/// decrypt can round-trip across process boundaries.
+/// Operator / CustomerHeld key material on disk (JSON).
 ///
-/// `EphemeralTestKeyProvider` has no public import API (and we do not extend
-/// `solum-crypto` here). Encrypt generates via that provider and persists the
-/// returned key bytes; decrypt rehydrates them into `CustomerHeldKeyProvider`
-/// for the decrypt call only. This is still not production custody — see
-/// [`EPHEMERAL_KEY_WARNING`].
+/// Same layout as the legacy demo ephemeral sidecar so existing fixtures remain
+/// readable; custody mode is determined by CLI flags + runtime config, not the
+/// file extension.
 #[derive(Debug, Serialize, Deserialize)]
-struct DemoEphemeralKeypair {
+struct KeypairFile {
     key_ref: String,
     pubkey: Vec<u8>,
     privkey: Vec<u8>,
@@ -205,11 +234,17 @@ fn run(cli: Cli) -> Result<(), ExitCode> {
     }
 }
 
-fn runtime_config() -> solum_core::profiles::RuntimeConfig {
+fn runtime_config(custody: KeyCustody) -> solum_core::profiles::RuntimeConfig {
     let mut runtime = example_eu_runtime();
     if let Ok(region) = env::var("SOLUM_STORAGE_REGION") {
         runtime.storage_region = region;
     }
+    runtime.key_management.provider = match &custody {
+        KeyCustody::CustomerHeld => Some("customer-held-file".into()),
+        KeyCustody::EphemeralTest => Some("ephemeral-test".into()),
+        KeyCustody::OperatorHeld => runtime.key_management.provider,
+    };
+    runtime.key_management.custody = custody;
     runtime
 }
 
@@ -223,8 +258,36 @@ fn fail_usage(err: impl std::fmt::Display) -> ExitCode {
     ExitCode::from(2)
 }
 
+fn ephemeral_env_allowed() -> bool {
+    match env::var("SOLUM_ALLOW_EPHEMERAL") {
+        Ok(v) => {
+            let v = v.trim().to_ascii_lowercase();
+            v == "1" || v == "true" || v == "yes"
+        }
+        Err(_) => false,
+    }
+}
+
+fn require_ephemeral_gate() -> Result<(), ExitCode> {
+    if ephemeral_env_allowed() {
+        return Ok(());
+    }
+    Err(fail_usage(
+        "ephemeral crypto requires SOLUM_ALLOW_EPHEMERAL=1 (or true/yes). \
+         Paid evaluations and pilots must use --keypair (CustomerHeld). \
+         See docs/customer/DEPLOYMENT-RUNBOOK.md §4.",
+    ))
+}
+
 fn cmd_check(profile: PathBuf) -> Result<(), ExitCode> {
-    let runtime = runtime_config();
+    // Check uses CustomerHeld runtime (matches pilot profiles). Override custody
+    // via SOLUM_KEY_CUSTODY=ephemeral_test only when exercising the refuse path.
+    let custody = match env::var("SOLUM_KEY_CUSTODY") {
+        Ok(v) if v.eq_ignore_ascii_case("ephemeral_test") => KeyCustody::EphemeralTest,
+        Ok(v) if v.eq_ignore_ascii_case("operator_held") => KeyCustody::OperatorHeld,
+        _ => KeyCustody::CustomerHeld,
+    };
+    let runtime = runtime_config(custody);
     match start_with_profile(&profile, &runtime) {
         Ok(p) => {
             println!(
@@ -242,8 +305,16 @@ fn open_deployment<P: Crypt4ghKeyProvider>(
     audit: &Path,
     consent_store: &Path,
     keys: P,
+    custody: KeyCustody,
 ) -> Result<Deployment<P>, ExitCode> {
-    Deployment::open(profile, &runtime_config(), audit, consent_store, keys).map_err(fail)
+    Deployment::open(
+        profile,
+        &runtime_config(custody),
+        audit,
+        consent_store,
+        keys,
+    )
+    .map_err(fail)
 }
 
 /// CLI actor for GTM-1 `*_as` paths.
@@ -261,6 +332,8 @@ fn cli_actor(subject_id: String, capabilities: Vec<String>) -> SolumActor {
 }
 
 fn cmd_consent(command: ConsentCmd) -> Result<(), ExitCode> {
+    // Consent does not touch Crypt4GH keys — use an empty CustomerHeld registry
+    // so pilot profiles never boot under EphemeralTest custody by accident.
     match command {
         ConsentCmd::Grant {
             profile,
@@ -276,7 +349,8 @@ fn cmd_consent(command: ConsentCmd) -> Result<(), ExitCode> {
                 &profile,
                 &audit,
                 &consent_store,
-                EphemeralTestKeyProvider::new(),
+                CustomerHeldKeyProvider::new(),
+                KeyCustody::CustomerHeld,
             )?;
             let actor = cli_actor(actor, capability);
             let record = deployment
@@ -298,7 +372,8 @@ fn cmd_consent(command: ConsentCmd) -> Result<(), ExitCode> {
                 &profile,
                 &audit,
                 &consent_store,
-                EphemeralTestKeyProvider::new(),
+                CustomerHeldKeyProvider::new(),
+                KeyCustody::CustomerHeld,
             )?;
             let actor = cli_actor(actor, capability);
             let record = deployment
@@ -316,7 +391,7 @@ fn cmd_consent(command: ConsentCmd) -> Result<(), ExitCode> {
             // See `query_consent_status` docs: no audit path on purpose.
             let status = query_consent_status(
                 &profile,
-                &runtime_config(),
+                &runtime_config(KeyCustody::CustomerHeld),
                 &consent_store,
                 &subject,
                 &purpose,
@@ -328,9 +403,67 @@ fn cmd_consent(command: ConsentCmd) -> Result<(), ExitCode> {
     }
 }
 
+fn load_keypair_file(path: &Path, expected_key_ref: &str) -> Result<KeypairFile, ExitCode> {
+    let kp: KeypairFile = read_json(path)?;
+    if kp.key_ref != expected_key_ref {
+        return Err(fail(format!(
+            "key-ref '{expected_key_ref}' does not match keypair file key '{}'",
+            kp.key_ref
+        )));
+    }
+    Ok(kp)
+}
+
+fn customer_provider_from_file(
+    path: &Path,
+    expected_key_ref: &str,
+) -> Result<(CustomerHeldKeyProvider, KeyRef), ExitCode> {
+    let file = load_keypair_file(path, expected_key_ref)?;
+    let key_ref = KeyRef::new(file.key_ref);
+    let mut keys = CustomerHeldKeyProvider::new();
+    keys.register_customer_keypair(key_ref.clone(), file.pubkey, file.privkey)
+        .map_err(|e| fail(SolumError::Message(e.to_string())))?;
+    Ok((keys, key_ref))
+}
+
+fn chmod_owner_rw(path: &Path) -> Result<(), ExitCode> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(path)
+            .map_err(|e| fail(format!("stat {}: {e}", path.display())))?
+            .permissions();
+        perms.set_mode(0o600);
+        fs::set_permissions(path, perms)
+            .map_err(|e| fail(format!("chmod {}: {e}", path.display())))?;
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
+    Ok(())
+}
+
 fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
-    eprintln!("{EPHEMERAL_KEY_WARNING}");
     match command {
+        CryptoCmd::Keygen { key_ref, out } => {
+            let (pubkey, privkey) = generate_operator_keypair()
+                .map_err(|e| fail(SolumError::Message(e.to_string())))?;
+            write_json(
+                &out,
+                &KeypairFile {
+                    key_ref,
+                    pubkey,
+                    privkey,
+                },
+            )?;
+            chmod_owner_rw(&out)?;
+            eprintln!(
+                "wrote CustomerHeld keypair to {} (protect this file; not an HSM)",
+                out.display()
+            );
+            Ok(())
+        }
         CryptoCmd::Encrypt {
             profile,
             audit,
@@ -341,46 +474,70 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
             capability,
             r#in,
             out,
+            keypair,
+            ephemeral,
         } => {
-            let key_ref = KeyRef::new(key_ref);
-            let mut keys = EphemeralTestKeyProvider::new();
-            let (pubkey, privkey) = keys
-                .generate_test_keypair(key_ref.clone())
-                .map_err(|e| fail(SolumError::Message(e.to_string())))?;
+            if ephemeral {
+                require_ephemeral_gate()?;
+                eprintln!("{EPHEMERAL_KEY_WARNING}");
+                let key_ref = KeyRef::new(key_ref);
+                let mut keys = EphemeralTestKeyProvider::new();
+                let (pubkey, privkey) = keys
+                    .generate_test_keypair(key_ref.clone())
+                    .map_err(|e| fail(SolumError::Message(e.to_string())))?;
 
-            let plaintext = fs::read(&r#in)
-                .map_err(|e| fail_usage(format!("failed to read --in {}: {e}", r#in.display())))?;
+                let plaintext = fs::read(&r#in).map_err(|e| {
+                    fail_usage(format!("failed to read --in {}: {e}", r#in.display()))
+                })?;
 
-            let mut deployment = open_deployment(&profile, &audit, &consent_store, keys)?;
-            let actor = cli_actor(actor, capability);
-            let field = deployment
-                .encrypt_field_as(&category, &plaintext, &key_ref, &actor)
-                .map_err(fail)?;
+                let mut deployment = open_deployment(
+                    &profile,
+                    &audit,
+                    &consent_store,
+                    keys,
+                    KeyCustody::EphemeralTest,
+                )?;
+                let actor = cli_actor(actor, capability);
+                let field = deployment
+                    .encrypt_field_as(&category, &plaintext, &key_ref, &actor)
+                    .map_err(fail)?;
 
-            write_json(&out, &field)?;
-            write_json(
-                &demo_keypair_sidecar(&out),
-                &DemoEphemeralKeypair {
-                    key_ref: key_ref.id,
-                    pubkey,
-                    privkey,
-                },
-            )?;
-            // Restrict sidecar to owner read/write on Unix (raw private key bytes).
-            // Windows: no POSIX permission equivalent set here — demo-only sidecar,
-            // do not use for real key custody on any platform.
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
+                write_json(&out, &field)?;
                 let sidecar = demo_keypair_sidecar(&out);
-                let mut perms = fs::metadata(&sidecar)
-                    .map_err(|e| fail(format!("stat {}: {e}", sidecar.display())))?
-                    .permissions();
-                perms.set_mode(0o600);
-                fs::set_permissions(&sidecar, perms)
-                    .map_err(|e| fail(format!("chmod {}: {e}", sidecar.display())))?;
+                write_json(
+                    &sidecar,
+                    &KeypairFile {
+                        key_ref: key_ref.id,
+                        pubkey,
+                        privkey,
+                    },
+                )?;
+                chmod_owner_rw(&sidecar)?;
+                Ok(())
+            } else {
+                let keypair_path = keypair.ok_or_else(|| {
+                    fail_usage("--keypair is required (or pass --ephemeral for local demos only)")
+                })?;
+                eprintln!("{CUSTOMER_HELD_KEY_NOTE}");
+                let (keys, key_ref) = customer_provider_from_file(&keypair_path, &key_ref)?;
+                let plaintext = fs::read(&r#in).map_err(|e| {
+                    fail_usage(format!("failed to read --in {}: {e}", r#in.display()))
+                })?;
+
+                let mut deployment = open_deployment(
+                    &profile,
+                    &audit,
+                    &consent_store,
+                    keys,
+                    KeyCustody::CustomerHeld,
+                )?;
+                let actor = cli_actor(actor, capability);
+                let field = deployment
+                    .encrypt_field_as(&category, &plaintext, &key_ref, &actor)
+                    .map_err(fail)?;
+                write_json(&out, &field)?;
+                Ok(())
             }
-            Ok(())
         }
         CryptoCmd::Decrypt {
             profile,
@@ -391,38 +548,64 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
             capability,
             r#in,
             out,
+            keypair,
+            ephemeral,
         } => {
-            // Rehydrate demo key bytes into CustomerHeldKeyProvider: EphemeralTestKeyProvider
-            // cannot import a prior generate_test_keypair result (no public register API;
-            // solum-crypto is intentionally not extended for this CLI).
-            let sidecar = demo_keypair_sidecar(&r#in);
-            if !sidecar.exists() {
-                return Err(fail(format!(
-                    "demo key sidecar {} missing — run crypto encrypt first in this workspace",
-                    sidecar.display()
-                )));
-            }
-            let demo: DemoEphemeralKeypair = read_json(&sidecar)?;
-            if demo.key_ref != key_ref {
-                return Err(fail(format!(
-                    "key-ref '{key_ref}' does not match demo sidecar key '{}'",
-                    demo.key_ref
-                )));
-            }
-            let key_ref = KeyRef::new(key_ref);
-            let mut keys = CustomerHeldKeyProvider::new();
-            keys.register_customer_keypair(key_ref.clone(), demo.pubkey, demo.privkey)
-                .map_err(|e| fail(SolumError::Message(e.to_string())))?;
+            if ephemeral {
+                require_ephemeral_gate()?;
+                eprintln!("{EPHEMERAL_KEY_WARNING}");
+                let sidecar = demo_keypair_sidecar(&r#in);
+                if !sidecar.exists() {
+                    return Err(fail(format!(
+                        "demo key sidecar {} missing — run crypto encrypt --ephemeral first",
+                        sidecar.display()
+                    )));
+                }
+                let demo = load_keypair_file(&sidecar, &key_ref)?;
+                let key_ref = KeyRef::new(demo.key_ref);
+                let mut keys = CustomerHeldKeyProvider::new();
+                keys.register_customer_keypair(key_ref.clone(), demo.pubkey, demo.privkey)
+                    .map_err(|e| fail(SolumError::Message(e.to_string())))?;
 
-            let field: EncryptedField = read_json(&r#in)?;
-            let mut deployment = open_deployment(&profile, &audit, &consent_store, keys)?;
-            let actor = cli_actor(actor, capability);
-            let plaintext = deployment
-                .decrypt_field_as(&field, &key_ref, &actor)
-                .map_err(fail)?;
-            fs::write(&out, plaintext)
-                .map_err(|e| fail(format!("failed to write --out {}: {e}", out.display())))?;
-            Ok(())
+                // Rehydrate via CustomerHeld provider, but declare EphemeralTest
+                // custody so pilot profiles still refuse this path at startup.
+                let field: EncryptedField = read_json(&r#in)?;
+                let mut deployment = open_deployment(
+                    &profile,
+                    &audit,
+                    &consent_store,
+                    keys,
+                    KeyCustody::EphemeralTest,
+                )?;
+                let actor = cli_actor(actor, capability);
+                let plaintext = deployment
+                    .decrypt_field_as(&field, &key_ref, &actor)
+                    .map_err(fail)?;
+                fs::write(&out, plaintext)
+                    .map_err(|e| fail(format!("failed to write --out {}: {e}", out.display())))?;
+                Ok(())
+            } else {
+                let keypair_path = keypair.ok_or_else(|| {
+                    fail_usage("--keypair is required (or pass --ephemeral for local demos only)")
+                })?;
+                eprintln!("{CUSTOMER_HELD_KEY_NOTE}");
+                let (keys, key_ref) = customer_provider_from_file(&keypair_path, &key_ref)?;
+                let field: EncryptedField = read_json(&r#in)?;
+                let mut deployment = open_deployment(
+                    &profile,
+                    &audit,
+                    &consent_store,
+                    keys,
+                    KeyCustody::CustomerHeld,
+                )?;
+                let actor = cli_actor(actor, capability);
+                let plaintext = deployment
+                    .decrypt_field_as(&field, &key_ref, &actor)
+                    .map_err(fail)?;
+                fs::write(&out, plaintext)
+                    .map_err(|e| fail(format!("failed to write --out {}: {e}", out.display())))?;
+                Ok(())
+            }
         }
     }
 }

@@ -19,8 +19,10 @@ Shared philosophy: customer-held keys, residency enforcement, auditable access �
 | [profiles.md](profiles.md) | Jurisdiction TOML schema and planned files |
 | [ferrum.md](ferrum.md) | What is reused vs linked from Ferrum |
 | [CRYPTO.md](CRYPTO.md) | Shared Crypt4GH envelope (Ferrum objects · Solum fields) |
-| [helios.md](helios.md) | Evidence / HELIOS boundary |
+| [helios.md](helios.md) | Evidence / HELIOS boundary (**signing deferred**) |
 | [ECOSYSTEM.md](ECOSYSTEM.md) | Synaptic Four related projects (Solum · Ferrum · HELIOS · Lab Kit) |
+| [CHANGELOG.md](../CHANGELOG.md) | Keep a Changelog |
+| [RELEASING.md](../RELEASING.md) | SemVer / GitHub Release process |
 | [LICENSE](../LICENSE) | BUSL-1.1 ([notes](LICENSE-OPTIONS.md)) |
 | [LICENSE-COMPATIBILITY.md](../LICENSE-COMPATIBILITY.md) | Allowed dependency licenses |
 

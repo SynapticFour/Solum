@@ -18,7 +18,24 @@ Crypt4GH is a **universal envelope encryption scheme** (X25519 header packets + 
 
 ## Customer-held keys
 
-Under `KeyCustody::CustomerHeld`, Solum never generates Crypt4GH keypairs. Operators register customer-supplied pub/priv material via `CustomerHeldKeyProvider`. `EphemeralTestKeyProvider` may mint keys **only** for tests/demos.
+Under `KeyCustody::CustomerHeld`, Solum does not mint keys *during encrypt* for regulated custody. Operators supply material via:
+
+| Path | Use |
+|------|-----|
+| CLI `solum crypto keygen` + `--keypair` | Stage‑1 evaluation / pilot operator path (file-based CustomerHeld) |
+| `CustomerHeldKeyProvider::register_customer_keypair` | Library integrators |
+| Optional `AwsKmsKeyProvider` (`aws-kms` feature) | KMS-wrapped seeds at rest (library only) |
+
+`generate_operator_keypair` / `crypto keygen` produce bytes for the operator to persist and register — Solum does not retain them after write.
+
+## Ephemeral / test keys (dev only)
+
+`EphemeralTestKeyProvider` and CLI `--ephemeral` may mint keys **only** for local demos:
+
+1. Set `SOLUM_ALLOW_EPHEMERAL=1`, and
+2. Use a profile that lists `ephemeral_test` (e.g. `config/profiles/dev-local.toml`).
+
+Pilot profiles (`eu-ehds`, `kenya-dpa`) allow **only** `customer_held` and refuse `EphemeralTest` at startup. **Paid evaluations must not use ephemeral keys.**
 
 ## SMART Health Links / JWE (out of scope for stage-1 at-rest)
 

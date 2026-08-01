@@ -253,6 +253,19 @@ impl Crypt4ghKeyProvider for EphemeralTestKeyProvider {
     }
 }
 
+/// Generate a Crypt4GH keypair for **operator / CustomerHeld registration**.
+///
+/// Solum does **not** retain this material — the caller must persist and
+/// register it (e.g. via [`CustomerHeldKeyProvider::register_customer_keypair`]
+/// or the CLI `--keypair` file). This is not [`EphemeralTestKeyProvider`]
+/// custody: the bytes leave Solum under operator control.
+pub fn generate_operator_keypair() -> Result<(Vec<u8>, Vec<u8>), CryptoError> {
+    let privkey = generate_private_key();
+    let pubkey = get_public_key_from_private_key(&privkey)
+        .map_err(|e| CryptoError::Provider(e.to_string()))?;
+    Ok((pubkey, privkey))
+}
+
 /// Gate that only allows categories listed in a jurisdiction profile's
 /// `encryption.required_field_categories`.
 #[derive(Debug, Clone, Copy)]
@@ -476,6 +489,20 @@ mod tests {
             encrypt_field(&gate, &provider, "consent_record", b"consent-v1", &key_ref).unwrap();
         let out = decrypt_field(&provider, &enc, &key_ref).unwrap();
         assert_eq!(out, b"consent-v1");
+    }
+
+    #[test]
+    fn operator_keypair_registers_as_customer_held() {
+        let profile = load_eu_ehds();
+        let gate = gate_from(&profile);
+        let key_ref = KeyRef::new("customer/op-1");
+        let (pubkey, privkey) = generate_operator_keypair().unwrap();
+        let mut provider = CustomerHeldKeyProvider::new();
+        provider
+            .register_customer_keypair(key_ref.clone(), pubkey, privkey)
+            .unwrap();
+        let enc = encrypt_field(&gate, &provider, "patient_summary", b"demo", &key_ref).unwrap();
+        assert_eq!(decrypt_field(&provider, &enc, &key_ref).unwrap(), b"demo");
     }
 
     #[test]

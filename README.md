@@ -87,27 +87,31 @@ cargo run -p solum-core -- consent revoke \
   --subject patient/42 --purpose care_provision --actor patient/42 \
   --capability solum:consent:revoke
 
-# 5–6. Field encrypt / decrypt (demo keys only)
+# 5–6. Field encrypt / decrypt (CustomerHeld — evaluation / pilot path)
 echo 'demo-summary' > /tmp/solum-demo/plain.txt
+cargo run -p solum-core -- crypto keygen \
+  --key-ref customer/demo-1 --out /tmp/solum-demo/customer.keypair.json
 cargo run -p solum-core -- crypto encrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
-  --category patient_summary --key-ref ephemeral/demo-1 --actor practitioner/7 \
-  --capability solum:crypto:encrypt \
+  --category patient_summary --key-ref customer/demo-1 \
+  --keypair /tmp/solum-demo/customer.keypair.json \
+  --actor practitioner/7 --capability solum:crypto:encrypt \
   --in /tmp/solum-demo/plain.txt --out /tmp/solum-demo/field.json
 cargo run -p solum-core -- crypto decrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
-  --key-ref ephemeral/demo-1 --actor practitioner/7 \
-  --capability solum:crypto:decrypt \
+  --key-ref customer/demo-1 \
+  --keypair /tmp/solum-demo/customer.keypair.json \
+  --actor practitioner/7 --capability solum:crypto:decrypt \
   --in /tmp/solum-demo/field.json --out /tmp/solum-demo/plain-out.txt
 
-# 7–8. Audit
+# 7–8. Audit (export envelope only — live HELIOS signing is not productized)
 cargo run -p solum-core -- audit export --audit "$AUDIT" --out /tmp/solum-demo/helios.json
 cargo run -p solum-core -- audit verify --audit "$AUDIT"
 # → ok
 ```
 
-> **⚠ EphemeralTestKeyProvider (crypto subcommands)**
-> Crypto encrypt/decrypt print and rely on a **demo** key path: keys are **not** suitable for real patient data, and production key custody (CustomerHeld / HSM-backed) is **not** yet wired into the CLI. Encrypt writes a sibling `*.ephemeral-keypair.json` beside `--out` so local decrypt can round-trip across process restarts; that sidecar **contains raw private key bytes in plaintext** (0600 permissions on Unix, no equivalent protection on Windows) — demo-only, not an HSM.
+> **CustomerHeld `--keypair` (evaluations / pilots)**
+> Use `crypto keygen` + `--keypair` for Stage‑1 evaluations. Ephemeral keys (`--ephemeral`) require `SOLUM_ALLOW_EPHEMERAL=1` and `config/profiles/dev-local.toml` — pilot profiles refuse them. See [docs/customer/DEPLOYMENT-RUNBOOK.md](docs/customer/DEPLOYMENT-RUNBOOK.md) §4.
 
 
 ## Jurisdiction profiles

@@ -10,11 +10,14 @@ This runbook is derived from the public repository README, profile docs, and bas
 
 ## 1. Prerequisites
 
-### How Solum is delivered today
+### How Solum is delivered
 
-There is **no documented binary release / installer channel** in this repository. Operators build the `solum` command-line tool from source with the Rust toolchain.
+| Path | Status |
+|------|--------|
+| **From source** | Supported today — build the `solum` CLI with the Rust toolchain (below). Prefer a **baseline tag** in [BASELINE.md](../BASELINE.md) or a SemVer tag once one exists. |
+| **GitHub Release assets** | Prepared — [`.github/workflows/release.yml`](../../.github/workflows/release.yml) builds platform tarballs on `v*` tags. **Use release assets only after a verified SemVer tag exists** (see [RELEASING.md](../../RELEASING.md)). Until then, treat binary install as unavailable and build from source. |
 
-**ANNAHME, bitte prüfen:** If Synaptic Four provides pre-built binaries under a separate commercial agreement, that path is not described in-repo — ask your Synaptic Four contact before assuming packages exist.
+**Stage‑1 evaluation:** Solum is a supervised Stage‑1 evaluation companion — not an unsupervised production EHR. Kenya profile remains **DRAFT**.
 
 ### Build prerequisites (from-source)
 
@@ -32,7 +35,7 @@ Example build/run (from README):
 cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml
 ```
 
-For a durable binary on a host, a typical pattern is `cargo build --release -p solum-core` and placing `target/release/solum` on a controlled path — **ANNAHME, bitte prüfen:** confirm packaging/signing expectations with Synaptic Four; the repo does not ship a release workflow for Solum binaries.
+For a durable binary on a host: `cargo build --release -p solum-core` and place `target/release/solum` on a controlled path. After a GitHub Release exists, extract the matching `solum-*.tar.gz` asset instead.
 
 ### What `./scripts/verify.sh` is (and is not)
 
@@ -46,8 +49,9 @@ Profiles live under `config/profiles/` as TOML **data** — not country-specific
 
 | File | Operator status |
 |------|-----------------|
-| `eu-ehds.toml` | Present — EU EHDS Annex II–oriented; typical Stage‑1 starting point. **Not** a legal compliance certificate. |
-| `kenya-dpa.toml` | Present **draft** — pending legal review. **Do not use for a real deployment** until open items in that file / [profiles.md](../profiles.md) are closed. |
+| `eu-ehds.toml` | Present — EU EHDS Annex II–oriented; typical Stage‑1 starting point. **Not** a legal compliance certificate. Allows **customer_held** only (ephemeral refused). |
+| `kenya-dpa.toml` | Present **draft** — pending legal review. **Do not use for a real deployment** until open items in that file / [profiles.md](../profiles.md) are closed. Allows **customer_held** only. |
+| `dev-local.toml` | **Developer demos only** — permits `ephemeral_test`. Never for paid evaluations or real patient data. |
 | `nigeria-ndpa.toml` | Planned |
 | `south-africa-popia.toml` | Planned |
 
@@ -97,21 +101,28 @@ cargo run -p solum-core -- consent revoke \
   --capability solum:consent:revoke
 ```
 
-### Field encrypt / decrypt (demo keys — see §4)
+### Field encrypt / decrypt (CustomerHeld — evaluation / pilot path)
 
 ```bash
+mkdir -p /tmp/solum-demo
 echo 'demo-plaintext' > /tmp/solum-demo/plain.txt
+
+# Operator-controlled keypair file (not HSM; protect with filesystem permissions)
+cargo run -p solum-core -- crypto keygen \
+  --key-ref customer/eval-1 --out /tmp/solum-demo/customer.keypair.json
 
 cargo run -p solum-core -- crypto encrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
-  --category patient_summary --key-ref ephemeral/demo-1 --actor practitioner/7 \
-  --capability solum:crypto:encrypt \
+  --category patient_summary --key-ref customer/eval-1 \
+  --keypair /tmp/solum-demo/customer.keypair.json \
+  --actor practitioner/7 --capability solum:crypto:encrypt \
   --in /tmp/solum-demo/plain.txt --out /tmp/solum-demo/field.json
 
 cargo run -p solum-core -- crypto decrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
-  --key-ref ephemeral/demo-1 --actor practitioner/7 \
-  --capability solum:crypto:decrypt \
+  --key-ref customer/eval-1 \
+  --keypair /tmp/solum-demo/customer.keypair.json \
+  --actor practitioner/7 --capability solum:crypto:decrypt \
   --in /tmp/solum-demo/field.json --out /tmp/solum-demo/plain-out.txt
 ```
 
@@ -129,22 +140,26 @@ Protect filesystem permissions on `$AUDIT`, `$CONSENT`, and any key material acc
 
 ## 4. Key management
 
-### CLI path — NOT for production
+### Paid evaluation / pilot path (required)
 
-> **⚠ Ephemeral test keys (CLI crypto subcommands)**
-> Crypto encrypt/decrypt print and rely on a **demo** key path: keys are **not** suitable for real patient data, and production key custody (customer-held / HSM-backed) is **not** yet wired into the CLI. Encrypt writes a sibling `*.ephemeral-keypair.json` beside `--out` so local decrypt can round-trip across process restarts; that sidecar **contains raw private key bytes in plaintext** (0600 permissions on Unix, no equivalent protection on Windows) — demo-only, not an HSM.
-> (README CLI usage; [BASELINE.md](../BASELINE.md))
+**Paid evaluations and pilots must use CustomerHeld `--keypair` files** (or the library / AWS KMS APIs). Do **not** use `--ephemeral` or describe ephemeral keys as an evaluation or production custody option.
 
-**Do not** process real patient data with the CLI crypto commands in this baseline.
+| Mechanism | How | Notes |
+|-----------|-----|--------|
+| CLI CustomerHeld file | `crypto keygen` → `--keypair` on encrypt/decrypt | Operator-controlled JSON (pubkey + privkey). Not an HSM. Protect with OS permissions (0600 on Unix). |
+| Library `CustomerHeldKeyProvider` | Register keypairs generated outside Solum | Same custody posture as CLI `--keypair`. |
+| AWS KMS envelope (optional feature) | Library `wrap_seed` / `from_wrapped_seed` | Feature default off; **not** a CLI command. See [SECURITY-OVERVIEW.md](SECURITY-OVERVIEW.md) §4. |
 
-### Production-oriented options (library integration)
+Pilot profiles (`eu-ehds`, `kenya-dpa`) list only `customer_held`. Declaring `EphemeralTest` runtime custody (CLI `--ephemeral`, or `SOLUM_KEY_CUSTODY=ephemeral_test` on `check`) **refuses startup**.
 
-| Option | Status in this baseline | Operator notes |
-|--------|-------------------------|----------------|
-| Customer-held key registration | Library API: register keypairs generated **outside** Solum | Solum never mints keys for customer-held custody. Brief in-process plaintext during encrypt/decrypt is expected (honest zero-knowledge path). See [SECURITY-OVERVIEW.md](SECURITY-OVERVIEW.md) §3. |
-| AWS KMS envelope (optional feature) | Library API: `wrap_seed` / `from_wrapped_seed` | Currently the **only KMS-backed** custody path implemented in this repository. **Not** a CLI command. Feature default is off. See [SECURITY-OVERVIEW.md](SECURITY-OVERVIEW.md) §4 and [BASELINE.md](../BASELINE.md). |
+### Dev-only ephemeral path (forbidden for paid evaluation)
 
-**Open point (baseline):** There is **no** Solum CLI subcommand for KMS provisioning or for loading customer-held production keys. Integrators must call the library APIs from their own service/process. ([BASELINE.md](../BASELINE.md) — *KMS-Provisioning-CLI*; *Produktions-Key-Custody in der CLI*)
+`--ephemeral` requires **both**:
+
+1. `SOLUM_ALLOW_EPHEMERAL=1` (or `true` / `yes`), and
+2. A profile that allows `ephemeral_test` (e.g. `config/profiles/dev-local.toml`).
+
+It writes a plaintext `*.ephemeral-keypair.json` sidecar (0600 on Unix). **Never for real patient data or paid evaluations.**
 
 Neither customer-held nor AWS-KMS providers currently implement zeroize-on-drop for key material in memory. ([BASELINE.md](../BASELINE.md))
 
@@ -185,7 +200,7 @@ Library callers that still invoke grant/revoke/encrypt/decrypt with a plain acto
 
 | Task | CLI (from README) | Notes |
 |------|-------------------|--------|
-| Export HELIOS-oriented JSON | `solum … audit export --audit … --out …` | Prepares evidence shape; live HELIOS signing is **not** wired in Solum yet ([BASELINE.md](../BASELINE.md)) |
+| Export HELIOS-oriented JSON | `solum … audit export --audit … --out …` | Export envelope only; live HELIOS signing is **deferred / not productized** ([helios.md](../helios.md)) |
 | Verify hash chain | `solum … audit verify --audit …` | Detects tampering / broken chain for the file store |
 | Retention | Per profile `retention` section | Operator responsibility to enforce archival / deletion outside Solum if required |
 
@@ -221,11 +236,11 @@ Do not duplicate the full risk register here. Read **[SECURITY-OVERVIEW.md §8](
 
 High-signal operational reminders:
 
-- CLI crypto = demo keys only
+- Paid evaluation / pilot crypto = CustomerHeld `--keypair` (not `--ephemeral`)
 - Library plain-string actors = no capability enforcement (CLI uses `--capability`, fail-closed if omitted)
 - Kenya profile = draft only
-- No in-repo binary release channel documented
-- Audit store = single writer
+- GitHub Release binaries available only after a verified `v*` tag (otherwise from-source)
+- Audit store = single writer; HELIOS live signing not productized
 - AWS KMS provisioning = library only, optional feature
 
 ---

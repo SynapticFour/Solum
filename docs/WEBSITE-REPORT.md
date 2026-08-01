@@ -71,7 +71,7 @@ On the capability-checked path, grant, revoke, encrypt, and decrypt each require
 
 ### A tamper-evident audit trail you can verify
 
-Deployments write a **durable, hash-chained** audit log. Operators can export a HELIOS-oriented evidence shape and verify chain integrity. Live HELIOS signing inside Solum is prepared but **not yet wired** as a product step. Stage 1 assumes a **single writer** to the audit file. ([architecture.md](architecture.md); [BASELINE.md](BASELINE.md); [helios.md](helios.md))
+Deployments write a **durable, hash-chained** audit log. Operators can export a HELIOS-oriented evidence shape and verify chain integrity. **Live HELIOS signing is deferred and not productized** — export only. Stage 1 assumes a **single writer** to the audit file. ([architecture.md](architecture.md); [BASELINE.md](BASELINE.md); [helios.md](helios.md))
 
 ### FHIR-oriented interoperability (Stage 1 focus)
 

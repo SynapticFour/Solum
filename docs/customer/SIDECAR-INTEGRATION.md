@@ -19,7 +19,7 @@ It does **not** introduce new compliance business logic. Fail-closed GTM‑1 cap
 
 > **⚠ Ephemeral test keys (sidecar crypto endpoints)**
 >
-> Crypto encrypt/decrypt use **`EphemeralTestKeyProvider` only** in this Stage‑1 sidecar: keys are **not** suitable for real patient data, live only in the sidecar **process memory** for that run, and are **lost on restart**. Production key custody (customer-held / HSM-backed / AWS KMS) is **not** wired into the sidecar. Every crypto response also includes a `warning` field and an `X-Solum-Ephemeral-Keys` header so HTTP clients that never see process logs still see the restriction.
+> Crypto encrypt/decrypt use **`EphemeralTestKeyProvider` only** in this Stage‑1 sidecar: keys are **not** suitable for real patient data or **paid evaluations**, live only in the sidecar **process memory** for that run, and are **lost on restart**. For evaluations use the CLI CustomerHeld `--keypair` path ([DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md) §4). Customer-held / HSM / AWS KMS is **not** wired into the sidecar. Every crypto response also includes a `warning` field and an `X-Solum-Ephemeral-Keys` header so HTTP clients that never see process logs still see the restriction.
 >
 > (Same honesty posture as [DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md) §4 for the CLI; [BASELINE.md](../BASELINE.md))
 

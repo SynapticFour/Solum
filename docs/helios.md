@@ -2,7 +2,24 @@
 
 [HELIOS](https://github.com/SynapticFour/HELIOS) is a separate Synaptic Four evidence tool (signed, reproducible attestations). It is **not** vendored into this workspace.
 
-## Why Solum talks to HELIOS
+## Status: deferred / not productized
+
+**Live HELIOS CLI/API signing is not a Solum product feature today.** Do not claim live signing, attestation submission, or a turnkey HELIOS bridge in Stage‑1 evaluations, sales materials, or pilot SOWs.
+
+What exists:
+
+- `solum-audit` event model and durable hash-chained file store
+- Stable JSON export envelopes (`solum-audit-helios-v1` / chain variant) so an *external* evidence tool could ingest trails later
+
+What does **not** exist:
+
+- Calling HELIOS as a live signing step inside Solum
+- Productized custody of HELIOS signing keys via Solum
+- Guaranteed round-trip with a particular HELIOS release
+
+Wiring a live HELIOS integration remains **roadmap / stage work**, not Stage‑1 delivery. See [roadmap.md](roadmap.md).
+
+## Why Solum still mentions HELIOS
 
 HELIOS today is strongest around pipeline / reproducibility-style evidence. Solum needs a related evidence class for **clinical compliance**:
 
@@ -10,11 +27,7 @@ HELIOS today is strongest around pipeline / reproducibility-style evidence. Solu
 - consent change attestation
 - processing-environment attestation
 
-Where that fits, Solum should **consume** HELIOS (or an equivalent) rather than grow a second cryptographic evidence stack.
-
-## What lives in this repo
-
-`solum-audit` defines an in-repo event model and a stable JSON export envelope (`solum-audit-helios-v1`) so an external evidence tool can ingest Solum trails. Wiring a live HELIOS CLI/API integration is stage work, not a scaffold requirement.
+Where that eventually fits, Solum should **consume** HELIOS (or an equivalent) rather than grow a second cryptographic evidence stack. Until both ends are released and custody is clear, keep the relationship as an export-shape boundary only.
 
 ## Boundary
 

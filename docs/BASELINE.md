@@ -133,9 +133,9 @@ From `crates/fhir/src/patient_summary.rs` (`ANNAHME` markers). These are stage-1
 5. **No terminology binding** to IPS value sets (e.g. SNOMED) — clinical codes are display/text only.
 6. **`author_display`** maps to Composition.author as a display-only `Reference` (no `reference` URL / Organization entry).
 
-### CLI crypto — EphemeralTestKeyProvider / plaintext key sidecar
+### CLI crypto — CustomerHeld `--keypair` vs gated ephemeral
 
-CLI crypto subcommands use EphemeralTestKeyProvider exclusively; the `*.ephemeral-keypair.json` sidecar holds raw private key bytes in plaintext (0600 on Unix, unprotected on Windows). Not suitable for real patient data. Revisit when CLI gains real CustomerHeld / HSM-backed key provisioning.
+Evaluation / pilot CLI path: `crypto keygen` + `--keypair` (CustomerHeld file). Ephemeral (`--ephemeral`) requires `SOLUM_ALLOW_EPHEMERAL=1` and a profile allowing `ephemeral_test` (`dev-local.toml`); pilot profiles refuse `EphemeralTest` custody. Ephemeral sidecars remain plaintext JSON (0600 on Unix). Not an HSM; zeroize-on-drop still open.
 
 ### `SolumActor` TryFrom — Jwt tested, Passport mapping untested
 
@@ -167,8 +167,8 @@ Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFI
 | `solum-fhir`: Vollständige IPS IG-Konformität, Terminologie-Bindung (SNOMED/LOINC-ValueSets), MedicationRequest-Unterstützung, FHIR-Validator-Integration bleiben offen | `crates/fhir/src/lib.rs` — `STAGE = "1-patient-summary"`; `patient_summary.rs` module docs |
 | Nur ein FHIR-Ressourcentyp (Patient Summary) — labs, discharge, imaging, prescriptions und weitere EEHRxF-Priority-Kategorien bleiben offen | `docs/roadmap.md` stage 2; `crates/fhir` Patient-Summary-only binding |
 | `solum-openehr` bleibt bewusst zurückgestellt (siehe Konversationsverlauf 2026-07-26: openEHR-Archetype-Unsicherheit); composition / archetype / CDR / AQL binding | `crates/openehr/src/lib.rs` — stage 2 scaffold; `docs/roadmap.md` stage 2 |
-| Produktions-Key-Custody in der CLI (CustomerHeld / HSM-backed provisioning) | CLI crypto is EphemeralTestKeyProvider + demo sidecar only — see “Bewusst akzeptierte Risiken” |
-| Kein Binary-Release-Weg (Pilotkunden bauen aus Source) | No in-repo binary release channel; customer docs / README build-from-source only |
+| HSM-backed / KMS CLI provisioning | CustomerHeld file `--keypair` is wired; AWS KMS remains library-only; no HSM CLI |
+| GitHub Release binaries before first verified `v*` tag | Workflow prepared (`.github/workflows/release.yml`); until a SemVer tag succeeds, install from source |
 | Ferrum-Storage / Auth-Verify nur als Referenzbeispiel, nicht im Produktpfad verdrahtet | `solum-example-ferrum-companion` + optional `ferrum-storage-backend` / standalone `solum-auth-verify` — reference/library surfaces, not a turnkey product path |
 | Sprint 6 aus `docs/INTEGRATION-ROADMAP.md` (Turnkey-Modus) | `docs/INTEGRATION-ROADMAP.md` — Sprint 1–5 only are inside this baseline |
 | JWKS-TTL-Refresh für `from_url` (aktuell einmaliger Fetch pro Verifier-Instanz) | Sprint-5 scope; offline `from_jwks_json` path is covered; URL fetch is one-shot |
@@ -179,7 +179,7 @@ Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFI
 | Patient Summary encrypt/decrypt über `Deployment` (mit `FileAuditStore`, nicht `AuditLog`) — explizit noch offen, siehe Sprint-3-Designentscheidung | Sprint-3 design note; `docs/architecture.md` FHIR/MII-Grenze |
 | FHIR / IHE EEHRxF priority-category depth beyond minimal Patient Summary (labs, discharge, imaging, prescriptions) | `docs/roadmap.md` stage 2 |
 | SaaS operating model | `docs/roadmap.md` stage 2; `docs/architecture.md` / PRODUCT-DEFINITION — on-premise first |
-| Live HELIOS CLI/API signing integration | `docs/helios.md` — export envelope prepared; wiring is open |
+| Live HELIOS CLI/API signing integration | `docs/helios.md` — **deferred / not productized**; export envelope only |
 | Multi-writer durable audit backend | `crates/audit/src/store.rs` — single-writer assumption for stage 1; multi-writer called stage-2 scope |
 | Clinical interpretation / diagnosis / therapy support | Out of scope both stages — `docs/roadmap.md`, CONTRIBUTING MDCG boundary |
 | Kenya production-ready legal closure | Draft profile inside baseline; see “Bewusst akzeptierte Risiken” — not a closed jurisdiction package |

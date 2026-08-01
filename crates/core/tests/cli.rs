@@ -11,8 +11,28 @@ fn eu_profile() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/profiles/eu-ehds.toml")
 }
 
+fn dev_profile() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/profiles/dev-local.toml")
+}
+
 fn solum() -> assert_cmd::Command {
     cargo_bin_cmd!("solum")
+}
+
+fn write_keypair(dir: &Path, key_ref: &str) -> PathBuf {
+    let out = dir.join("customer.keypair.json");
+    solum()
+        .args([
+            "crypto",
+            "keygen",
+            "--key-ref",
+            key_ref,
+            "--out",
+            out.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    out
 }
 
 fn grant(dir: &Path, subject: &str, purpose: &str) {
@@ -140,8 +160,10 @@ fn consent_grant_without_capability_is_denied() {
 }
 
 #[test]
-fn crypto_encrypt_decrypt_round_trip() {
+fn crypto_encrypt_decrypt_customer_held_round_trip() {
     let dir = tempdir().unwrap();
+    let key_ref = "customer/eval-1";
+    let keypair = write_keypair(dir.path(), key_ref);
     let plain_in = dir.path().join("plain.txt");
     let enc_out = dir.path().join("field.json");
     let plain_out = dir.path().join("plain-out.txt");
@@ -151,6 +173,81 @@ fn crypto_encrypt_decrypt_round_trip() {
         .args([
             "crypto",
             "encrypt",
+            "--profile",
+            eu_profile().to_str().unwrap(),
+            "--audit",
+            dir.path().join("audit.jsonl").to_str().unwrap(),
+            "--consent-store",
+            dir.path().join("consent.jsonl").to_str().unwrap(),
+            "--category",
+            "patient_summary",
+            "--key-ref",
+            key_ref,
+            "--keypair",
+            keypair.to_str().unwrap(),
+            "--actor",
+            "practitioner/7",
+            "--capability",
+            "solum:crypto:encrypt",
+            "--in",
+            plain_in.to_str().unwrap(),
+            "--out",
+            enc_out.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    let stderr = String::from_utf8_lossy(&enc.get_output().stderr);
+    assert!(
+        stderr.contains("CustomerHeld"),
+        "encrypt must note CustomerHeld path: {stderr}"
+    );
+    assert!(
+        !stderr.contains("EphemeralTestKeyProvider"),
+        "CustomerHeld path must not print ephemeral warning: {stderr}"
+    );
+
+    solum()
+        .args([
+            "crypto",
+            "decrypt",
+            "--profile",
+            eu_profile().to_str().unwrap(),
+            "--audit",
+            dir.path().join("audit.jsonl").to_str().unwrap(),
+            "--consent-store",
+            dir.path().join("consent.jsonl").to_str().unwrap(),
+            "--key-ref",
+            key_ref,
+            "--keypair",
+            keypair.to_str().unwrap(),
+            "--actor",
+            "practitioner/7",
+            "--capability",
+            "solum:crypto:decrypt",
+            "--in",
+            enc_out.to_str().unwrap(),
+            "--out",
+            plain_out.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    assert_eq!(fs::read(&plain_out).unwrap(), b"patient-summary-demo");
+}
+
+#[test]
+fn crypto_ephemeral_refused_on_eu_profile_even_with_env() {
+    let dir = tempdir().unwrap();
+    let plain_in = dir.path().join("plain.txt");
+    let enc_out = dir.path().join("field.json");
+    fs::write(&plain_in, b"x").unwrap();
+
+    let assert = solum()
+        .env("SOLUM_ALLOW_EPHEMERAL", "1")
+        .args([
+            "crypto",
+            "encrypt",
+            "--ephemeral",
             "--profile",
             eu_profile().to_str().unwrap(),
             "--audit",
@@ -171,43 +268,61 @@ fn crypto_encrypt_decrypt_round_trip() {
             enc_out.to_str().unwrap(),
         ])
         .assert()
-        .success();
-    let stderr = String::from_utf8_lossy(&enc.get_output().stderr);
+        .failure();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert!(
-        stderr.contains("EphemeralTestKeyProvider"),
-        "encrypt must print the ephemeral-key warning: {stderr}"
+        stderr.contains("startup refused")
+            || stderr.contains("CustodyNotAllowed")
+            || stderr.contains("ephemeral"),
+        "eu-ehds must refuse EphemeralTest custody: {stderr}"
     );
+    assert!(!enc_out.exists());
+}
 
-    solum()
+#[test]
+fn crypto_ephemeral_requires_allow_env() {
+    let dir = tempdir().unwrap();
+    let plain_in = dir.path().join("plain.txt");
+    let enc_out = dir.path().join("field.json");
+    fs::write(&plain_in, b"x").unwrap();
+
+    let assert = solum()
+        .env_remove("SOLUM_ALLOW_EPHEMERAL")
         .args([
             "crypto",
-            "decrypt",
+            "encrypt",
+            "--ephemeral",
             "--profile",
-            eu_profile().to_str().unwrap(),
+            dev_profile().to_str().unwrap(),
             "--audit",
             dir.path().join("audit.jsonl").to_str().unwrap(),
             "--consent-store",
             dir.path().join("consent.jsonl").to_str().unwrap(),
+            "--category",
+            "patient_summary",
             "--key-ref",
             "ephemeral/cli-1",
             "--actor",
             "practitioner/7",
             "--capability",
-            "solum:crypto:decrypt",
+            "solum:crypto:encrypt",
             "--in",
-            enc_out.to_str().unwrap(),
+            plain_in.to_str().unwrap(),
             "--out",
-            plain_out.to_str().unwrap(),
+            enc_out.to_str().unwrap(),
         ])
         .assert()
-        .success();
-
-    assert_eq!(fs::read(&plain_out).unwrap(), b"patient-summary-demo");
+        .failure();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert!(
+        stderr.contains("SOLUM_ALLOW_EPHEMERAL"),
+        "must require env gate: {stderr}"
+    );
 }
 
 #[cfg(unix)]
 #[test]
-fn crypto_encrypt_sidecar_is_mode_0600() {
+fn crypto_ephemeral_sidecar_is_mode_0600_on_dev_profile() {
     use std::os::unix::fs::MetadataExt;
 
     let dir = tempdir().unwrap();
@@ -216,11 +331,13 @@ fn crypto_encrypt_sidecar_is_mode_0600() {
     fs::write(&plain_in, b"x").unwrap();
 
     solum()
+        .env("SOLUM_ALLOW_EPHEMERAL", "1")
         .args([
             "crypto",
             "encrypt",
+            "--ephemeral",
             "--profile",
-            eu_profile().to_str().unwrap(),
+            dev_profile().to_str().unwrap(),
             "--audit",
             dir.path().join("audit.jsonl").to_str().unwrap(),
             "--consent-store",
@@ -258,6 +375,8 @@ fn audit_verify_ok_after_consent_and_crypto() {
     let dir = tempdir().unwrap();
     grant(dir.path(), "patient/42", "care_provision");
 
+    let key_ref = "customer/eval-1";
+    let keypair = write_keypair(dir.path(), key_ref);
     let plain_in = dir.path().join("plain.txt");
     let enc_out = dir.path().join("field.json");
     fs::write(&plain_in, b"x").unwrap();
@@ -274,7 +393,9 @@ fn audit_verify_ok_after_consent_and_crypto() {
             "--category",
             "patient_summary",
             "--key-ref",
-            "ephemeral/cli-1",
+            key_ref,
+            "--keypair",
+            keypair.to_str().unwrap(),
             "--actor",
             "practitioner/7",
             "--capability",
@@ -303,6 +424,8 @@ fn audit_verify_ok_after_consent_and_crypto() {
 #[test]
 fn crypto_encrypt_rejects_unknown_category_without_panic() {
     let dir = tempdir().unwrap();
+    let key_ref = "customer/eval-1";
+    let keypair = write_keypair(dir.path(), key_ref);
     let plain_in = dir.path().join("plain.txt");
     let enc_out = dir.path().join("field.json");
     fs::write(&plain_in, b"x").unwrap();
@@ -320,7 +443,9 @@ fn crypto_encrypt_rejects_unknown_category_without_panic() {
             "--category",
             "marketing_segment",
             "--key-ref",
-            "ephemeral/cli-1",
+            key_ref,
+            "--keypair",
+            keypair.to_str().unwrap(),
             "--actor",
             "practitioner/7",
             "--capability",
@@ -338,7 +463,6 @@ fn crypto_encrypt_rejects_unknown_category_without_panic() {
         stderr.contains("marketing_segment") || stderr.contains("fatal"),
         "expected clear rejection, got: {stderr}"
     );
-    // Smoke-check: process exited via ExitCode, not an abort/panic payload.
     assert!(
         !stderr.contains("panicked at") && !stderr.contains("RUST_BACKTRACE"),
         "unknown category must not panic: {stderr}"
@@ -354,4 +478,18 @@ fn check_still_works() {
         .status()
         .unwrap();
     assert!(status.success());
+}
+
+#[test]
+fn check_refuses_ephemeral_custody_on_eu_profile() {
+    let assert = solum()
+        .env("SOLUM_KEY_CUSTODY", "ephemeral_test")
+        .args(["check", "--profile", eu_profile().to_str().unwrap()])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert!(
+        stderr.contains("startup refused") || stderr.contains("ephemeral"),
+        "expected custody refusal: {stderr}"
+    );
 }

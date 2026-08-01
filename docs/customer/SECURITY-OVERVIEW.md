@@ -111,7 +111,7 @@ Solum persists a **durable, hash-chained, tamper-evident** audit log for deploym
 
 **What this is:** customer-inspectable accountability for access, consent, crypto, and authorization-denial events prepared for external evidence tooling.
 
-**What this is not (yet):** live HELIOS CLI/API signing integration inside Solum. Export envelopes are prepared; wiring HELIOS as a live signing step remains open. ([BASELINE.md](../BASELINE.md); [helios.md](../helios.md))
+**What this is not:** live HELIOS CLI/API signing inside Solum. Export envelopes are prepared; **live HELIOS signing is deferred and not productized** — do not claim it in evaluations. ([helios.md](../helios.md); [roadmap.md](../roadmap.md))
 
 **Operational limit:** Stage 1 assumes a **single writer** to the durable audit file. Multi-writer backends are Stage‑2 / out of this baseline. ([BASELINE.md](../BASELINE.md))
 
@@ -136,7 +136,7 @@ EU and African markets are equal core markets in product strategy; profile avail
 
 The following are **accepted or open limitations** of the current baseline, restated for non-developer readers. Full engineering wording: [BASELINE.md](../BASELINE.md) — *Bewusst akzeptierte Risiken* and *Explizit außerhalb dieser Baseline*.
 
-1. **Command-line crypto uses demo keys only.** The CLI encrypt/decrypt path uses an ephemeral test key provider. Sidecar files can hold **raw private key bytes in plaintext** (Unix mode 0600; no equivalent protection called out for Windows). **Not suitable for real patient data.** Production key custody is **not** wired into the CLI. ([BASELINE.md](../BASELINE.md); README CLI warning)
+1. **Paid evaluations must use CustomerHeld `--keypair` (or library/KMS).** The CLI evaluation path is operator-supplied keypair files via `crypto keygen` + `--keypair`. Ephemeral keys (`--ephemeral`) require `SOLUM_ALLOW_EPHEMERAL=1` and `dev-local` (or another profile allowing `ephemeral_test`); pilot profiles refuse `EphemeralTest` custody. **Never describe ephemeral keys as a paid-evaluation custody option.** File keypairs hold private key bytes in plaintext JSON (0600 on Unix) — not an HSM. ([DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md) §4)
 
 2. **Legacy library actor paths skip authorization.** Callers that invoke grant/revoke/encrypt/decrypt with a plain actor string (no scopes) **bypass GTM‑1 capability checks entirely**. The shipped **CLI** does **not** use that path: it builds a structured actor from `--actor` + `--capability` and calls the checked APIs (omit `--capability` → fail-closed denial). Library integrators that still use the plain-string APIs remain on the unchecked flank. ([BASELINE.md](../BASELINE.md))
 
@@ -160,7 +160,7 @@ The following are **accepted or open limitations** of the current baseline, rest
 
 12. **Single-writer audit store; no multi-instance audit backend** in Stage 1. ([BASELINE.md](../BASELINE.md))
 
-13. **No packaged binary release channel is documented in this repository.** Installation today means building from source (see [DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md)). **ANNAHME, bitte prüfen:** if Synaptic Four distributes binaries outside this repo, that channel is not described here.
+13. **Binary install via GitHub Release is prepared but only after a verified SemVer `v*` tag.** Until then, install from source (see [DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md) §1 and [RELEASING.md](../../RELEASING.md)).
 
 ---
 

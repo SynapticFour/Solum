@@ -1,0 +1,78 @@
+# Solum jurisdiction profile — local developer demos only.
+#
+# Allows ephemeral_test key custody so CLI `--ephemeral` works when
+# SOLUM_ALLOW_EPHEMERAL=1. Pilot / paid-evaluation / production profiles
+# (eu-ehds, kenya-dpa) must NOT list ephemeral_test — they refuse startup
+# if runtime custody is EphemeralTest.
+#
+# STATUS: DEV ONLY — never use for real patient data or customer evaluations.
+
+schema_version = 1
+
+[meta]
+profile = "dev-local"
+jurisdiction = "DEV"
+description = "Local developer profile — permits ephemeral test keys; not a jurisdiction"
+references = [
+    "Solum internal — developer demos only",
+]
+
+[encryption]
+required_field_categories = [
+    "patient_identifier",
+    "patient_summary",
+    "e_prescription",
+    "e_dispensation",
+    "medical_images",
+    "medical_image_reports",
+    "laboratory_results",
+    "discharge_reports",
+    "clinical_notes",
+    "consent_record",
+]
+allowed_key_custody = ["customer_held", "ephemeral_test"]
+
+[audit]
+mandatory_events = [
+    "access.granted",
+    "access.denied",
+    "data.read",
+    "data.export",
+    "data.receive_eehrxf",
+    "consent.granted",
+    "consent.revoked",
+    "identity.authenticated",
+    "key.use",
+    "residency.transfer_attempt",
+]
+helios_export_prepared = true
+
+[retention]
+default_retention_days = 30
+audit_log_retention_days = 30
+
+[storage]
+# Loose residency so local machines can run demos without SOLUM_STORAGE_REGION.
+allowed_regions = ["EU", "EEA", "DEV", "LOCAL"]
+enforce_residency = false
+
+[consent]
+workflow = "gdpr_granular"
+required_purposes = [
+    "care_provision",
+    "emergency_access",
+    "secondary_use_hdab",
+    "quality_improvement",
+]
+
+[transfer]
+permitted_mechanisms = []
+permitted_destinations = []
+requires_serving_copy = false
+
+[regulatory]
+annex_requirements = []
+notes = [
+    "DEV ONLY — ephemeral keys and loose residency are intentional for local demos.",
+    "Paid evaluations and pilots must use eu-ehds (or a reviewed jurisdiction profile) with CustomerHeld --keypair files.",
+]

@@ -4,8 +4,9 @@ Each `*.toml` file is a jurisdiction profile loaded by `solum-profiles`.
 
 | File | Status |
 |------|--------|
-| `eu-ehds.toml` | Present — EU EHDS (Annex II–oriented) |
-| `kenya-dpa.toml` | Present (draft — pending legal review, see regulatory.notes) — Kenya DPA 2019 + Digital Health Act 2023 |
+| `eu-ehds.toml` | Present — EU EHDS (Annex II–oriented); `customer_held` only |
+| `kenya-dpa.toml` | Present (draft — pending legal review, see regulatory.notes) — Kenya DPA 2019 + Digital Health Act 2023; `customer_held` only |
+| `dev-local.toml` | Developer demos only — allows `ephemeral_test`; never for paid evaluations |
 | `nigeria-ndpa.toml` | Planned — Nigeria NDPA-oriented |
 | `south-africa-popia.toml` | Planned — POPIA-oriented |
 
