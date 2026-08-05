@@ -1,29 +1,92 @@
 //! HTTP integration tests for `solum-sidecar` (axum + reqwest against a free port).
 
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use base64::Engine;
 use serde_json::Value;
+use solum_core::crypto::generate_operator_keypair;
 use solum_sidecar::{
-    app_router, build_state, SidecarConfig, EPHEMERAL_WARNING_HEADER, SIDECAR_TOKEN_HEADER,
+    app_router, build_state, KeypairFile, SidecarConfig, CUSTOMER_HELD_KEY_NOTE,
+    EPHEMERAL_WARNING_HEADER, SIDECAR_TOKEN_HEADER,
 };
 use tempfile::tempdir;
+
+/// Serialize env mutations for ephemeral gate tests (process-wide `SOLUM_ALLOW_EPHEMERAL`).
+fn env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
 
 fn eu_profile() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/profiles/eu-ehds.toml")
 }
 
-async fn spawn_sidecar(token: &str) -> (SocketAddr, tempfile::TempDir) {
+fn dev_local_profile() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/profiles/dev-local.toml")
+}
+
+fn write_keypair_file(dir: &Path, key_ref: &str) -> PathBuf {
+    let (pubkey, privkey) = generate_operator_keypair().expect("generate_operator_keypair");
+    let path = dir.join(format!("{}.json", key_ref.replace('/', "_")));
+    let file = KeypairFile {
+        key_ref: key_ref.to_string(),
+        pubkey,
+        privkey,
+    };
+    std::fs::write(&path, serde_json::to_string_pretty(&file).unwrap()).unwrap();
+    path
+}
+
+/// Ephemeral sidecar: `--ephemeral` + env gate + `dev-local` profile.
+async fn spawn_ephemeral_sidecar(token: &str) -> (SocketAddr, tempfile::TempDir) {
+    let _guard = env_lock().lock().unwrap();
+    std::env::set_var("SOLUM_ALLOW_EPHEMERAL", "1");
     let dir = tempdir().unwrap();
+    let config = SidecarConfig {
+        bind: "127.0.0.1:0".parse().unwrap(),
+        profile: dev_local_profile(),
+        audit: dir.path().join("audit.jsonl"),
+        consent_store: dir.path().join("consent.jsonl"),
+        token: token.to_string(),
+        keys_dir: None,
+        ephemeral: true,
+    };
+    let state = build_state(&config).expect("build_state ephemeral");
+    // SOLUM_ALLOW_EPHEMERAL is read only synchronously inside build_state()
+    // (require_ephemeral_gate()); app_router() and the TCP bind do not touch
+    // the env var. Release before the first .await so we do not hold
+    // std::sync::MutexGuard across await (clippy::await_holding_lock).
+    drop(_guard);
+    let app = app_router(state);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    (addr, dir)
+}
+
+/// CustomerHeld sidecar: `--keys-dir` with a pre-registered keypair.
+async fn spawn_customer_held_sidecar(
+    token: &str,
+    key_ref: &str,
+) -> (SocketAddr, tempfile::TempDir) {
+    let dir = tempdir().unwrap();
+    let keys_dir = dir.path().join("keys");
+    std::fs::create_dir_all(&keys_dir).unwrap();
+    write_keypair_file(&keys_dir, key_ref);
     let config = SidecarConfig {
         bind: "127.0.0.1:0".parse().unwrap(),
         profile: eu_profile(),
         audit: dir.path().join("audit.jsonl"),
         consent_store: dir.path().join("consent.jsonl"),
         token: token.to_string(),
+        keys_dir: Some(keys_dir),
+        ephemeral: false,
     };
-    let state = build_state(&config).expect("build_state");
+    let state = build_state(&config).expect("build_state customer-held");
     let app = app_router(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -40,7 +103,7 @@ fn client() -> reqwest::Client {
 #[tokio::test]
 async fn grant_with_capability_and_secret_created() {
     let token = "test-secret-grant-ok";
-    let (addr, _dir) = spawn_sidecar(token).await;
+    let (addr, _dir) = spawn_ephemeral_sidecar(token).await;
     let url = format!("http://{addr}/v1/consent/grant");
     let res = client()
         .post(&url)
@@ -63,7 +126,7 @@ async fn grant_with_capability_and_secret_created() {
 #[tokio::test]
 async fn grant_without_secret_is_unauthorized() {
     let token = "test-secret-no-header";
-    let (addr, dir) = spawn_sidecar(token).await;
+    let (addr, dir) = spawn_ephemeral_sidecar(token).await;
     let url = format!("http://{addr}/v1/consent/grant");
     let res = client()
         .post(&url)
@@ -96,7 +159,7 @@ async fn grant_without_secret_is_unauthorized() {
 #[tokio::test]
 async fn grant_wrong_secret_is_unauthorized() {
     let token = "test-secret-correct";
-    let (addr, _dir) = spawn_sidecar(token).await;
+    let (addr, _dir) = spawn_ephemeral_sidecar(token).await;
     let url = format!("http://{addr}/v1/consent/grant");
     let res = client()
         .post(&url)
@@ -117,7 +180,7 @@ async fn grant_wrong_secret_is_unauthorized() {
 #[tokio::test]
 async fn grant_missing_capability_is_forbidden_no_side_effect() {
     let token = "test-secret-cap-deny";
-    let (addr, _dir) = spawn_sidecar(token).await;
+    let (addr, _dir) = spawn_ephemeral_sidecar(token).await;
     let url = format!("http://{addr}/v1/consent/grant");
     let res = client()
         .post(&url)
@@ -151,7 +214,7 @@ async fn grant_missing_capability_is_forbidden_no_side_effect() {
 #[tokio::test]
 async fn encrypt_decrypt_round_trip_over_http() {
     let token = "test-secret-crypto";
-    let (addr, _dir) = spawn_sidecar(token).await;
+    let (addr, _dir) = spawn_ephemeral_sidecar(token).await;
     let plain = b"patient-summary-demo";
     let enc = client()
         .post(format!("http://{addr}/v1/crypto/encrypt"))
@@ -201,7 +264,7 @@ async fn encrypt_decrypt_round_trip_over_http() {
 #[tokio::test]
 async fn encrypt_same_key_ref_twice_both_ciphertexts_decrypt() {
     let token = "test-secret-key-reuse";
-    let (addr, _dir) = spawn_sidecar(token).await;
+    let (addr, _dir) = spawn_ephemeral_sidecar(token).await;
     let key_ref = "ephemeral/reuse-1";
     let plain_a = b"first-plaintext-block";
     let plain_b = b"second-plaintext-block";
@@ -290,7 +353,7 @@ async fn encrypt_same_key_ref_twice_both_ciphertexts_decrypt() {
 #[tokio::test]
 async fn audit_verify_ok_after_operations() {
     let token = "test-secret-audit";
-    let (addr, _dir) = spawn_sidecar(token).await;
+    let (addr, _dir) = spawn_ephemeral_sidecar(token).await;
 
     let grant = client()
         .post(format!("http://{addr}/v1/consent/grant"))
@@ -342,4 +405,126 @@ async fn audit_verify_ok_after_operations() {
     assert_eq!(export.status(), 200);
     let exported: Value = export.json().await.unwrap();
     assert!(exported["record_count"].as_u64().unwrap() >= 2);
+}
+
+#[tokio::test]
+async fn customer_held_encrypt_decrypt_round_trip() {
+    let token = "test-secret-ch-roundtrip";
+    let key_ref = "customer/sidecar-1";
+    let (addr, _dir) = spawn_customer_held_sidecar(token, key_ref).await;
+    let plain = b"customer-held-plaintext";
+
+    let enc = client()
+        .post(format!("http://{addr}/v1/crypto/encrypt"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "category": "patient_summary",
+            "key_ref": key_ref,
+            "actor": "practitioner/7",
+            "capability": ["solum:crypto:encrypt"],
+            "plaintext_base64": base64::engine::general_purpose::STANDARD.encode(plain)
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(enc.headers().get(EPHEMERAL_WARNING_HEADER).is_none());
+    let enc_status = enc.status();
+    let enc_body: Value = enc.json().await.unwrap();
+    assert_eq!(enc_status, 200, "body={enc_body}");
+    assert_eq!(
+        enc_body["warning"].as_str().unwrap(),
+        CUSTOMER_HELD_KEY_NOTE
+    );
+    let field = enc_body["field"].clone();
+
+    let dec = client()
+        .post(format!("http://{addr}/v1/crypto/decrypt"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "key_ref": key_ref,
+            "actor": "practitioner/7",
+            "capability": ["solum:crypto:decrypt"],
+            "field": field
+        }))
+        .send()
+        .await
+        .unwrap();
+    let dec_status = dec.status();
+    let dec_body: Value = dec.json().await.unwrap();
+    assert_eq!(dec_status, 200, "body={dec_body}");
+    let out = base64::engine::general_purpose::STANDARD
+        .decode(dec_body["plaintext_base64"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(out, plain);
+}
+
+#[tokio::test]
+async fn customer_held_unknown_key_ref_does_not_auto_generate() {
+    let token = "test-secret-ch-unknown";
+    let (addr, _dir) = spawn_customer_held_sidecar(token, "customer/known-1").await;
+
+    let enc = client()
+        .post(format!("http://{addr}/v1/crypto/encrypt"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "category": "patient_summary",
+            "key_ref": "customer/never-registered",
+            "actor": "practitioner/7",
+            "capability": ["solum:crypto:encrypt"],
+            "plaintext_base64": base64::engine::general_purpose::STANDARD.encode(b"x")
+        }))
+        .send()
+        .await
+        .unwrap();
+    let status = enc.status();
+    let body: Value = enc.json().await.unwrap();
+    assert_eq!(status, 400, "body={body}");
+    let msg = body["message"].as_str().unwrap_or("").to_ascii_lowercase();
+    assert!(
+        msg.contains("unknown") || msg.contains("key") || msg.contains("never-registered"),
+        "expected unknown-key error, got {body}"
+    );
+}
+
+#[test]
+fn build_state_requires_keys_dir_or_ephemeral() {
+    let dir = tempdir().unwrap();
+    let err = match build_state(&SidecarConfig {
+        bind: "127.0.0.1:0".parse().unwrap(),
+        profile: eu_profile(),
+        audit: dir.path().join("audit.jsonl"),
+        consent_store: dir.path().join("consent.jsonl"),
+        token: "tok".into(),
+        keys_dir: None,
+        ephemeral: false,
+    }) {
+        Ok(_) => panic!("must require custody flag"),
+        Err(e) => e,
+    };
+    assert!(
+        err.contains("--keys-dir") && err.contains("--ephemeral"),
+        "err={err}"
+    );
+}
+
+#[test]
+fn build_state_ephemeral_requires_allow_env() {
+    let _guard = env_lock().lock().unwrap();
+    std::env::remove_var("SOLUM_ALLOW_EPHEMERAL");
+    let dir = tempdir().unwrap();
+    let err = match build_state(&SidecarConfig {
+        bind: "127.0.0.1:0".parse().unwrap(),
+        profile: dev_local_profile(),
+        audit: dir.path().join("audit.jsonl"),
+        consent_store: dir.path().join("consent.jsonl"),
+        token: "tok".into(),
+        keys_dir: None,
+        ephemeral: true,
+    }) {
+        Ok(_) => panic!("must require SOLUM_ALLOW_EPHEMERAL"),
+        Err(e) => e,
+    };
+    assert!(err.contains("SOLUM_ALLOW_EPHEMERAL"), "err={err}");
+    // Restore for sibling ephemeral HTTP tests that may run after in the same process.
+    std::env::set_var("SOLUM_ALLOW_EPHEMERAL", "1");
 }

@@ -1,17 +1,21 @@
-//! `solum-sidecar` binary — HTTP wrap of Deployment `*_as` (demo keys only).
+//! `solum-sidecar` binary — HTTP wrap of Deployment `*_as`.
+//!
+//! Key custody matches the Phase‑C CLI: `--keys-dir` (CustomerHeld) by default
+//! for evaluations; `--ephemeral` only behind `SOLUM_ALLOW_EPHEMERAL` + a profile
+//! that allows `ephemeral_test`.
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
-use solum_sidecar::{serve, SidecarConfig, EPHEMERAL_KEY_WARNING};
+use solum_sidecar::{serve, SidecarConfig};
 
 #[derive(Debug, Parser)]
 #[command(
     name = "solum-sidecar",
     version,
-    about = "Solum HTTP sidecar for HMIS/EHR integrators (Stage 1 — ephemeral keys only)"
+    about = "Solum HTTP sidecar for HMIS/EHR integrators (CustomerHeld --keys-dir; gated --ephemeral)"
 )]
 struct Cli {
     /// Bind address. Default loopback only — override deliberately for non-local use.
@@ -34,6 +38,20 @@ struct Cli {
     /// Shared secret for `X-Solum-Sidecar-Token` (required). Not a GTM-1 capability.
     #[arg(long, env = "SOLUM_SIDECAR_TOKEN")]
     token: String,
+
+    /// Directory of CustomerHeld keypair JSON files (`solum crypto keygen` layout).
+    /// Required unless `--ephemeral`.
+    #[arg(
+        long = "keys-dir",
+        env = "SOLUM_SIDECAR_KEYS_DIR",
+        required_unless_present = "ephemeral"
+    )]
+    keys_dir: Option<PathBuf>,
+
+    /// Dev-only ephemeral keys. Requires `SOLUM_ALLOW_EPHEMERAL=1` and a profile
+    /// that lists `ephemeral_test` (e.g. `dev-local.toml`).
+    #[arg(long, default_value_t = false, conflicts_with = "keys_dir")]
+    ephemeral: bool,
 }
 
 #[tokio::main]
@@ -46,7 +64,6 @@ async fn main() -> ExitCode {
         .init();
 
     let cli = Cli::parse();
-    eprintln!("{EPHEMERAL_KEY_WARNING}");
 
     let config = SidecarConfig {
         bind: cli.bind,
@@ -54,6 +71,8 @@ async fn main() -> ExitCode {
         audit: cli.audit,
         consent_store: cli.consent_store,
         token: cli.token,
+        keys_dir: cli.keys_dir,
+        ephemeral: cli.ephemeral,
     };
 
     match serve(config).await {

@@ -1,6 +1,6 @@
 [package]
 name = "solum-sidecar"
-description = "HTTP sidecar wrapping Deployment *_as methods for non-Rust HMIS/EHR integrators (Stage 1, demo keys only)"
+description = "HTTP sidecar wrapping Deployment *_as methods for non-Rust HMIS/EHR integrators (CustomerHeld --keys-dir; gated --ephemeral)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

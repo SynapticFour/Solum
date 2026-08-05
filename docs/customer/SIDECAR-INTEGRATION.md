@@ -15,15 +15,43 @@ It does **not** introduce new compliance business logic. Fail-closed GTM‑1 cap
 
 ---
 
-## 2. Not for production data
+## 2. Key custody (same posture as the CLI)
 
-> **⚠ Ephemeral test keys (sidecar crypto endpoints)**
->
-> Crypto encrypt/decrypt use **`EphemeralTestKeyProvider` only** in this Stage‑1 sidecar: keys are **not** suitable for real patient data or **paid evaluations**, live only in the sidecar **process memory** for that run, and are **lost on restart**. For evaluations use the CLI CustomerHeld `--keypair` path ([DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md) §4). Customer-held / HSM / AWS KMS is **not** wired into the sidecar. Every crypto response also includes a `warning` field and an `X-Solum-Ephemeral-Keys` header so HTTP clients that never see process logs still see the restriction.
->
-> (Same honesty posture as [DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md) §4 for the CLI; [BASELINE.md](../BASELINE.md))
+### Recommended: CustomerHeld via `--keys-dir`
 
-**Do not** process real patient data with the sidecar crypto endpoints in this baseline.
+For evaluations and pilots, run the sidecar with **`--keys-dir`** pointing at a directory of operator keypair JSON files — the **same layout** as `solum crypto keygen`:
+
+```bash
+# Generate a keypair file (CLI)
+cargo run -p solum-core -- crypto keygen \
+  --key-ref customer/hmis-1 \
+  --out /secure/solum-keys/customer_hmis-1.json
+# Protect the file (0600 on Unix). Place it (or copies) under --keys-dir.
+
+export SOLUM_SIDECAR_TOKEN='replace-with-a-long-random-secret'
+cargo run -p solum-sidecar -- \
+  --profile config/profiles/eu-ehds.toml \
+  --audit /tmp/solum-sidecar/audit.jsonl \
+  --consent-store /tmp/solum-sidecar/consent.jsonl \
+  --keys-dir /secure/solum-keys \
+  --bind 127.0.0.1:8787
+```
+
+At startup the sidecar loads **every regular file** in `--keys-dir` as JSON, registers each `key_ref` from the **file contents** (not the filename), and refuses to start on invalid JSON or an empty directory. Encrypt/decrypt only succeed for those pre-registered refs — there is **no** automatic key generation in CustomerHeld mode.
+
+AWS KMS is **not** wired into the sidecar (library-only today; follow-on work).
+
+### Not for production: gated `--ephemeral`
+
+> **⚠ Ephemeral test keys**
+>
+> `--ephemeral` uses **`EphemeralTestKeyProvider`**: keys live only in process memory, are lost on restart, and are **not** suitable for real patient data or **paid evaluations**. Requires **`SOLUM_ALLOW_EPHEMERAL=1`** (or `true`/`yes`) **and** a profile that allows `ephemeral_test` (e.g. `config/profiles/dev-local.toml`). Pilot profiles (`eu-ehds`, `kenya-dpa`) refuse EphemeralTest custody at startup. Crypto responses include a `warning` field and `X-Solum-Ephemeral-Keys`.
+>
+> (Same honesty posture as [DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md) §4; [BASELINE.md](../BASELINE.md))
+
+Either `--keys-dir` **or** `--ephemeral` is required (clap conflict if both). Omitting both fails at startup.
+
+**`key_ref` reuse (ephemeral only):** The first encrypt for a given `key_ref` generates a session keypair; later encrypts with the same `key_ref` reuse it (no silent rotation). CustomerHeld never auto-generates.
 
 ---
 
@@ -40,23 +68,33 @@ Default bind is **`127.0.0.1`** (not `0.0.0.0`). Override only via `SOLUM_SIDECA
 
 ## 4. Run the sidecar
 
-**Prerequisites:** same as the CLI (Rust toolchain, libsodium). Build from source — no packaged binary channel is documented in this repository.
+**Prerequisites:** same as the CLI (Rust toolchain, libsodium). Build from source — see [RELEASING.md](../../RELEASING.md) for the SemVer binary release channel when tagged.
 
 ```bash
 export SOLUM_SIDECAR_TOKEN='replace-with-a-long-random-secret'
 export PROFILE=config/profiles/eu-ehds.toml
 export AUDIT=/tmp/solum-sidecar/audit.jsonl
 export CONSENT=/tmp/solum-sidecar/consent.jsonl
-mkdir -p /tmp/solum-sidecar
+export KEYS=/secure/solum-keys
+mkdir -p /tmp/solum-sidecar "$KEYS"
 
 cargo run -p solum-sidecar -- \
   --profile "$PROFILE" \
   --audit "$AUDIT" \
   --consent-store "$CONSENT" \
+  --keys-dir "$KEYS" \
   --bind 127.0.0.1:8787
 ```
 
-Expect a startup warning about ephemeral keys on stderr / logs.
+For local demos only:
+
+```bash
+export SOLUM_ALLOW_EPHEMERAL=1
+cargo run -p solum-sidecar -- \
+  --profile config/profiles/dev-local.toml \
+  --audit "$AUDIT" --consent-store "$CONSENT" \
+  --ephemeral --bind 127.0.0.1:8787
+```
 
 ---
 
@@ -94,7 +132,7 @@ curl -sS -X POST "$BASE/v1/consent/revoke" \
   }'
 ```
 
-### Field encrypt / decrypt (demo keys only — see §2)
+### Field encrypt / decrypt (CustomerHeld `key_ref` must be pre-loaded)
 
 ```bash
 PLAIN_B64=$(printf 'demo-plaintext' | base64)
@@ -104,18 +142,14 @@ curl -sS -X POST "$BASE/v1/crypto/encrypt" \
   -H "X-Solum-Sidecar-Token: $TOKEN" \
   -d "{
     \"category\": \"patient_summary\",
-    \"key_ref\": \"ephemeral/demo-1\",
+    \"key_ref\": \"customer/hmis-1\",
     \"actor\": \"practitioner/7\",
     \"capability\": [\"solum:crypto:encrypt\"],
     \"plaintext_base64\": \"$PLAIN_B64\"
   }"
-# Response JSON includes "field" + "warning"; header X-Solum-Ephemeral-Keys is set.
-
-# Pass the returned "field" object back into decrypt (same sidecar process / key_ref).
+# Response JSON includes "field" + CustomerHeld "warning".
+# Pass the returned "field" object back into decrypt (same key_ref).
 ```
-
-**`key_ref` reuse within one sidecar process:** The first encrypt for a given `key_ref` generates an ephemeral keypair and keeps it in memory. Later encrypts with the **same** `key_ref` reuse that keypair (no silent rotation). Ciphertexts from earlier encrypts with that `key_ref` stay decryptable until the process exits. Keys are still lost on restart (§2).
-
 
 ### Audit export / verify
 
@@ -142,8 +176,8 @@ Encrypt does **not** imply decrypt. No wildcards. ([SECURITY-OVERVIEW.md](SECURI
 
 ## 7. Maturity / next steps
 
-- This sidecar is **new** relative to the CLI path. Treat it as an integration preview: correct wiring and fail-closed behaviour are covered by automated HTTP tests; it is **not** marketed as a finished, production-hardened appliance.
-- Production key custody and AWS KMS for the sidecar are **follow-on** work (same open flank as CLI crypto / KMS provisioning in [BASELINE.md](../BASELINE.md)).
+- Treat the sidecar as an integration preview: fail-closed behaviour and CustomerHeld / ephemeral gates are covered by automated HTTP tests; it is **not** marketed as a finished, production-hardened appliance.
+- AWS KMS for the sidecar (and CLI) remains **follow-on** work ([BASELINE.md](../BASELINE.md)).
 - For security evaluation of Solum overall, start from [SECURITY-OVERVIEW.md](SECURITY-OVERVIEW.md) and the current baseline tag.
 
 **Contact:** [contact@synapticfour.com](mailto:contact@synapticfour.com) · [synapticfour.com](https://synapticfour.com)

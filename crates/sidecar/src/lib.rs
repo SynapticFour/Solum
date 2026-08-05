@@ -8,19 +8,21 @@
 //! idioms aligned with the portfolio instead of introducing a second framework
 //! (actix, warp, …) solely for this binary.
 //!
-//! # Key custody — Option A (not production)
+//! # Key custody — CustomerHeld default, ephemeral gated
 //!
-//! This crate fixes crypto to [`EphemeralTestKeyProvider`] only — no
-//! `aws-kms` feature, no customer-held registration path. Keys live in process
-//! memory for the lifetime of the sidecar. See [`EPHEMERAL_KEY_WARNING`] and
+//! Same posture as the Phase‑C CLI:
+//! - **`--keys-dir`** — load operator keypair JSON files (`solum crypto keygen`
+//!   layout) into [`CustomerHeldKeyProvider`] (evaluation / pilot path).
+//! - **`--ephemeral`** — [`EphemeralTestKeyProvider`] only with
+//!   `SOLUM_ALLOW_EPHEMERAL=1` and a profile that allows `ephemeral_test`
+//!   (e.g. `dev-local.toml`). Pilot profiles refuse EphemeralTest at startup.
+//!
+//! AWS KMS is **not** wired here (follow-on). See
 //! `docs/customer/SIDECAR-INTEGRATION.md`.
 //!
-//! `Deployment` owns its key provider privately, so encrypt must call
-//! [`EphemeralTestKeyProvider::generate_test_keypair`] on the same map that
-//! `Deployment` later reads. [`SharedEphemeralKeys`] is a thin
-//! [`Crypt4ghKeyProvider`] handle over `Arc<Mutex<EphemeralTestKeyProvider>>`
-//! so generate + encrypt/decrypt share one store. It is **not** a second
-//! custody model.
+//! [`SidecarKeys`] is a concrete enum so axum `State` stays sized (no `dyn`
+//! provider). Ephemeral encrypt may call [`SharedEphemeralKeys::generate_test_keypair`]
+//! on first use of a `key_ref`; CustomerHeld never auto-generates.
 //!
 //! # Access control layers
 //!
@@ -31,8 +33,9 @@
 
 #![forbid(unsafe_code)]
 
+use std::fs;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use axum::body::Body;
@@ -46,7 +49,8 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 use solum_core::audit::FileAuditStore;
 use solum_core::crypto::{
-    Crypt4ghKeyProvider, Crypt4ghKeys, EncryptedField, EphemeralTestKeyProvider, KeyRef,
+    Crypt4ghKeyProvider, Crypt4ghKeys, CustomerHeldKeyProvider, EncryptedField,
+    EphemeralTestKeyProvider, KeyCustody, KeyRef,
 };
 use solum_core::{
     example_eu_runtime, query_consent_status, ActorSource, Deployment, SolumActor, SolumError,
@@ -57,18 +61,37 @@ use tower_http::trace::TraceLayer;
 /// Same warning text as the CLI (`solum-core` binary) ephemeral path.
 pub const EPHEMERAL_KEY_WARNING: &str = "\
 ⚠ Using EphemeralTestKeyProvider — keys are NOT persisted across runs
-and are NOT suitable for real patient data. Production key custody
-(CustomerHeld / HSM-backed) is not yet wired into the sidecar.
+and are NOT suitable for real patient data or paid evaluations.
+Requires SOLUM_ALLOW_EPHEMERAL=1 and a profile that allows ephemeral_test
+(e.g. config/profiles/dev-local.toml). Pilot profiles (eu-ehds, kenya-dpa)
+refuse EphemeralTest custody at startup.
 Keys exist only in the sidecar process memory for this run; restarting
 the process loses them. Demo-only — not an HSM.";
 
-/// Response / header name carrying [`EPHEMERAL_KEY_WARNING`] on crypto routes.
+/// Same honesty note as the CLI CustomerHeld `--keypair` path.
+pub const CUSTOMER_HELD_KEY_NOTE: &str = "\
+Using CustomerHeld key material from --keys-dir (operator-supplied files).
+Solum does not mint these keys during encrypt; protect keypair files
+as you would other secrets (0600 on Unix recommended).";
+
+/// Response / header name carrying ephemeral warning on crypto routes.
 pub const EPHEMERAL_WARNING_HEADER: &str = "x-solum-ephemeral-keys";
 
 /// Shared-secret header for the sidecar access gate (not GTM-1).
 pub const SIDECAR_TOKEN_HEADER: &str = "x-solum-sidecar-token";
 
-/// Shareable handle to a single [`EphemeralTestKeyProvider`] (Option A only).
+/// Same JSON layout as CLI `KeypairFile` (`solum crypto keygen` output).
+///
+/// `pubkey` / `privkey` are raw byte arrays (serde JSON number arrays), matching
+/// the CLI — not a divergent sidecar schema.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeypairFile {
+    pub key_ref: String,
+    pub pubkey: Vec<u8>,
+    pub privkey: Vec<u8>,
+}
+
+/// Shareable handle to a single [`EphemeralTestKeyProvider`].
 #[derive(Clone)]
 pub struct SharedEphemeralKeys(Arc<Mutex<EphemeralTestKeyProvider>>);
 
@@ -86,9 +109,6 @@ impl SharedEphemeralKeys {
     }
 
     /// Whether this session already holds a keypair for `key_ref`.
-    ///
-    /// Uses [`Crypt4ghKeyProvider::recipient_pubkey`] (`Err` for unknown refs)
-    /// — no change to `EphemeralTestKeyProvider` generate/overwrite behaviour.
     fn key_exists(&self, key_ref: &KeyRef) -> Result<bool, String> {
         Ok(self
             .0
@@ -125,10 +145,75 @@ impl Crypt4ghKeyProvider for SharedEphemeralKeys {
     }
 }
 
-/// Process-wide sidecar state: one Deployment over shared ephemeral keys.
+/// Shareable handle to a single [`CustomerHeldKeyProvider`].
+#[derive(Clone)]
+pub struct SharedCustomerHeldKeys(Arc<Mutex<CustomerHeldKeyProvider>>);
+
+impl SharedCustomerHeldKeys {
+    fn new(inner: CustomerHeldKeyProvider) -> Self {
+        Self(Arc::new(Mutex::new(inner)))
+    }
+}
+
+impl Crypt4ghKeyProvider for SharedCustomerHeldKeys {
+    fn recipient_pubkey(
+        &self,
+        key_ref: &KeyRef,
+    ) -> Result<Vec<u8>, solum_core::crypto::CryptoError> {
+        self.0
+            .lock()
+            .map_err(|_| {
+                solum_core::crypto::CryptoError::Provider("customer-held key lock poisoned".into())
+            })?
+            .recipient_pubkey(key_ref)
+    }
+
+    fn private_keys(
+        &self,
+        key_ref: &KeyRef,
+    ) -> Result<Vec<Crypt4ghKeys>, solum_core::crypto::CryptoError> {
+        self.0
+            .lock()
+            .map_err(|_| {
+                solum_core::crypto::CryptoError::Provider("customer-held key lock poisoned".into())
+            })?
+            .private_keys(key_ref)
+    }
+}
+
+/// Concrete key provider for axum `State` — CustomerHeld or gated ephemeral.
+#[derive(Clone)]
+pub enum SidecarKeys {
+    Ephemeral(SharedEphemeralKeys),
+    CustomerHeld(SharedCustomerHeldKeys),
+}
+
+impl Crypt4ghKeyProvider for SidecarKeys {
+    fn recipient_pubkey(
+        &self,
+        key_ref: &KeyRef,
+    ) -> Result<Vec<u8>, solum_core::crypto::CryptoError> {
+        match self {
+            Self::Ephemeral(k) => k.recipient_pubkey(key_ref),
+            Self::CustomerHeld(k) => k.recipient_pubkey(key_ref),
+        }
+    }
+
+    fn private_keys(
+        &self,
+        key_ref: &KeyRef,
+    ) -> Result<Vec<Crypt4ghKeys>, solum_core::crypto::CryptoError> {
+        match self {
+            Self::Ephemeral(k) => k.private_keys(key_ref),
+            Self::CustomerHeld(k) => k.private_keys(key_ref),
+        }
+    }
+}
+
+/// Process-wide sidecar state: one Deployment over [`SidecarKeys`].
 pub struct AppState {
-    deployment: Mutex<Deployment<SharedEphemeralKeys>>,
-    keys: SharedEphemeralKeys,
+    deployment: Mutex<Deployment<SidecarKeys>>,
+    keys: SidecarKeys,
     profile: PathBuf,
     audit_path: PathBuf,
     consent_path: PathBuf,
@@ -144,31 +229,143 @@ pub struct SidecarConfig {
     pub audit: PathBuf,
     pub consent_store: PathBuf,
     pub token: String,
+    /// Directory of `KeypairFile` JSON documents (`solum crypto keygen` layout).
+    pub keys_dir: Option<PathBuf>,
+    /// Dev-only ephemeral keys (conflicts with `keys_dir` at the CLI layer).
+    pub ephemeral: bool,
 }
 
 impl SidecarConfig {
-    pub fn runtime_config(&self) -> solum_core::profiles::RuntimeConfig {
+    pub fn runtime_config(&self, custody: KeyCustody) -> solum_core::profiles::RuntimeConfig {
         let mut runtime = example_eu_runtime();
         if let Ok(region) = std::env::var("SOLUM_STORAGE_REGION") {
             runtime.storage_region = region;
         }
+        runtime.key_management.provider = match &custody {
+            KeyCustody::CustomerHeld => Some("customer-held-file".into()),
+            KeyCustody::EphemeralTest => Some("ephemeral-test".into()),
+            KeyCustody::OperatorHeld => runtime.key_management.provider,
+        };
+        runtime.key_management.custody = custody;
         runtime
     }
 }
 
-/// Build [`AppState`] (validates profile, opens stores). Logs ephemeral warning.
-pub fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String> {
-    tracing::warn!("{EPHEMERAL_KEY_WARNING}");
-    eprintln!("{EPHEMERAL_KEY_WARNING}");
+fn ephemeral_env_allowed() -> bool {
+    match std::env::var("SOLUM_ALLOW_EPHEMERAL") {
+        Ok(v) => {
+            let v = v.trim().to_ascii_lowercase();
+            v == "1" || v == "true" || v == "yes"
+        }
+        Err(_) => false,
+    }
+}
 
+fn require_ephemeral_gate() -> Result<(), String> {
+    if ephemeral_env_allowed() {
+        return Ok(());
+    }
+    Err(
+        "ephemeral crypto requires SOLUM_ALLOW_EPHEMERAL=1 (or true/yes). \
+         Paid evaluations and pilots must use --keys-dir (CustomerHeld). \
+         See docs/customer/SIDECAR-INTEGRATION.md / DEPLOYMENT-RUNBOOK.md §4."
+            .into(),
+    )
+}
+
+/// Load every regular file under `dir` as a [`KeypairFile`] and register it.
+///
+/// Fail-closed: unreadable or invalid JSON aborts with the file path; empty
+/// directories and duplicate `key_ref` values are errors (no silent skip).
+fn load_customer_held_from_dir(dir: &Path) -> Result<CustomerHeldKeyProvider, String> {
+    if !dir.is_dir() {
+        return Err(format!("--keys-dir is not a directory: {}", dir.display()));
+    }
+    let mut provider = CustomerHeldKeyProvider::new();
+    let mut loaded = 0usize;
+    let mut seen_refs: Vec<String> = Vec::new();
+
+    let entries = fs::read_dir(dir)
+        .map_err(|e| format!("failed to read --keys-dir {}: {e}", dir.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("failed to read entry in {}: {e}", dir.display()))?;
+        let path = entry.path();
+        let meta = entry
+            .metadata()
+            .map_err(|e| format!("stat {}: {e}", path.display()))?;
+        if !meta.is_file() {
+            continue;
+        }
+        let raw = fs::read_to_string(&path)
+            .map_err(|e| format!("failed to read keypair {}: {e}", path.display()))?;
+        let file: KeypairFile = serde_json::from_str(&raw).map_err(|e| {
+            format!(
+                "invalid keypair JSON {}: {e} (expected solum crypto keygen layout)",
+                path.display()
+            )
+        })?;
+        if seen_refs.iter().any(|r| r == &file.key_ref) {
+            return Err(format!(
+                "duplicate key_ref '{}' in --keys-dir (also in {})",
+                file.key_ref,
+                path.display()
+            ));
+        }
+        let key_ref = KeyRef::new(file.key_ref.clone());
+        provider
+            .register_customer_keypair(key_ref, file.pubkey, file.privkey)
+            .map_err(|e| format!("register keypair {}: {e}", path.display()))?;
+        seen_refs.push(file.key_ref);
+        loaded += 1;
+    }
+
+    if loaded == 0 {
+        return Err(format!(
+            "no keypair files found in --keys-dir {} (place solum crypto keygen JSON files here)",
+            dir.display()
+        ));
+    }
+    Ok(provider)
+}
+
+/// Build [`AppState`] (validates custody flags, profile, opens stores).
+pub fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String> {
     if config.token.is_empty() {
         return Err("sidecar token must not be empty (set SOLUM_SIDECAR_TOKEN)".into());
     }
 
-    let keys = SharedEphemeralKeys::new();
+    if config.ephemeral && config.keys_dir.is_some() {
+        return Err("pass either --keys-dir or --ephemeral, not both".into());
+    }
+    if !config.ephemeral && config.keys_dir.is_none() {
+        return Err("either --keys-dir or --ephemeral required".into());
+    }
+
+    let (keys, custody) = if config.ephemeral {
+        require_ephemeral_gate()?;
+        tracing::warn!("{EPHEMERAL_KEY_WARNING}");
+        eprintln!("{EPHEMERAL_KEY_WARNING}");
+        (
+            SidecarKeys::Ephemeral(SharedEphemeralKeys::new()),
+            KeyCustody::EphemeralTest,
+        )
+    } else {
+        let dir = config
+            .keys_dir
+            .as_ref()
+            .expect("keys_dir checked non-None above");
+        let provider = load_customer_held_from_dir(dir)?;
+        tracing::info!("{CUSTOMER_HELD_KEY_NOTE}");
+        eprintln!("{CUSTOMER_HELD_KEY_NOTE}");
+        (
+            SidecarKeys::CustomerHeld(SharedCustomerHeldKeys::new(provider)),
+            KeyCustody::CustomerHeld,
+        )
+    };
+
     let deployment = Deployment::open(
         &config.profile,
-        &config.runtime_config(),
+        &config.runtime_config(custody),
         &config.audit,
         &config.consent_store,
         keys.clone(),
@@ -289,6 +486,56 @@ fn ephemeral_headers() -> HeaderMap {
         headers.insert(EPHEMERAL_WARNING_HEADER, v);
     }
     headers
+}
+
+fn crypto_response_meta(keys: &SidecarKeys) -> (HeaderMap, &'static str) {
+    match keys {
+        SidecarKeys::Ephemeral(_) => (ephemeral_headers(), EPHEMERAL_KEY_WARNING),
+        SidecarKeys::CustomerHeld(_) => (HeaderMap::new(), CUSTOMER_HELD_KEY_NOTE),
+    }
+}
+
+/// Ephemeral-only: ensure a session keypair exists for `key_ref` (generate once).
+/// CustomerHeld: no-op — unknown refs fail later inside `encrypt_field_as`.
+fn ensure_ephemeral_key_for_encrypt(
+    keys: &SidecarKeys,
+    key_ref: &KeyRef,
+) -> Result<(), Box<Response>> {
+    match keys {
+        SidecarKeys::CustomerHeld(_) => Ok(()),
+        SidecarKeys::Ephemeral(ephemeral) => {
+            // Reuse existing session keypair; only generate on first use.
+            // (generate_test_keypair would silently overwrite HashMap entries.)
+            match ephemeral.key_exists(key_ref) {
+                Ok(true) => Ok(()),
+                Ok(false) => ephemeral
+                    .generate_test_keypair(key_ref.clone())
+                    .map(|_| ())
+                    .map_err(|e| {
+                        Box::new(
+                            (
+                                StatusCode::BAD_REQUEST,
+                                Json(ErrorBody {
+                                    error: "bad_request".into(),
+                                    message: e,
+                                }),
+                            )
+                                .into_response(),
+                        )
+                    }),
+                Err(e) => Err(Box::new(
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ErrorBody {
+                            error: "internal".into(),
+                            message: e,
+                        }),
+                    )
+                        .into_response(),
+                )),
+            }
+        }
+    }
 }
 
 // --- Request / response types (CLI-parameter parity) ---
@@ -413,10 +660,15 @@ async fn consent_status(
     State(state): State<Arc<AppState>>,
     Query(q): Query<ConsentStatusQuery>,
 ) -> Response {
-    let mut runtime = example_eu_runtime();
-    if let Ok(region) = std::env::var("SOLUM_STORAGE_REGION") {
-        runtime.storage_region = region;
-    }
+    // Consent status does not touch Crypt4GH keys — CustomerHeld runtime matches
+    // pilot profiles (same as CLI consent status).
+    let runtime = {
+        let mut runtime = example_eu_runtime();
+        if let Ok(region) = std::env::var("SOLUM_STORAGE_REGION") {
+            runtime.storage_region = region;
+        }
+        runtime
+    };
     match query_consent_status(
         &state.profile,
         &runtime,
@@ -453,32 +705,8 @@ async fn crypto_encrypt(
         }
     };
     let key_ref = KeyRef::new(body.key_ref);
-    // Reuse existing session keypair for this key_ref; only generate on first use.
-    // (generate_test_keypair would silently overwrite HashMap entries — see crypto crate.)
-    match state.keys.key_exists(&key_ref) {
-        Ok(true) => {}
-        Ok(false) => {
-            if let Err(e) = state.keys.generate_test_keypair(key_ref.clone()) {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(ErrorBody {
-                        error: "bad_request".into(),
-                        message: e,
-                    }),
-                )
-                    .into_response();
-            }
-        }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "internal".into(),
-                    message: e,
-                }),
-            )
-                .into_response();
-        }
+    if let Err(resp) = ensure_ephemeral_key_for_encrypt(&state.keys, &key_ref) {
+        return *resp;
     }
     let actor = sidecar_actor(body.actor, body.capability);
     let mut deployment = match state.deployment.lock() {
@@ -494,14 +722,12 @@ async fn crypto_encrypt(
                 .into_response();
         }
     };
+    let (headers, warning) = crypto_response_meta(&state.keys);
     match deployment.encrypt_field_as(&body.category, &plaintext, &key_ref, &actor) {
         Ok(field) => (
             StatusCode::OK,
-            ephemeral_headers(),
-            Json(EncryptResponse {
-                field,
-                warning: EPHEMERAL_KEY_WARNING,
-            }),
+            headers,
+            Json(EncryptResponse { field, warning }),
         )
             .into_response(),
         Err(e) => map_solum_err(e),
@@ -527,13 +753,14 @@ async fn crypto_decrypt(
                 .into_response();
         }
     };
+    let (headers, warning) = crypto_response_meta(&state.keys);
     match deployment.decrypt_field_as(&body.field, &key_ref, &actor) {
         Ok(plaintext) => (
             StatusCode::OK,
-            ephemeral_headers(),
+            headers,
             Json(DecryptResponse {
                 plaintext_base64: base64::engine::general_purpose::STANDARD.encode(plaintext),
-                warning: EPHEMERAL_KEY_WARNING,
+                warning,
             }),
         )
             .into_response(),
@@ -608,7 +835,7 @@ pub async fn serve(config: SidecarConfig) -> Result<(), String> {
     let listener = tokio::net::TcpListener::bind(config.bind)
         .await
         .map_err(|e| format!("bind {}: {e}", config.bind))?;
-    tracing::info!(%config.bind, "solum-sidecar listening (loopback default; demo keys only)");
+    tracing::info!(%config.bind, "solum-sidecar listening");
     axum::serve(listener, app)
         .await
         .map_err(|e| format!("serve: {e}"))
