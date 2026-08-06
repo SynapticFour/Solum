@@ -40,18 +40,31 @@ struct Cli {
     token: String,
 
     /// Directory of CustomerHeld keypair JSON files (`solum crypto keygen` layout).
-    /// Required unless `--ephemeral`.
+    /// Required unless `--ephemeral` or `--wrapped-keys-dir`.
     #[arg(
         long = "keys-dir",
         env = "SOLUM_SIDECAR_KEYS_DIR",
-        required_unless_present = "ephemeral"
+        required_unless_present_any = ["ephemeral", "wrapped_keys_dir"]
     )]
     keys_dir: Option<PathBuf>,
 
     /// Dev-only ephemeral keys. Requires `SOLUM_ALLOW_EPHEMERAL=1` and a profile
     /// that lists `ephemeral_test` (e.g. `dev-local.toml`).
-    #[arg(long, default_value_t = false, conflicts_with = "keys_dir")]
+    #[arg(
+        long,
+        default_value_t = false,
+        conflicts_with_all = ["keys_dir", "wrapped_keys_dir"]
+    )]
     ephemeral: bool,
+
+    /// Directory of KMS-wrapped seed JSON (`solum crypto wrap-seed`).
+    /// Requires build `--features aws-kms`.
+    #[arg(
+        long = "wrapped-keys-dir",
+        env = "SOLUM_SIDECAR_WRAPPED_KEYS_DIR",
+        conflicts_with_all = ["keys_dir", "ephemeral"]
+    )]
+    wrapped_keys_dir: Option<PathBuf>,
 
     /// Org-IAM mapping TOML (H2.2). When set, mutating routes require Bearer JWT
     /// and derive CAP_* from OIDC groups (body capability[] ignored).
@@ -94,6 +107,7 @@ async fn main() -> ExitCode {
         token: cli.token,
         keys_dir: cli.keys_dir,
         ephemeral: cli.ephemeral,
+        wrapped_keys_dir: cli.wrapped_keys_dir,
         org_iam_config: cli.org_iam_config,
         jwks_url: cli.jwks_url,
         jwks_file: cli.jwks_file,

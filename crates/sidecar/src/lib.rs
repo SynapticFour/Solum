@@ -13,11 +13,13 @@
 //! Same posture as the Phase‑C CLI:
 //! - **`--keys-dir`** — load operator keypair JSON files (`solum crypto keygen`
 //!   layout) into [`CustomerHeldKeyProvider`] (evaluation / pilot path).
+//! - **`--wrapped-keys-dir`** — AWS KMS-wrapped seeds (`solum crypto wrap-seed`),
+//!   feature `aws-kms`; CustomerHeld custody with `provider=aws-kms`.
 //! - **`--ephemeral`** — [`EphemeralTestKeyProvider`] only with
 //!   `SOLUM_ALLOW_EPHEMERAL=1` and a profile that allows `ephemeral_test`
 //!   (e.g. `dev-local.toml`). Pilot profiles refuse EphemeralTest at startup.
 //!
-//! AWS KMS is **not** wired here (follow-on). See
+//! Envelope KMS unwraps seeds into process memory (ZeroizeOnDrop) — not an HSM/TEE.
 //! `docs/customer/SIDECAR-INTEGRATION.md`.
 //!
 //! [`SidecarKeys`] is a concrete enum so axum `State` stays sized (no `dyn`
@@ -77,6 +79,12 @@ pub const CUSTOMER_HELD_KEY_NOTE: &str = "\
 Using CustomerHeld key material from --keys-dir (operator-supplied files).
 Solum does not mint these keys during encrypt; protect keypair files
 as you would other secrets (0600 on Unix recommended).";
+
+/// Honesty note for AWS KMS envelope path (feature `aws-kms` / `--wrapped-keys-dir`).
+pub const AWS_KMS_KEY_NOTE: &str = "\
+Using AWS KMS-wrapped Crypt4GH seeds from --wrapped-keys-dir (CustomerHeld custody; provider=aws-kms).
+Seeds are unwrapped into process memory (ZeroizeOnDrop) — envelope encryption, not an HSM/TEE.
+Requires build --features aws-kms and AWS credentials/region.";
 
 /// Response / header name carrying ephemeral warning on crypto routes.
 pub const EPHEMERAL_WARNING_HEADER: &str = "x-solum-ephemeral-keys";
@@ -185,11 +193,51 @@ impl Crypt4ghKeyProvider for SharedCustomerHeldKeys {
     }
 }
 
-/// Concrete key provider for axum `State` — CustomerHeld or gated ephemeral.
+/// Concrete key provider for axum `State` — CustomerHeld, AWS KMS, or gated ephemeral.
 #[derive(Clone)]
 pub enum SidecarKeys {
     Ephemeral(SharedEphemeralKeys),
     CustomerHeld(SharedCustomerHeldKeys),
+    #[cfg(feature = "aws-kms")]
+    AwsKms(SharedAwsKmsKeys),
+}
+
+#[cfg(feature = "aws-kms")]
+#[derive(Clone)]
+pub struct SharedAwsKmsKeys(Arc<Mutex<solum_core::crypto::aws_kms::AwsKmsKeyProvider>>);
+
+#[cfg(feature = "aws-kms")]
+impl SharedAwsKmsKeys {
+    fn new(inner: solum_core::crypto::aws_kms::AwsKmsKeyProvider) -> Self {
+        Self(Arc::new(Mutex::new(inner)))
+    }
+}
+
+#[cfg(feature = "aws-kms")]
+impl Crypt4ghKeyProvider for SharedAwsKmsKeys {
+    fn recipient_pubkey(
+        &self,
+        key_ref: &KeyRef,
+    ) -> Result<Vec<u8>, solum_core::crypto::CryptoError> {
+        self.0
+            .lock()
+            .map_err(|_| {
+                solum_core::crypto::CryptoError::Provider("aws-kms key lock poisoned".into())
+            })?
+            .recipient_pubkey(key_ref)
+    }
+
+    fn private_keys(
+        &self,
+        key_ref: &KeyRef,
+    ) -> Result<Vec<Crypt4ghKeys>, solum_core::crypto::CryptoError> {
+        self.0
+            .lock()
+            .map_err(|_| {
+                solum_core::crypto::CryptoError::Provider("aws-kms key lock poisoned".into())
+            })?
+            .private_keys(key_ref)
+    }
 }
 
 impl Crypt4ghKeyProvider for SidecarKeys {
@@ -200,6 +248,8 @@ impl Crypt4ghKeyProvider for SidecarKeys {
         match self {
             Self::Ephemeral(k) => k.recipient_pubkey(key_ref),
             Self::CustomerHeld(k) => k.recipient_pubkey(key_ref),
+            #[cfg(feature = "aws-kms")]
+            Self::AwsKms(k) => k.recipient_pubkey(key_ref),
         }
     }
 
@@ -210,6 +260,8 @@ impl Crypt4ghKeyProvider for SidecarKeys {
         match self {
             Self::Ephemeral(k) => k.private_keys(key_ref),
             Self::CustomerHeld(k) => k.private_keys(key_ref),
+            #[cfg(feature = "aws-kms")]
+            Self::AwsKms(k) => k.private_keys(key_ref),
         }
     }
 }
@@ -244,8 +296,10 @@ pub struct SidecarConfig {
     pub token: String,
     /// Directory of `KeypairFile` JSON documents (`solum crypto keygen` layout).
     pub keys_dir: Option<PathBuf>,
-    /// Dev-only ephemeral keys (conflicts with `keys_dir` at the CLI layer).
+    /// Dev-only ephemeral keys (conflicts with `keys_dir` / `wrapped_keys_dir`).
     pub ephemeral: bool,
+    /// Directory of KMS-wrapped seed JSON (`solum crypto wrap-seed`). Requires `--features aws-kms`.
+    pub wrapped_keys_dir: Option<PathBuf>,
     /// Org-IAM mapping TOML (`config/org-iam/*.toml`). Enables H2.2 mode when set.
     pub org_iam_config: Option<PathBuf>,
     /// JWKS URL (used when org-IAM is enabled). Env: `SOLUM_ORG_IAM_JWKS_URL`.
@@ -259,16 +313,21 @@ pub struct SidecarConfig {
 }
 
 impl SidecarConfig {
-    pub fn runtime_config(&self, custody: KeyCustody) -> solum_core::profiles::RuntimeConfig {
+    pub fn runtime_config(
+        &self,
+        custody: KeyCustody,
+        provider: Option<&str>,
+    ) -> solum_core::profiles::RuntimeConfig {
         let mut runtime = example_eu_runtime();
         if let Ok(region) = std::env::var("SOLUM_STORAGE_REGION") {
             runtime.storage_region = region;
         }
-        runtime.key_management.provider = match &custody {
-            KeyCustody::CustomerHeld => Some("customer-held-file".into()),
-            KeyCustody::EphemeralTest => Some("ephemeral-test".into()),
-            KeyCustody::OperatorHeld => runtime.key_management.provider,
-        };
+        runtime.key_management.provider =
+            provider.map(|s| s.to_string()).or_else(|| match &custody {
+                KeyCustody::CustomerHeld => Some("customer-held-file".into()),
+                KeyCustody::EphemeralTest => Some("ephemeral-test".into()),
+                KeyCustody::OperatorHeld => runtime.key_management.provider.clone(),
+            });
         runtime.key_management.custody = custody;
         runtime
     }
@@ -357,23 +416,59 @@ pub async fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String
         return Err("sidecar token must not be empty (set SOLUM_SIDECAR_TOKEN)".into());
     }
 
-    if config.ephemeral && config.keys_dir.is_some() {
-        return Err("pass either --keys-dir or --ephemeral, not both".into());
+    let modes = [
+        config.ephemeral,
+        config.keys_dir.is_some(),
+        config.wrapped_keys_dir.is_some(),
+    ]
+    .into_iter()
+    .filter(|x| *x)
+    .count();
+    if modes > 1 {
+        return Err("pass exactly one of --keys-dir, --wrapped-keys-dir, or --ephemeral".into());
     }
-    if !config.ephemeral && config.keys_dir.is_none() {
-        return Err("either --keys-dir or --ephemeral required".into());
+    if modes == 0 {
+        return Err(
+            "either --keys-dir, --wrapped-keys-dir (feature aws-kms), or --ephemeral required"
+                .into(),
+        );
     }
 
     let org_iam = load_org_iam(config).await?;
 
-    let (keys, custody) = if config.ephemeral {
+    let (keys, custody, provider) = if config.ephemeral {
         require_ephemeral_gate()?;
         tracing::warn!("{EPHEMERAL_KEY_WARNING}");
         eprintln!("{EPHEMERAL_KEY_WARNING}");
         (
             SidecarKeys::Ephemeral(SharedEphemeralKeys::new()),
             KeyCustody::EphemeralTest,
+            Some("ephemeral-test"),
         )
+    } else if let Some(dir) = config.wrapped_keys_dir.as_ref() {
+        #[cfg(feature = "aws-kms")]
+        {
+            use solum_core::crypto::aws_kms::{client_from_env, load_aws_kms_from_dir};
+            tracing::info!("{AWS_KMS_KEY_NOTE}");
+            eprintln!("{AWS_KMS_KEY_NOTE}");
+            let client = client_from_env().map_err(|e| e.to_string())?;
+            let provider = load_aws_kms_from_dir(&client, dir)
+                .await
+                .map_err(|e| e.to_string())?;
+            (
+                SidecarKeys::AwsKms(SharedAwsKmsKeys::new(provider)),
+                KeyCustody::CustomerHeld,
+                Some("aws-kms"),
+            )
+        }
+        #[cfg(not(feature = "aws-kms"))]
+        {
+            let _ = dir;
+            return Err(
+                "--wrapped-keys-dir requires rebuilding solum-sidecar with --features aws-kms"
+                    .into(),
+            );
+        }
     } else {
         let dir = config
             .keys_dir
@@ -385,12 +480,13 @@ pub async fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String
         (
             SidecarKeys::CustomerHeld(SharedCustomerHeldKeys::new(provider)),
             KeyCustody::CustomerHeld,
+            Some("customer-held-file"),
         )
     };
 
     let deployment = Deployment::open(
         &config.profile,
-        &config.runtime_config(custody),
+        &config.runtime_config(custody, provider),
         &config.audit,
         &config.consent_store,
         keys.clone(),
@@ -623,6 +719,8 @@ fn crypto_response_meta(keys: &SidecarKeys) -> (HeaderMap, &'static str) {
     match keys {
         SidecarKeys::Ephemeral(_) => (ephemeral_headers(), EPHEMERAL_KEY_WARNING),
         SidecarKeys::CustomerHeld(_) => (HeaderMap::new(), CUSTOMER_HELD_KEY_NOTE),
+        #[cfg(feature = "aws-kms")]
+        SidecarKeys::AwsKms(_) => (HeaderMap::new(), AWS_KMS_KEY_NOTE),
     }
 }
 
@@ -634,6 +732,8 @@ fn ensure_ephemeral_key_for_encrypt(
 ) -> Result<(), Box<Response>> {
     match keys {
         SidecarKeys::CustomerHeld(_) => Ok(()),
+        #[cfg(feature = "aws-kms")]
+        SidecarKeys::AwsKms(_) => Ok(()),
         SidecarKeys::Ephemeral(ephemeral) => {
             // Reuse existing session keypair; only generate on first use.
             // (generate_test_keypair would silently overwrite HashMap entries.)

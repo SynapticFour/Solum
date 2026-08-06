@@ -12,12 +12,18 @@ publish.workspace = true
 name = "solum-sidecar"
 path = "src/main.rs"
 
+[features]
+default = []
+# Optional AWS KMS --wrapped-keys-dir (H2.4). Default off. Env credentials (no aws-config).
+aws-kms = ["solum-crypto/aws-kms", "solum-core/aws-kms"]
+
 [dependencies]
 axum = "0.7"
 clap = { workspace = true, features = ["derive", "env"] }
 serde.workspace = true
 serde_json.workspace = true
 solum-core.workspace = true
+solum-crypto.workspace = true
 solum-identity.workspace = true
 solum-auth-verify = { workspace = true, features = ["http"] }
 subtle = "2"

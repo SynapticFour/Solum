@@ -12,8 +12,8 @@ use solum_crypto::aws_kms::aws_sdk_kms::Client;
 use solum_crypto::aws_kms::aws_smithy_mocks::{mock, mock_client, RuleMode};
 use solum_crypto::aws_kms::AwsKmsKeyProvider;
 use solum_crypto::{
-    decrypt_field, encrypt_field, CryptoError, CustomerHeldKeyProvider, EphemeralTestKeyProvider,
-    FieldCategoryGate, KeyRef,
+    decrypt_field, encrypt_field, Crypt4ghKeyProvider, CryptoError, CustomerHeldKeyProvider,
+    EphemeralTestKeyProvider, FieldCategoryGate, KeyRef,
 };
 
 fn categories() -> Vec<String> {
@@ -120,4 +120,53 @@ async fn wrap_seed_rejects_short_seed() {
         .expect_err("short seed");
     assert!(matches!(err, CryptoError::Provider(_)));
     assert_eq!(encrypt_rule.num_calls(), 0);
+}
+
+#[tokio::test]
+async fn load_aws_kms_from_dir_unwraps_wrapped_seed_file() {
+    use solum_crypto::aws_kms::{load_aws_kms_from_dir, WrappedSeedFile};
+    use tempfile::tempdir;
+
+    let mut ephemeral = EphemeralTestKeyProvider::new();
+    let (_pubkey, privkey) = ephemeral
+        .generate_test_keypair(KeyRef::new("eph-gen"))
+        .expect("ephemeral keygen");
+    let seed = privkey[..32].to_vec();
+    let key_ref = "kms/dir-1";
+    let wrapped_marker = b"mock-dir-wrapped-seed-blob".to_vec();
+
+    let decrypt_rule = mock!(Client::decrypt)
+        .match_requests({
+            let wrapped = wrapped_marker.clone();
+            move |req| req.ciphertext_blob().map(|b| b.as_ref()) == Some(wrapped.as_slice())
+        })
+        .then_output({
+            let seed = seed.clone();
+            move || {
+                DecryptOutput::builder()
+                    .plaintext(Blob::new(seed.clone()))
+                    .key_id("alias/test")
+                    .build()
+            }
+        });
+    let client = mock_client!(aws_sdk_kms, [&decrypt_rule]);
+
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("slot.json");
+    WrappedSeedFile {
+        key_ref: key_ref.into(),
+        kms_key_id: "alias/test".into(),
+        wrapped_seed: wrapped_marker,
+    }
+    .write(&path)
+    .expect("write wrapped");
+
+    let provider = load_aws_kms_from_dir(&client, dir.path())
+        .await
+        .expect("load dir");
+    assert_eq!(decrypt_rule.num_calls(), 1);
+    let pub_out = provider
+        .recipient_pubkey(&KeyRef::new(key_ref))
+        .expect("pubkey");
+    assert!(!pub_out.is_empty());
 }

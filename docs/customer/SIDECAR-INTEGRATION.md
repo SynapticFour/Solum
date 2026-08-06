@@ -39,7 +39,7 @@ cargo run -p solum-sidecar -- \
 
 At startup the sidecar loads **every regular file** in `--keys-dir` as JSON, registers each `key_ref` from the **file contents** (not the filename), and refuses to start on invalid JSON or an empty directory. Encrypt/decrypt only succeed for those pre-registered refs — there is **no** automatic key generation in CustomerHeld mode.
 
-AWS KMS is **not** wired into the sidecar (library-only today; follow-on work).
+AWS KMS (optional feature `aws-kms`): `--wrapped-keys-dir` loads `solum crypto wrap-seed` JSON; CustomerHeld custody with `provider=aws-kms`. Seeds unwrap into process memory (ZeroizeOnDrop) — envelope, **not** HSM/TEE. Requires rebuild with `--features aws-kms`, rustc **≥ 1.94.1**, and env credentials (`AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`).
 
 ### Not for production: gated `--ephemeral`
 
@@ -205,7 +205,7 @@ Encrypt does **not** imply decrypt. No wildcards. ([SECURITY-OVERVIEW.md](SECURI
 ## 7. Maturity / next steps
 
 - Treat the sidecar as an integration preview: fail-closed behaviour and CustomerHeld / ephemeral gates are covered by automated HTTP tests; it is **not** marketed as a finished, production-hardened appliance.
-- AWS KMS for the sidecar (and CLI) remains **follow-on** work ([BASELINE.md](../BASELINE.md)).
+- AWS KMS: optional `--features aws-kms` on CLI (`crypto wrap-seed`, `--wrapped-keypair`) and sidecar (`--wrapped-keys-dir`). Envelope + in-process unwrap — not HSM certification ([BASELINE.md](../BASELINE.md)).
 - For security evaluation of Solum overall, start from [SECURITY-OVERVIEW.md](SECURITY-OVERVIEW.md) and the current baseline tag.
 
 **Contact:** [contact@synapticfour.com](mailto:contact@synapticfour.com) · [synapticfour.com](https://synapticfour.com)

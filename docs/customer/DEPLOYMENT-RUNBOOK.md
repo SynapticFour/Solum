@@ -148,7 +148,7 @@ Protect filesystem permissions on `$AUDIT`, `$CONSENT`, and any key material acc
 |-----------|-----|--------|
 | CLI CustomerHeld file | `crypto keygen` → `--keypair` on encrypt/decrypt | Operator-controlled JSON (pubkey + privkey). Not an HSM. Protect with OS permissions (0600 on Unix). |
 | Library `CustomerHeldKeyProvider` | Register keypairs generated outside Solum | Same custody posture as CLI `--keypair`. |
-| AWS KMS envelope (optional feature) | Library `wrap_seed` / `from_wrapped_seed` | Feature default off; **not** a CLI command. See [SECURITY-OVERVIEW.md](SECURITY-OVERVIEW.md) §4. |
+| AWS KMS envelope (optional feature) | CLI `crypto wrap-seed` + `--wrapped-keypair`; sidecar `--wrapped-keys-dir` | Feature default off; rustc ≥ 1.94.1 for feature build; env credentials. See [SECURITY-OVERVIEW.md](SECURITY-OVERVIEW.md) §4. |
 
 Pilot profiles (`eu-ehds`, `kenya-dpa`) list only `customer_held`. Declaring `EphemeralTest` runtime custody (CLI `--ephemeral`, or `SOLUM_KEY_CUSTODY=ephemeral_test` on `check`) **refuses startup**.
 
@@ -241,7 +241,7 @@ High-signal operational reminders:
 - Kenya profile = draft only
 - GitHub Release binaries available only after a verified `v*` tag (otherwise from-source)
 - Audit store = single writer; HELIOS live signing not productized
-- AWS KMS provisioning = library only, optional feature
+- AWS KMS provisioning = optional feature `aws-kms` (CLI + sidecar); envelope, not HSM
 
 ---
 

@@ -33,6 +33,144 @@ pub use aws_sdk_kms;
 /// Re-export mock harness for the feature-gated integration test.
 pub use aws_smithy_mocks;
 
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::Path;
+
+/// On-disk KMS-wrapped Crypt4GH seed (CLI / sidecar layout).
+///
+/// Produced by `solum crypto wrap-seed` (feature `aws-kms`). Private seed is
+/// never stored plaintext; unwrap happens once into process memory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WrappedSeedFile {
+    pub key_ref: String,
+    /// KMS key id / alias / ARN used at wrap time (informational for operators;
+    /// Decrypt uses the ciphertext blob, not this field, for AWS API calls).
+    pub kms_key_id: String,
+    pub wrapped_seed: Vec<u8>,
+}
+
+impl WrappedSeedFile {
+    pub fn load(path: &Path) -> Result<Self, CryptoError> {
+        let raw = fs::read_to_string(path).map_err(|e| {
+            CryptoError::Provider(format!(
+                "failed to read wrapped seed {}: {e}",
+                path.display()
+            ))
+        })?;
+        serde_json::from_str(&raw).map_err(|e| {
+            CryptoError::Provider(format!(
+                "invalid wrapped-seed JSON {}: {e} (expected key_ref, kms_key_id, wrapped_seed)",
+                path.display()
+            ))
+        })
+    }
+
+    pub fn write(&self, path: &Path) -> Result<(), CryptoError> {
+        let raw = serde_json::to_string_pretty(self)
+            .map_err(|e| CryptoError::Provider(format!("serialize wrapped seed: {e}")))?;
+        fs::write(path, raw).map_err(|e| {
+            CryptoError::Provider(format!("failed to write {}: {e}", path.display()))
+        })?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+        }
+        Ok(())
+    }
+}
+
+/// Load every regular file under `dir` as [`WrappedSeedFile`] and unwrap into
+/// one [`AwsKmsKeyProvider`]. Fail-closed on empty dir / bad JSON / duplicate refs.
+pub async fn load_aws_kms_from_dir(
+    kms_client: &KmsClient,
+    dir: &Path,
+) -> Result<AwsKmsKeyProvider, CryptoError> {
+    if !dir.is_dir() {
+        return Err(CryptoError::Provider(format!(
+            "wrapped-keys-dir is not a directory: {}",
+            dir.display()
+        )));
+    }
+    let mut provider = AwsKmsKeyProvider::new();
+    let mut loaded = 0usize;
+    let mut seen_refs: Vec<String> = Vec::new();
+
+    let entries = fs::read_dir(dir).map_err(|e| {
+        CryptoError::Provider(format!(
+            "failed to read wrapped-keys-dir {}: {e}",
+            dir.display()
+        ))
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|e| {
+            CryptoError::Provider(format!("failed to read entry in {}: {e}", dir.display()))
+        })?;
+        let path = entry.path();
+        let meta = entry
+            .metadata()
+            .map_err(|e| CryptoError::Provider(format!("stat {}: {e}", path.display())))?;
+        if !meta.is_file() {
+            continue;
+        }
+        let file = WrappedSeedFile::load(&path)?;
+        if seen_refs.iter().any(|r| r == &file.key_ref) {
+            return Err(CryptoError::Provider(format!(
+                "duplicate key_ref '{}' in wrapped-keys-dir ({})",
+                file.key_ref,
+                path.display()
+            )));
+        }
+        provider
+            .register_wrapped_seed(
+                kms_client,
+                KeyRef::new(file.key_ref.clone()),
+                &file.wrapped_seed,
+            )
+            .await?;
+        seen_refs.push(file.key_ref);
+        loaded += 1;
+    }
+    if loaded == 0 {
+        return Err(CryptoError::Provider(format!(
+            "no wrapped-seed files found in {} (place solum crypto wrap-seed JSON here)",
+            dir.display()
+        )));
+    }
+    Ok(provider)
+}
+
+/// Build a KMS client from environment variables (no `aws-config` crate).
+///
+/// Required: `AWS_REGION` or `AWS_DEFAULT_REGION`, `AWS_ACCESS_KEY_ID`,
+/// `AWS_SECRET_ACCESS_KEY`. Optional: `AWS_SESSION_TOKEN`.
+///
+/// Instance-role / IRSA default chains are not loaded here — keeps the
+/// dependency tree on Solum's MSRV without `aws-config`.
+pub fn client_from_env() -> Result<KmsClient, CryptoError> {
+    use aws_sdk_kms::config::{Credentials, Region};
+    use std::env;
+
+    let region = env::var("AWS_REGION")
+        .or_else(|_| env::var("AWS_DEFAULT_REGION"))
+        .map_err(|_| {
+            CryptoError::Provider("set AWS_REGION or AWS_DEFAULT_REGION for Solum AWS KMS".into())
+        })?;
+    let access_key = env::var("AWS_ACCESS_KEY_ID")
+        .map_err(|_| CryptoError::Provider("set AWS_ACCESS_KEY_ID for Solum AWS KMS".into()))?;
+    let secret_key = env::var("AWS_SECRET_ACCESS_KEY")
+        .map_err(|_| CryptoError::Provider("set AWS_SECRET_ACCESS_KEY for Solum AWS KMS".into()))?;
+    let session_token = env::var("AWS_SESSION_TOKEN").ok();
+    let creds = Credentials::new(access_key, secret_key, session_token, None, "solum-env");
+    let conf = aws_sdk_kms::Config::builder()
+        .behavior_version_latest()
+        .region(Region::new(region))
+        .credentials_provider(creds)
+        .build();
+    Ok(KmsClient::from_conf(conf))
+}
+
 #[derive(Clone, ZeroizeOnDrop)]
 struct HeldKeypair {
     #[zeroize(skip)]

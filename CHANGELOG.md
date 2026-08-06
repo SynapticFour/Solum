@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **H2.1 Ferrum consumer** — document that Ferrum may poll `GET /v1/consent/status` for purpose-bound DRS/WES deny ([SIDECAR-INTEGRATION.md](docs/customer/SIDECAR-INTEGRATION.md), [ferrum.md](docs/ferrum.md)).
 - **H2 spine — zeroize** — best-effort `ZeroizeOnDrop` for CustomerHeld / AwsKms held Crypt4GH seeds.
 - **ADR 0002 — CDR engine** — front EHRbase (Apache 2.0) as Track B default; Solum keeps compliance/façade/migration ([docs/adr/0002-cdr-engine-ehrbase.md](docs/adr/0002-cdr-engine-ehrbase.md)).
+- **H2.4 AWS KMS CLI/sidecar** — feature `aws-kms`: `crypto wrap-seed` / `--wrapped-keypair`; sidecar `--wrapped-keys-dir`; env credentials; rustc ≥ 1.94.1 for this feature; envelope honesty (not HSM).
 - **Kenya K1 Vorprüfung applied** — non-counsel engineering review → profile **PROVISIONAL-PRODUCTION-CANDIDATE**; `optional_purposes`; honesty on retention/transfer/HDB ([docs/counsel/KENYA-K1-VORPRUEFUNG.md](docs/counsel/KENYA-K1-VORPRUEFUNG.md)). **Real counsel still required.**
 - **Kenya K1 send checklist** — operator steps to package and email the counsel brief ([docs/counsel/KENYA-K1-SEND-CHECKLIST.md](docs/counsel/KENYA-K1-SEND-CHECKLIST.md)).
 - **Kenya K1 counsel brief** — external-review package for `kenya-dpa` retention/transfer/HDB/offline questions ([docs/counsel/KENYA-K1-BRIEF.md](docs/counsel/KENYA-K1-BRIEF.md)).

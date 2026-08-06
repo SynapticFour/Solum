@@ -145,9 +145,16 @@ From `crates/fhir/src/patient_summary.rs` (`ANNAHME` markers). These are stage-1
 
 Evaluation / pilot CLI path: `crypto keygen` + `--keypair` (CustomerHeld file, 0600 on Unix). Ephemeral (`--ephemeral`) requires `SOLUM_ALLOW_EPHEMERAL=1` and a profile allowing `ephemeral_test` (`dev-local.toml`); pilot profiles refuse `EphemeralTest` custody. Ephemeral sidecars remain plaintext JSON (0600 on Unix). Not an HSM. Private seeds in `CustomerHeldKeyProvider` / `AwsKmsKeyProvider` use **best-effort `ZeroizeOnDrop`** (H2) — not a TEE.
 
-### AWS-KMS — library-only; neither CLI nor Sidecar wired
+### AWS-KMS — optional CLI / sidecar feature (H2.4)
 
-Weder CLI noch Sidecar haben eine AWS-KMS-Anbindung; beide unterstützen CustomerHeld (Datei-basiert) und gated Ephemeral. AWS-KMS existiert nur als `solum-crypto`-Library-API (GTM-3).
+Feature `aws-kms` on `solum-core` / `solum-sidecar` (and `solum-crypto`):
+
+- CLI: `solum crypto wrap-seed`, encrypt/decrypt `--wrapped-keypair`
+- Sidecar: `--wrapped-keys-dir` / `SOLUM_SIDECAR_WRAPPED_KEYS_DIR`
+- Custody remains `CustomerHeld` with `provider=aws-kms`
+- Credentials via env (`AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` [+ optional session token]) — not full IRSA/`aws-config` chain (MSRV posture)
+- Build/test this feature with **rustc ≥ 1.94.1** (AWS SDK); default Solum MSRV **1.91.1** builds stay AWS-free
+- Honesty: envelope unwrap into process memory (`ZeroizeOnDrop`); **not** HSM/TEE/FIPS certification; mocked tests only in CI (`cargo test -p solum-crypto --features aws-kms --test aws_kms`)
 
 ### HELIOS live signing — deferred
 

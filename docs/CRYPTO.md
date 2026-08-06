@@ -24,7 +24,7 @@ Under `KeyCustody::CustomerHeld`, Solum does not mint keys *during encrypt* for 
 |------|-----|
 | CLI `solum crypto keygen` + `--keypair` | Stage‑1 evaluation / pilot operator path (file-based CustomerHeld) |
 | `CustomerHeldKeyProvider::register_customer_keypair` | Library integrators |
-| Optional `AwsKmsKeyProvider` (`aws-kms` feature) | KMS-wrapped seeds at rest (library only) |
+| Optional `AwsKmsKeyProvider` (`aws-kms` feature) | KMS-wrapped seeds; CLI `wrap-seed` / `--wrapped-keypair`; sidecar `--wrapped-keys-dir` |
 
 `generate_operator_keypair` / `crypto keygen` produce bytes for the operator to persist and register — Solum does not retain them after write.
 

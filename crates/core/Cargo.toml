@@ -17,6 +17,15 @@ default = []
 # Optional Ferrum object-storage reuse (LocalStorage first). Default off so Mode A
 # / CLI builds never resolve ferrum-storage or tokio via this crate.
 ferrum-storage-backend = ["dep:ferrum-storage", "dep:tokio"]
+# Optional AWS KMS wrap/encrypt/decrypt CLI (H2.4). Default off — no aws-sdk in Mode A.
+# Uses env credentials (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION); no aws-config
+# (keeps MSRV 1.91.1 — full instance/IRSA chain is a follow-on if MSRV rises).
+aws-kms = [
+    "solum-crypto/aws-kms",
+    "dep:tokio",
+    "tokio/rt-multi-thread",
+    "tokio/macros",
+]
 
 [dependencies]
 anyhow.workspace = true
@@ -37,6 +46,7 @@ solum-identity = { workspace = true, features = ["ferrum-companion"] }
 # Same git pin as crates/crypto ferrum-core (config/ci/ferrum-revision.txt).
 ferrum-storage = { git = "https://github.com/SynapticFour/Ferrum.git", rev = "27a6a8e9a719fd1a171da28b20462a777f95cf65", optional = true }
 # Only io-util for AsyncReadExt in library code; callers (tests/examples) supply the runtime.
+# aws-kms also enables rt-multi-thread / macros for CLI wrap/encrypt paths.
 tokio = { version = "1", optional = true, default-features = false, features = ["io-util"] }
 
 [dev-dependencies]

@@ -73,7 +73,7 @@ AWS KMS is an **optional**, feature-gated custody path (default off). It is **no
 
 **Operational caveats (current baseline):**
 
-- Provisioning helpers exist as a **library API** (`wrap_seed` / `from_wrapped_seed`) — **there is no CLI command** for KMS provisioning yet. ([BASELINE.md](../BASELINE.md) — *Explizit außerhalb*)
+- Provisioning: library API **and** optional CLI/sidecar behind `--features aws-kms` (`wrap-seed`, `--wrapped-keypair`, `--wrapped-keys-dir`; rustc ≥ 1.94.1 for that feature). ([BASELINE.md](../BASELINE.md))
 - Unwrapped seed material is held in ordinary process memory with **best-effort `ZeroizeOnDrop`** (not a TEE). ([BASELINE.md](../BASELINE.md))
 - No KMS EncryptionContext / AAD binding is wired yet. ([BASELINE.md](../BASELINE.md))
 - CI covers mocked KMS behaviour, not live AWS accounts. ([BASELINE.md](../BASELINE.md))
@@ -150,7 +150,7 @@ The following are **accepted or open limitations** of the current baseline, rest
 
 7. **Kenya transfer destinations list is empty.** Even listed transfer *mechanisms* will fail every concrete destination check until destinations are filled under legal guidance. ([BASELINE.md](../BASELINE.md))
 
-8. **AWS KMS path caveats:** no EncryptionContext/AAD; library-only provisioning; mocked tests only in CI. ([BASELINE.md](../BASELINE.md))
+8. **AWS KMS path caveats:** no EncryptionContext/AAD; optional feature (CLI/sidecar); mocked tests only in CI; not HSM. ([BASELINE.md](../BASELINE.md))
 
 9. **Optional object-storage backend** (Ferrum LocalStorage path) pulls a transitive cloud SDK even when only local storage is used; that feature stays default-off. CI coverage for the feature path is limited relative to the default build. ([BASELINE.md](../BASELINE.md))
 

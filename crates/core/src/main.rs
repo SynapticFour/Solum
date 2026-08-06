@@ -33,6 +33,12 @@ Using CustomerHeld key material from --keypair (operator-supplied file).
 Solum does not mint these keys during encrypt; protect the keypair file
 as you would other secrets (0600 on Unix recommended).";
 
+#[cfg_attr(not(feature = "aws-kms"), allow(dead_code))]
+const AWS_KMS_KEY_NOTE: &str = "\
+Using AWS KMS-wrapped Crypt4GH seed (CustomerHeld custody; provider=aws-kms).
+Seed is unwrapped into process memory (ZeroizeOnDrop) — envelope encryption, not an HSM/TEE.
+Build with --features aws-kms; configure AWS_REGION and credentials (or instance role).";
+
 #[derive(Debug, Parser)]
 #[command(name = "solum", version, about = "Solum clinical compliance CLI")]
 struct Cli {
@@ -131,6 +137,21 @@ enum CryptoCmd {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Wrap a CustomerHeld private seed under AWS KMS (`--features aws-kms`).
+    ///
+    /// Writes JSON `{key_ref, kms_key_id, wrapped_seed}` for `--wrapped-keypair`.
+    WrapSeed {
+        #[arg(long)]
+        key_ref: String,
+        /// KMS key id, alias, or ARN.
+        #[arg(long)]
+        kms_key_id: String,
+        /// Plaintext keypair from `crypto keygen` (privkey provides the seed).
+        #[arg(long)]
+        keypair: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+    },
     /// Encrypt a file into an EncryptedField JSON document.
     Encrypt {
         #[arg(long)]
@@ -152,13 +173,16 @@ enum CryptoCmd {
         r#in: PathBuf,
         #[arg(long)]
         out: PathBuf,
-        /// CustomerHeld Crypt4GH keypair JSON from `crypto keygen` (required unless `--ephemeral`).
-        #[arg(long, required_unless_present = "ephemeral")]
+        /// CustomerHeld Crypt4GH keypair JSON from `crypto keygen`.
+        #[arg(long, required_unless_present_any = ["ephemeral", "wrapped_keypair"])]
         keypair: Option<PathBuf>,
         /// Dev-only ephemeral keys. Requires `SOLUM_ALLOW_EPHEMERAL=1` and a
         /// profile that lists `ephemeral_test` (e.g. `dev-local.toml`).
-        #[arg(long, default_value_t = false, conflicts_with = "keypair")]
+        #[arg(long, default_value_t = false, conflicts_with_all = ["keypair", "wrapped_keypair"])]
         ephemeral: bool,
+        /// AWS KMS-wrapped seed JSON from `crypto wrap-seed` (requires `--features aws-kms`).
+        #[arg(long, conflicts_with_all = ["keypair", "ephemeral"])]
+        wrapped_keypair: Option<PathBuf>,
     },
     /// Decrypt an EncryptedField JSON document to a plaintext file.
     Decrypt {
@@ -179,13 +203,16 @@ enum CryptoCmd {
         r#in: PathBuf,
         #[arg(long)]
         out: PathBuf,
-        /// CustomerHeld Crypt4GH keypair JSON (required unless `--ephemeral`).
-        #[arg(long, required_unless_present = "ephemeral")]
+        /// CustomerHeld Crypt4GH keypair JSON (required unless `--ephemeral` / `--wrapped-keypair`).
+        #[arg(long, required_unless_present_any = ["ephemeral", "wrapped_keypair"])]
         keypair: Option<PathBuf>,
         /// Dev-only ephemeral keys. Requires `SOLUM_ALLOW_EPHEMERAL=1` and a
         /// profile that lists `ephemeral_test` (e.g. `dev-local.toml`).
-        #[arg(long, default_value_t = false, conflicts_with = "keypair")]
+        #[arg(long, default_value_t = false, conflicts_with_all = ["keypair", "wrapped_keypair"])]
         ephemeral: bool,
+        /// AWS KMS-wrapped seed JSON from `crypto wrap-seed` (requires `--features aws-kms`).
+        #[arg(long, conflicts_with_all = ["keypair", "ephemeral"])]
+        wrapped_keypair: Option<PathBuf>,
     },
 }
 
@@ -307,14 +334,22 @@ fn open_deployment<P: Crypt4ghKeyProvider>(
     keys: P,
     custody: KeyCustody,
 ) -> Result<Deployment<P>, ExitCode> {
-    Deployment::open(
-        profile,
-        &runtime_config(custody),
-        audit,
-        consent_store,
-        keys,
-    )
-    .map_err(fail)
+    open_deployment_with_provider(profile, audit, consent_store, keys, custody, None)
+}
+
+fn open_deployment_with_provider<P: Crypt4ghKeyProvider>(
+    profile: &Path,
+    audit: &Path,
+    consent_store: &Path,
+    keys: P,
+    custody: KeyCustody,
+    provider_override: Option<&str>,
+) -> Result<Deployment<P>, ExitCode> {
+    let mut runtime = runtime_config(custody);
+    if let Some(p) = provider_override {
+        runtime.key_management.provider = Some(p.into());
+    }
+    Deployment::open(profile, &runtime, audit, consent_store, keys).map_err(fail)
 }
 
 /// CLI actor for GTM-1 `*_as` paths.
@@ -464,6 +499,12 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
             );
             Ok(())
         }
+        CryptoCmd::WrapSeed {
+            key_ref,
+            kms_key_id,
+            keypair,
+            out,
+        } => cmd_crypto_wrap_seed(key_ref, kms_key_id, keypair, out),
         CryptoCmd::Encrypt {
             profile,
             audit,
@@ -476,6 +517,7 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
             out,
             keypair,
             ephemeral,
+            wrapped_keypair,
         } => {
             if ephemeral {
                 require_ephemeral_gate()?;
@@ -514,9 +556,22 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
                 )?;
                 chmod_owner_rw(&sidecar)?;
                 Ok(())
+            } else if let Some(wrapped_path) = wrapped_keypair {
+                cmd_crypto_encrypt_wrapped(
+                    profile,
+                    audit,
+                    consent_store,
+                    category,
+                    key_ref,
+                    actor,
+                    capability,
+                    r#in,
+                    out,
+                    wrapped_path,
+                )
             } else {
                 let keypair_path = keypair.ok_or_else(|| {
-                    fail_usage("--keypair is required (or pass --ephemeral for local demos only)")
+                    fail_usage("--keypair is required (or --ephemeral / --wrapped-keypair)")
                 })?;
                 eprintln!("{CUSTOMER_HELD_KEY_NOTE}");
                 let (keys, key_ref) = customer_provider_from_file(&keypair_path, &key_ref)?;
@@ -550,6 +605,7 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
             out,
             keypair,
             ephemeral,
+            wrapped_keypair,
         } => {
             if ephemeral {
                 require_ephemeral_gate()?;
@@ -584,9 +640,21 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
                 fs::write(&out, plaintext)
                     .map_err(|e| fail(format!("failed to write --out {}: {e}", out.display())))?;
                 Ok(())
+            } else if let Some(wrapped_path) = wrapped_keypair {
+                cmd_crypto_decrypt_wrapped(
+                    profile,
+                    audit,
+                    consent_store,
+                    key_ref,
+                    actor,
+                    capability,
+                    r#in,
+                    out,
+                    wrapped_path,
+                )
             } else {
                 let keypair_path = keypair.ok_or_else(|| {
-                    fail_usage("--keypair is required (or pass --ephemeral for local demos only)")
+                    fail_usage("--keypair is required (or --ephemeral / --wrapped-keypair)")
                 })?;
                 eprintln!("{CUSTOMER_HELD_KEY_NOTE}");
                 let (keys, key_ref) = customer_provider_from_file(&keypair_path, &key_ref)?;
@@ -607,6 +675,212 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
                 Ok(())
             }
         }
+    }
+}
+
+fn require_aws_kms_feature() -> Result<(), ExitCode> {
+    #[cfg(feature = "aws-kms")]
+    {
+        Ok(())
+    }
+    #[cfg(not(feature = "aws-kms"))]
+    {
+        Err(fail_usage(
+            "AWS KMS CLI path requires rebuilding with --features aws-kms \
+             (e.g. cargo run -p solum-core --features aws-kms -- crypto wrap-seed …)",
+        ))
+    }
+}
+
+fn cmd_crypto_wrap_seed(
+    key_ref: String,
+    kms_key_id: String,
+    keypair: PathBuf,
+    out: PathBuf,
+) -> Result<(), ExitCode> {
+    require_aws_kms_feature()?;
+    #[cfg(feature = "aws-kms")]
+    {
+        use solum_core::crypto::aws_kms::{AwsKmsKeyProvider, WrappedSeedFile};
+        eprintln!("{AWS_KMS_KEY_NOTE}");
+        let file = load_keypair_file(&keypair, &key_ref)?;
+        let seed = &file.privkey;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| fail(format!("tokio runtime: {e}")))?;
+        let wrapped = rt
+            .block_on(async {
+                let client = solum_core::crypto::aws_kms::client_from_env()?;
+                AwsKmsKeyProvider::wrap_seed(&client, &kms_key_id, seed).await
+            })
+            .map_err(|e| fail(e))?;
+        let doc = WrappedSeedFile {
+            key_ref,
+            kms_key_id,
+            wrapped_seed: wrapped,
+        };
+        doc.write(&out).map_err(fail)?;
+        eprintln!(
+            "wrote KMS-wrapped seed to {} (0600 on Unix; not an HSM export)",
+            out.display()
+        );
+        Ok(())
+    }
+    #[cfg(not(feature = "aws-kms"))]
+    {
+        let _ = (key_ref, kms_key_id, keypair, out);
+        unreachable!()
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cmd_crypto_encrypt_wrapped(
+    profile: PathBuf,
+    audit: PathBuf,
+    consent_store: PathBuf,
+    category: String,
+    key_ref: String,
+    actor: String,
+    capability: Vec<String>,
+    r#in: PathBuf,
+    out: PathBuf,
+    wrapped_path: PathBuf,
+) -> Result<(), ExitCode> {
+    require_aws_kms_feature()?;
+    #[cfg(feature = "aws-kms")]
+    {
+        use solum_core::crypto::aws_kms::{AwsKmsKeyProvider, WrappedSeedFile};
+        eprintln!("{AWS_KMS_KEY_NOTE}");
+        let file = WrappedSeedFile::load(&wrapped_path).map_err(fail)?;
+        if file.key_ref != key_ref {
+            return Err(fail(format!(
+                "key-ref '{key_ref}' does not match wrapped file key '{}'",
+                file.key_ref
+            )));
+        }
+        let plaintext = fs::read(&r#in)
+            .map_err(|e| fail_usage(format!("failed to read --in {}: {e}", r#in.display())))?;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| fail(format!("tokio runtime: {e}")))?;
+        let keys = rt
+            .block_on(async {
+                let client = solum_core::crypto::aws_kms::client_from_env()?;
+                AwsKmsKeyProvider::from_wrapped_seed(
+                    &client,
+                    KeyRef::new(file.key_ref),
+                    &file.wrapped_seed,
+                )
+                .await
+            })
+            .map_err(fail)?;
+        let key_ref = KeyRef::new(key_ref);
+        let mut deployment = open_deployment_with_provider(
+            &profile,
+            &audit,
+            &consent_store,
+            keys,
+            KeyCustody::CustomerHeld,
+            Some("aws-kms"),
+        )?;
+        let actor = cli_actor(actor, capability);
+        let field = deployment
+            .encrypt_field_as(&category, &plaintext, &key_ref, &actor)
+            .map_err(fail)?;
+        write_json(&out, &field)?;
+        Ok(())
+    }
+    #[cfg(not(feature = "aws-kms"))]
+    {
+        let _ = (
+            profile,
+            audit,
+            consent_store,
+            category,
+            key_ref,
+            actor,
+            capability,
+            r#in,
+            out,
+            wrapped_path,
+        );
+        unreachable!()
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cmd_crypto_decrypt_wrapped(
+    profile: PathBuf,
+    audit: PathBuf,
+    consent_store: PathBuf,
+    key_ref: String,
+    actor: String,
+    capability: Vec<String>,
+    r#in: PathBuf,
+    out: PathBuf,
+    wrapped_path: PathBuf,
+) -> Result<(), ExitCode> {
+    require_aws_kms_feature()?;
+    #[cfg(feature = "aws-kms")]
+    {
+        use solum_core::crypto::aws_kms::{AwsKmsKeyProvider, WrappedSeedFile};
+        eprintln!("{AWS_KMS_KEY_NOTE}");
+        let file = WrappedSeedFile::load(&wrapped_path).map_err(fail)?;
+        if file.key_ref != key_ref {
+            return Err(fail(format!(
+                "key-ref '{key_ref}' does not match wrapped file key '{}'",
+                file.key_ref
+            )));
+        }
+        let field: EncryptedField = read_json(&r#in)?;
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| fail(format!("tokio runtime: {e}")))?;
+        let keys = rt
+            .block_on(async {
+                let client = solum_core::crypto::aws_kms::client_from_env()?;
+                AwsKmsKeyProvider::from_wrapped_seed(
+                    &client,
+                    KeyRef::new(file.key_ref),
+                    &file.wrapped_seed,
+                )
+                .await
+            })
+            .map_err(fail)?;
+        let key_ref = KeyRef::new(key_ref);
+        let mut deployment = open_deployment_with_provider(
+            &profile,
+            &audit,
+            &consent_store,
+            keys,
+            KeyCustody::CustomerHeld,
+            Some("aws-kms"),
+        )?;
+        let actor = cli_actor(actor, capability);
+        let plaintext = deployment
+            .decrypt_field_as(&field, &key_ref, &actor)
+            .map_err(fail)?;
+        fs::write(&out, plaintext)
+            .map_err(|e| fail(format!("failed to write --out {}: {e}", out.display())))?;
+        Ok(())
+    }
+    #[cfg(not(feature = "aws-kms"))]
+    {
+        let _ = (
+            profile,
+            audit,
+            consent_store,
+            key_ref,
+            actor,
+            capability,
+            r#in,
+            out,
+            wrapped_path,
+        );
+        unreachable!()
     }
 }
 

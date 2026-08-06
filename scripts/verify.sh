@@ -84,5 +84,15 @@ cargo test -p solum-core --features ferrum-storage-backend --lib
 cargo run -p solum-example-ferrum-companion --features storage-backend
 echo "ok: ferrum-storage-backend feature path passed"
 
+echo "== 7c. AWS KMS feature (mocked; rustc >= 1.94.1) =="
+if rustc +1.94.1 -vV >/dev/null 2>&1; then
+  RUSTUP_TOOLCHAIN=1.94.1 cargo test -p solum-crypto --features aws-kms --test aws_kms
+  RUSTUP_TOOLCHAIN=1.94.1 cargo check -p solum-core --features aws-kms
+  RUSTUP_TOOLCHAIN=1.94.1 cargo check -p solum-sidecar --features aws-kms
+  echo "ok: aws-kms feature path passed"
+else
+  echo "SKIP: rustc 1.94.1 not installed (aws-kms feature requires it for AWS SDK)"
+fi
+
 echo
 echo "All baseline checks passed."
