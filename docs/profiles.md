@@ -36,6 +36,8 @@ Profiles live in [`config/profiles/`](../config/profiles/). Each file is a juris
 
 Do not use this profile for a real deployment until those items are closed.
 
+**Portfolio decision:** Kenya is the **first non-EU geography** to drive toward production-ready (provisional). Work breakdown: [H4 geography decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md) (K1 legal / K2 technical / K3 field).
+
 Adding a jurisdiction: copy an existing TOML, adjust fields, drop it in the directory. `load_profiles_dir` picks up every `*.toml` without a code change (unless the schema itself is extended).
 
 ## Transfer policy

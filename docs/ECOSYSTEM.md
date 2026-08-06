@@ -39,6 +39,8 @@ Across Synaptic Four Rust products you should expect:
 ## Further reading in this repo
 
 - [Product definition](PRODUCT-DEFINITION.md) (Track A sidecar + Track B CDR)
+- [ADR 0001 — openEHR CDR + migration](adr/0001-openehr-cdr-and-migration.md)
+- [Migration strangler](MIGRATION-STRANGLER.md)
 - Portfolio [coordinated roadmap](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/COORDINATED-PORTFOLIO-ROADMAP.md)
 - [Ferrum relationship](ferrum.md)
 - [HELIOS relationship](helios.md)

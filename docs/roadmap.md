@@ -17,9 +17,9 @@ Spec-independent controls that already have a clear regulatory floor (e.g. EHDS 
 Communicated as evolving with specifications and demand — not implemented as stage-1 scope:
 
 - FHIR / IHE interoperability depth for EEHRxF priority categories (e.g. patient summary, laboratory results, discharge reports, imaging reports / manifests, prescriptions)
-- openEHR layer for deeper clinical semantics and long-lived modelling
-- SaaS operating model built on stage-1 key-custody and audit foundations
-- Additional jurisdiction profiles (e.g. Nigeria, South Africa, others) as data files when needed
+- **openEHR clinical data plane (Track B)** — see [ADR 0001](adr/0001-openehr-cdr-and-migration.md) and [MIGRATION-STRANGLER.md](MIGRATION-STRANGLER.md) (architecture accepted; CDR MVP not built yet)
+- SaaS *preparedness* (tenancy / key boundaries) on stage-1 foundations — not SaaS as default delivery
+- Additional jurisdiction profiles; **Kenya pack hardening** first among African profiles (see Showcase [H4 geography decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md))
 - **Live HELIOS CLI/API signing bridge** (only after HELIOS release + custody story are clear — not claimed in Stage 1)
 
 ## Out of scope for both stages (default)
