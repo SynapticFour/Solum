@@ -43,6 +43,7 @@ Across Synaptic Four Rust products you should expect:
 - [ADR 0002 — CDR engine = EHRbase](adr/0002-cdr-engine-ehrbase.md)
 - [Migration strangler](MIGRATION-STRANGLER.md)
 - [Kenya K1 counsel brief](counsel/KENYA-K1-BRIEF.md) (profile remains DRAFT)
+- [Kenya K1 send checklist](counsel/KENYA-K1-SEND-CHECKLIST.md)
 - Portfolio [coordinated roadmap](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/COORDINATED-PORTFOLIO-ROADMAP.md)
 - [Ferrum relationship](ferrum.md)
 - [HELIOS relationship](helios.md)

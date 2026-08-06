@@ -1,6 +1,7 @@
 # Kenya jurisdiction pack — counsel brief (K1)
 
 **Status:** Ready for external legal review
+**How to send:** [KENYA-K1-SEND-CHECKLIST.md](KENYA-K1-SEND-CHECKLIST.md)
 **Date:** 2026-08-06
 **Profile:** `Solum/config/profiles/kenya-dpa.toml` (**DRAFT** — not for production SoR)
 **Portfolio context:** [H4 geography decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md)
