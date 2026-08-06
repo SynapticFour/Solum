@@ -1,21 +1,24 @@
 # Kenya jurisdiction pack — counsel brief (K1)
 
-**Status:** Ready for external legal review
+**Status:** Ready for external legal review (**still required**)
 **How to send:** [KENYA-K1-SEND-CHECKLIST.md](KENYA-K1-SEND-CHECKLIST.md)
+**Engineering prior art (not counsel):** [KENYA-K1-VORPRUEFUNG.md](KENYA-K1-VORPRUEFUNG.md) — applied 2026-08-06; **not** legal advice
 **Date:** 2026-08-06
-**Profile:** `Solum/config/profiles/kenya-dpa.toml` (**DRAFT** — not for production SoR)
+**Profile:** `Solum/config/profiles/kenya-dpa.toml` (**PROVISIONAL-PRODUCTION-CANDIDATE** — not PRODUCTION / not patient SoR)
 **Portfolio context:** [H4 geography decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md)
 
 This brief is for a **qualified counsel / data-protection advisor** familiar with Kenya DPA 2019, Digital Health Act 2023, and ODPC guidance. It is **not** legal advice from Synaptic Four.
+
+A **non-counsel Vorprüfung** already adjusted profile honesty (retention claims, purposes, transfer fail-closed). Counsel must still confirm, amend, or reject those assumptions before PRODUCTION.
 
 ---
 
 ## 1. Ask to counsel
 
-Please review the draft Solum jurisdiction profile and answer the **open items** in §3 so engineering can either:
+Please review the provisional Solum jurisdiction profile and answer the **open items** in §3 so engineering can either:
 
 - mark the profile **PRODUCTION-ready** (with documented assumptions), or
-- keep **DRAFT** and list blocking conditions.
+- keep **PROVISIONAL** / revert to **DRAFT** and list blocking conditions.
 
 Synaptic Four will **not** claim ODPC registration, certification, or “Kenya-compliant EHR” from software alone.
 
@@ -36,56 +39,61 @@ Primary statutes cited in the profile header: DPA 2019; Digital Health Act 2023;
 
 ## 3. Open items (need counsel answers)
 
+Engineering defaults after Vorprüfung are noted below — please **confirm or correct**.
+
 ### 3.1 Retention — clinical records
 
-| Current draft | Conflict / question |
-|---------------|---------------------|
-| `default_retention_days = 7300` (20 years) | Digital Health Act s.25 vs DPA s.39 for **private** deployments — which floor/ceiling applies to a private lab/clinic pilot using Solum on-prem? |
+| Current provisional | Conflict / question |
+|---------------------|---------------------|
+| `default_retention_days = 7300` as **conservative Digital Health Act–aligned default**, not “Kenya requires 20 years for all private deployments” | Private facility vs public / integrated-system floor |
 
-**Ask:** Recommend a single retention table (clinical vs audit) for (a) private facility, (b) public facility, if different.
+**Ask:** Confirm or replace the dual table (public/integrated ≈ 20y orientation; private = documented operator policy ≥ legal/contractual minimum).
 
 ### 3.2 Retention — audit logs
 
-| Current draft | Question |
-|---------------|----------|
-| `audit_log_retention_days` set in TOML | No ODPC-specified figure found in engineering research |
+| Current provisional | Question |
+|---------------------|----------|
+| `audit_log_retention_days = 7300` as **security evidence retention** (no ODPC figure claimed) | Minimum / recommended under DPA + Digital Health Act |
 
-**Ask:** Minimum / recommended audit-log retention for health data processing systems under DPA + Digital Health Act.
+**Ask:** Confirm 7–10y / match-processing guidance or give a figure to encode.
 
 ### 3.3 Required purposes catalogue
 
-| Current draft | Question |
-|---------------|----------|
-| `required_purposes` in profile (guidance-directed) | Not a statutory closed list |
+| Current provisional | Question |
+|---------------------|----------|
+| `required_purposes` = care_provision, emergency_access, care_coordination; research etc. in `optional_purposes` only | Acceptable for primary care vs research secondary use? |
 
-**Ask:** Is the draft catalogue acceptable for pilots? What purposes must be present / forbidden for primary care vs research secondary use?
+**Ask:** Confirm floor + optional split; name any missing / forbidden purposes.
 
 ### 3.4 Cross-border transfer
 
-| Current draft | Question |
-|---------------|----------|
-| `[transfer]` mechanisms partially modelled; `permitted_destinations` often empty → **fail-closed** | ODPC case-by-case guidance |
+| Current provisional | Question |
+|---------------------|----------|
+| `permitted_destinations = []` fail-closed; mechanisms include safeguards / hdab_mediated / statutory_exception (pathways ≠ permits) | Kenya-only OK? EU research collaboration listing? |
 
-**Ask:** For an on-prem Kenya site that only stores in `KE` and never transfers abroad: is empty destinations + fail-closed correct? For EU research collaboration (Ferrum secondary use / HDAB-style): what destinations/mechanisms may we list without over-claiming?
+**Ask:** Confirm empty destinations for KE-only. What destinations/mechanisms may be listed for EU research without over-claiming?
 
 ### 3.5 National Health Data Bank
 
-**Ask:** Confirm Solum’s explicit **non-goal** (no automatic national HDB submission) is appropriate for a private pilot, and what disclosure obligations remain on the **operator**.
+**Ask:** Confirm non-goal (no automatic HDB submission) and operator disclosure obligations wording in profile notes.
 
 ### 3.6 Offline / Edge (Raspberry Pi)
 
-**Ask:** Any additional constraints for offline capture with later sync to a Kenya hub (residency during sync, consent withdrawal while offline)?
+Engineering policy drafted in `regulatory.notes` (cache region = KE; no master keys on Pi; customer_held; restrict non-emergency when consent unknown pending sync).
+
+**Ask:** Confirm or amend residency-during-offline, revoke-while-offline, and key constraints.
 
 ---
 
 ## 4. Materials to attach for counsel
 
 1. `config/profiles/kenya-dpa.toml` (full file)
-2. `docs/profiles.md` § Kenya draft
-3. `docs/PRODUCT-DEFINITION.md` § markets + MDCG posture
-4. This brief
+2. [KENYA-K1-VORPRUEFUNG.md](KENYA-K1-VORPRUEFUNG.md) (engineering prior art — label as non-counsel)
+3. `docs/profiles.md` § Kenya
+4. `docs/PRODUCT-DEFINITION.md` § markets + MDCG posture
+5. This brief
 
-Optional: Showcase H1 pilot checklist (EU pilot path) for comparison.
+Optional: Showcase H1 pilot checklist (EU path) for comparison.
 
 ---
 
@@ -95,7 +103,7 @@ Optional: Showcase H1 pilot checklist (EU pilot path) for comparison.
 |------------------|----------|
 | Retention X / Y | Update TOML + tests; document in `regulatory.notes` |
 | Destinations list | Populate `permitted_destinations` or keep empty with runbook |
-| Still insufficient | Keep STATUS DRAFT; block H4 Stage-4 cut-over |
+| Still insufficient | Keep PROVISIONAL or DRAFT; block H4 Stage-4 cut-over |
 | Approved with assumptions | Flip STATUS to PRODUCTION candidate + Showcase H4 sign-off |
 
 ---
@@ -107,3 +115,4 @@ Optional: Showcase H1 pilot checklist (EU pilot path) for comparison.
 - Eng owner of profile schema: Solum `crates/profiles`
 
 **Counsel name / firm / date received:** _______________________
+**Vorprüfung applied (non-counsel):** 2026-08-06 — see [KENYA-K1-VORPRUEFUNG.md](KENYA-K1-VORPRUEFUNG.md)

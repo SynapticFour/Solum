@@ -113,15 +113,18 @@ From [`.gitleaks.toml`](../.gitleaks.toml) (`private-key` rule allowlist, `condi
 - **Reason:** Static PEM armor string literals in `generate_keys()` write path — not embedded key material; identical to upstream EGA-archive/crypt4gh-rust armor headers.
 - **Revisit when:** Upstream crypt4gh key format / keygen writing changes, or gitleaks `private-key` rule no longer matches these literals — then re-scan and tighten or remove the allowlist.
 
-### Kenya profile — draft, pending legal review
+### Kenya profile — provisional (counsel still required)
 
-`kenya-dpa.toml` is present and loadable but **not production-ready**. Open items from that file’s `regulatory.notes` / `docs/profiles.md` “Kenya draft” section:
+`kenya-dpa.toml` is loadable as **PROVISIONAL-PRODUCTION-CANDIDATE** after a **non-counsel** Vorprüfung ([docs/counsel/KENYA-K1-VORPRUEFUNG.md](counsel/KENYA-K1-VORPRUEFUNG.md)). **Not** production SoR / **not** ODPC-certified. Real counsel via [KENYA-K1-BRIEF.md](counsel/KENYA-K1-BRIEF.md) remains mandatory before PRODUCTION.
 
-1. Retention periods (7300 days) follow Digital Health Act s.25 for the integrated system; for standalone private deployments outside that system, DPA s.39 basis is an assumption pending legal review.
-2. Audit-log retention (7300 days) has no ODPC-specified figure found; aligned to clinical retention floor as a conservative assumption.
-3. `required_purposes` (`research`, `public_health`, `health_insurance`) follow ODPC health guidance direction, not a codified statutory list — pending legal review.
-4. Cross-border transfer is only **partially** modelled via `[transfer]` (`safeguards_based`, `statutory_exception`, `requires_serving_copy = true`); primary residency remains KE-only.
-5. Digital Health Act national Health Data Bank submission obligations remain operator responsibility outside Solum’s current scope (serving-copy flag is declarative only).
+Honesty after Vorprüfung:
+
+1. Retention `7300` days = conservative Digital Health Act–aligned default — **not** a universal private-sector statutory mandate.
+2. Audit-log `7300` = security evidence retention; no ODPC-specified figure claimed.
+3. `required_purposes` = primary-care floor; `research` / secondary use in `optional_purposes` only (separate lawful basis).
+4. Cross-border: mechanisms listed as pathways; `permitted_destinations = []` fail-closed until TIA + approval.
+5. National Health Data Bank submission remains operator responsibility (Solum non-goal).
+6. Edge offline residency / revoke / key policies are documented in `regulatory.notes`; field enforcement is K2/K3.
 
 ### Kenya `TransferPolicy.permitted_destinations` empty
 

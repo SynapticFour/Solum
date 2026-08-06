@@ -9,7 +9,7 @@ Spec-independent controls that already have a clear regulatory floor (e.g. EHDS 
 - Secure processing environment: encryption at rest / in transit (`solum-crypto` policy layer implemented; actual field-level encryption still open — see below), granular access control, complete audit log (`solum-audit::FileAuditStore` — persistent, hash-chained, implemented)
 - Consent and access-rights management (`solum-consent` — grant/revoke with purpose binding and full history, implemented; anticipating EEHRxF individual rights — access, who accessed, onward sharing, rectification / completion — where implementable without waiting for every implementing act)
 - Compliance evidence **export hooks** (HELIOS-oriented JSON envelope from `solum-audit` — hash-chained, operator-verifiable). **Live HELIOS signing is deferred / not productized** — see [helios.md](helios.md)
-- Jurisdiction [profile system](profiles.md), initially `eu-ehds`, schema ready for further countries; Kenya remains **DRAFT**
+- Jurisdiction [profile system](profiles.md), initially `eu-ehds`, schema ready for further countries; Kenya is **PROVISIONAL-PRODUCTION-CANDIDATE** (non-counsel Vorprüfung; real counsel still required)
 - CustomerHeld CLI operator path (`crypto keygen` + `--keypair`) for Stage‑1 evaluations; ephemeral keys gated to `dev-local` only
 
 ## Stage 2 — planned

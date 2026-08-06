@@ -13,8 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **H2.1 Ferrum consumer** — document that Ferrum may poll `GET /v1/consent/status` for purpose-bound DRS/WES deny ([SIDECAR-INTEGRATION.md](docs/customer/SIDECAR-INTEGRATION.md), [ferrum.md](docs/ferrum.md)).
 - **H2 spine — zeroize** — best-effort `ZeroizeOnDrop` for CustomerHeld / AwsKms held Crypt4GH seeds.
 - **ADR 0002 — CDR engine** — front EHRbase (Apache 2.0) as Track B default; Solum keeps compliance/façade/migration ([docs/adr/0002-cdr-engine-ehrbase.md](docs/adr/0002-cdr-engine-ehrbase.md)).
+- **Kenya K1 Vorprüfung applied** — non-counsel engineering review → profile **PROVISIONAL-PRODUCTION-CANDIDATE**; `optional_purposes`; honesty on retention/transfer/HDB ([docs/counsel/KENYA-K1-VORPRUEFUNG.md](docs/counsel/KENYA-K1-VORPRUEFUNG.md)). **Real counsel still required.**
 - **Kenya K1 send checklist** — operator steps to package and email the counsel brief ([docs/counsel/KENYA-K1-SEND-CHECKLIST.md](docs/counsel/KENYA-K1-SEND-CHECKLIST.md)).
-- **Kenya K1 counsel brief** — external-review package for DRAFT `kenya-dpa` retention/transfer/HDB/offline questions ([docs/counsel/KENYA-K1-BRIEF.md](docs/counsel/KENYA-K1-BRIEF.md)).
+- **Kenya K1 counsel brief** — external-review package for `kenya-dpa` retention/transfer/HDB/offline questions ([docs/counsel/KENYA-K1-BRIEF.md](docs/counsel/KENYA-K1-BRIEF.md)).
 - **ADR 0001 + migration strangler** — optional openEHR clinical data plane (Track B) and wrap→mirror→prefer→cut-over path ([docs/adr/0001-openehr-cdr-and-migration.md](docs/adr/0001-openehr-cdr-and-migration.md), [docs/MIGRATION-STRANGLER.md](docs/MIGRATION-STRANGLER.md)).
 - **Phase C evaluation pack — CustomerHeld CLI crypto** — `solum crypto keygen` writes operator keypair files; encrypt/decrypt require `--keypair` for CustomerHeld custody (pilot / paid-evaluation path).
 - **Ephemeral gate** — `--ephemeral` requires `SOLUM_ALLOW_EPHEMERAL=1` and a profile that allows `ephemeral_test` (`config/profiles/dev-local.toml`). Pilot profiles (`eu-ehds`, `kenya-dpa`) refuse `EphemeralTest` custody at startup.
@@ -28,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Notes
 
-- Kenya profile remains **DRAFT**; counsel brief + [send checklist](docs/counsel/KENYA-K1-SEND-CHECKLIST.md) ready; portfolio H4 names Kenya as first non-EU pack ([Showcase H4 decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md)).
+- Kenya profile is **PROVISIONAL-PRODUCTION-CANDIDATE** after non-counsel Vorprüfung; [send checklist](docs/counsel/KENYA-K1-SEND-CHECKLIST.md) + [brief](docs/counsel/KENYA-K1-BRIEF.md) still required for real counsel; portfolio H4 names Kenya as first non-EU pack ([Showcase H4 decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md)).
 - Stage-1 evaluation language unchanged; Track B CDR is architecture-only (ADR 0001 + 0002) until H3 implementation.
 - Do **not** cut a production `v*` tag until release CI binaries build successfully.
 

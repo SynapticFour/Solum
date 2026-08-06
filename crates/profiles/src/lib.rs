@@ -103,9 +103,15 @@ pub enum ConsentWorkflow {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConsentPolicy {
     pub workflow: ConsentWorkflow,
-    /// Purposes that must be expressible in the consent record.
+    /// Primary-care floor purposes that this jurisdiction profile expects to
+    /// support. Also part of the allow-list for [`solum_consent::validate_purpose`].
     #[serde(default)]
     pub required_purposes: Vec<String>,
+    /// Additional purposes that may be granted only with separate lawful basis /
+    /// governance (e.g. research). Not implied by clinical-care consent.
+    /// Combined with `required_purposes` for purpose allow-list checks.
+    #[serde(default)]
+    pub optional_purposes: Vec<String>,
 }
 
 /// Legal / procedural basis for a concrete cross-border or secondary-use transfer.
@@ -443,6 +449,24 @@ mod tests {
         assert!(!p.audit.mandatory_events.is_empty());
         assert!(!p.regulatory.annex_requirements.is_empty());
         assert!(p.retention.default_retention_days >= 7300);
+        assert!(p
+            .consent
+            .required_purposes
+            .iter()
+            .any(|x| x == "care_provision"));
+        assert!(
+            !p.consent.required_purposes.iter().any(|x| x == "research"),
+            "research must not be a required default purpose"
+        );
+        assert!(
+            p.consent.optional_purposes.iter().any(|x| x == "research"),
+            "research belongs in optional_purposes"
+        );
+        assert!(p.transfer.permitted_destinations.is_empty());
+        assert!(p
+            .transfer
+            .permitted_mechanisms
+            .contains(&TransferMechanism::HdabMediated));
     }
 
     #[test]

@@ -10,7 +10,7 @@ Profiles live in [`config/profiles/`](../config/profiles/). Each file is a juris
 | `audit` | Mandatory event types; HELIOS export readiness flag |
 | `retention` | Default / audit / per-category retention (days) |
 | `storage` | Allowed regions + residency enforcement |
-| `consent` | Workflow variant + required purposes |
+| `consent` | Workflow + `required_purposes` (primary floor) + `optional_purposes` (secondary / research; separate lawful basis) |
 | `transfer` | Permitted transfer mechanisms + destinations + serving-copy flag |
 | `regulatory` | Annex / statute references (documentation aids) |
 
@@ -19,22 +19,23 @@ Profiles live in [`config/profiles/`](../config/profiles/). Each file is a juris
 | File | Status |
 |------|--------|
 | `eu-ehds.toml` | Present — EU EHDS Annex II orientation (`customer_held` only) |
-| `kenya-dpa.toml` | Present (draft — pending legal review, see regulatory.notes) — Kenya DPA 2019 + Digital Health Act 2023 (`customer_held` only) |
+| `kenya-dpa.toml` | Present (**PROVISIONAL-PRODUCTION-CANDIDATE** — non-counsel Vorprüfung applied; real counsel still required) — Kenya DPA 2019 + Digital Health Act 2023 (`customer_held` only) |
 | `dev-local.toml` | Developer demos only — allows `ephemeral_test`; never for paid evaluations |
 | `nigeria-ndpa.toml` | Planned |
 | `south-africa-popia.toml` | Planned |
 
-### Kenya draft
+### Kenya (provisional)
 
-`kenya-dpa.toml` is a **draft** profile (not production-ready). Open legal-review items are recorded in that file’s `regulatory.notes` and in the header `STATUS: DRAFT` comment, including:
+`kenya-dpa.toml` is a **PROVISIONAL-PRODUCTION-CANDIDATE** after a **non-counsel** Vorprüfung ([KENYA-K1-VORPRUEFUNG.md](counsel/KENYA-K1-VORPRUEFUNG.md)). It is **not** PRODUCTION, **not** ODPC-certified, and **not** for live patient system-of-record until qualified Kenya counsel confirms [KENYA-K1-BRIEF.md](counsel/KENYA-K1-BRIEF.md).
 
-- retention periods (7300 days / Digital Health Act s.25 vs DPA s.39 for private deployments)
-- audit-log retention (no ODPC-specified figure found)
-- `required_purposes` catalogue (guidance-directed, not a statutory list)
-- cross-border transfer **partially** modelled via `[transfer]` (mechanisms + `requires_serving_copy`); `permitted_destinations` still empty pending ODPC case-by-case guidance
-- national Health Data Bank submission obligations remain outside Solum’s current scope
+Engineering posture after Vorprüfung:
 
-Do not use this profile for a real deployment until those items are closed.
+- Retention `7300` days = conservative Digital Health Act–aligned **default**, not “Kenya requires 20 years for all private deployments”
+- Audit `7300` = evidence retention (no ODPC figure claimed)
+- `required_purposes` = primary-care floor; research etc. in `optional_purposes` only
+- `permitted_destinations = []` fail-closed (strength); mechanisms are pathways, not permits
+- National Health Data Bank = operator obligation / Solum non-goal
+- Edge offline policies documented in `regulatory.notes` (enforcement = later K2/K3)
 
 **Portfolio decision:** Kenya is the **first non-EU geography** to drive toward production-ready (provisional). Work breakdown: [H4 geography decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md) (K1 legal / K2 technical / K3 field).
 

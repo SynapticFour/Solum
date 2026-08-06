@@ -50,7 +50,7 @@ Profiles live under `config/profiles/` as TOML **data** — not country-specific
 | File | Operator status |
 |------|-----------------|
 | `eu-ehds.toml` | Present — EU EHDS Annex II–oriented; typical Stage‑1 starting point. **Not** a legal compliance certificate. Allows **customer_held** only (ephemeral refused). |
-| `kenya-dpa.toml` | Present **draft** — pending legal review. **Do not use for a real deployment** until open items in that file / [profiles.md](../profiles.md) are closed. Allows **customer_held** only. |
+| `kenya-dpa.toml` | Present **PROVISIONAL-PRODUCTION-CANDIDATE** — non-counsel Vorprüfung applied; **real counsel still required**. Do **not** use as patient SoR / do **not** claim ODPC compliance. Allows **customer_held** only. See [profiles.md](../profiles.md) · [KENYA-K1-VORPRUEFUNG.md](../counsel/KENYA-K1-VORPRUEFUNG.md). |
 | `dev-local.toml` | **Developer demos only** — permits `ephemeral_test`. Never for paid evaluations or real patient data. |
 | `nigeria-ndpa.toml` | Planned |
 | `south-africa-popia.toml` | Planned |

@@ -8,10 +8,13 @@
 #
 # Same schema_version as eu-ehds.toml — data-only extension.
 #
-# STATUS: DRAFT — not production-ready. See regulatory.notes below and
-# docs/profiles.md "Kenya draft" section for open legal-review items
-# (retention periods, required_purposes catalogue, cross-border transfer
-# basis) before using this profile for a real deployment.
+# STATUS: PROVISIONAL-PRODUCTION-CANDIDATE — engineering-aligned after a
+# **non-counsel** Vorprüfung (2026-08-06). NOT production SoR. NOT ODPC-
+# certified. Real Kenya data-protection / health-tech counsel must still
+# confirm before any PRODUCTION flip. See:
+#   docs/counsel/KENYA-K1-VORPRUEFUNG.md
+#   docs/counsel/KENYA-K1-BRIEF.md
+#   docs/profiles.md § Kenya
 
 schema_version = 1
 
@@ -60,13 +63,16 @@ mandatory_events = [
 helios_export_prepared = true
 
 [retention]
-# Digital Health Act 2023 s.25(1): data held in the comprehensive integrated
-# health information system — minimum twenty years. Used here as the Solum
-# clinical floor for KE deployments that align with that system posture.
-# DPA 2019 s.39: retain only as reasonably necessary unless a longer lawful
-# basis applies (see regulatory.notes for operator-specific caveats).
-default_retention_days = 7300          # 20 years
-audit_log_retention_days = 7300        # match clinical floor pending sector guidance
+# Solum supports configurable retention. 7300 days is a conservative default
+# for deployments aligned with Digital Health Act integrated-system
+# expectations — NOT a universal private-sector statutory claim.
+# Private clinic/lab pilots: operator/legal confirmation of retention policy
+# required (DPA: no indefinite storage). See regulatory.notes.
+default_retention_days = 7300          # 20 years (conservative default)
+# No ODPC-specific audit retention figure identified; treated as security
+# evidence retention (prefer ≥ processing lifetime; often 7–10 years).
+# Kept aligned to clinical default as a conservative evidence period.
+audit_log_retention_days = 7300
 
 [retention.category_overrides_days]
 consent_record = 7300
@@ -93,22 +99,34 @@ enforce_residency = true
 # limited, with withdrawal (ss.2, 30–32). ODPC Health Data Guidance mirrors
 # GDPR-style granular consent. Workflow id `gdpr_granular` is the closest
 # existing enum variant — not an EU-law claim.
+#
+# required_purposes = primary-care floor (not a statutory closed list).
+# optional_purposes = secondary / research / insurance — allowed only with
+# separate lawful basis and governance; NOT implied by clinical-care consent.
 workflow = "gdpr_granular"
 required_purposes = [
     "care_provision",
     "emergency_access",
+    "care_coordination",
+]
+optional_purposes = [
     "research",
     "public_health",
     "quality_improvement",
     "health_insurance",
+    "billing_or_claims",
 ]
 
 [transfer]
-# DPA 2019 Part VI (safeguards_based) + Digital Health Act 2023 s.47
-# (statutory_exception, health tourism). Destinations are not a fixed list —
-# ODPC assesses transfers case-by-case; permitted_destinations left empty so
-# validate_transfer refuses concrete destinations until guidance enumerates them.
-permitted_mechanisms = ["safeguards_based", "statutory_exception"]
+# Mechanisms name *possible* legal pathways — they are NOT an automatic
+# transfer permit. Destinations stay empty → validate_transfer fail-closed
+# until Transfer Impact Assessment + operator approval + safeguards fill them.
+# Do NOT set permitted_destinations = ["EU"] by default (EU ≠ adequacy).
+permitted_mechanisms = [
+    "safeguards_based",
+    "hdab_mediated",
+    "statutory_exception",
+]
 permitted_destinations = []
 requires_serving_copy = true
 
@@ -125,13 +143,15 @@ annex_requirements = [
     "Digital Health Act 2023 ss.46–47 — Health tourism transfers / disclosure of personal health information outside Kenya",
 ]
 notes = [
+    "STATUS: PROVISIONAL-PRODUCTION-CANDIDATE after non-counsel Vorprüfung 2026-08-06 (docs/counsel/KENYA-K1-VORPRUEFUNG.md). Real Kenya counsel review still REQUIRED before PRODUCTION. Not ODPC registration/certification.",
     "Supervisory authority (DPA): Office of the Data Protection Commissioner (ODPC), https://www.odpc.go.ke/",
     "Solum is a compliance layer for clinical data — not a medical device by default.",
     "Features that interpret clinical data for diagnosis/therapy support require an MDCG-style boundary review (see CONTRIBUTING.md).",
     "Genomic / -omic exchange remains Ferrum's domain; Solum does not re-implement GA4GH.",
-    "Retention periods (7300 days) follow Digital Health Act s.25 for the integrated system; for standalone private deployments outside that system, DPA s.39 basis is an assumption pending legal review.",
-    "Audit-log retention (7300 days) has no ODPC-specified figure found; aligned to clinical retention floor as a conservative assumption.",
-    "required_purposes (research, public_health, health_insurance) follow ODPC health guidance direction, not a codified statutory list — pending legal review.",
-    "Cross-border transfer: PARTIALLY modelled via [transfer] as of 2026-07-25 (permitted_mechanisms = safeguards_based, statutory_exception; requires_serving_copy = true). Primary residency remains KE-only (enforce_residency = true, allowed_regions = ['KE']). permitted_destinations is empty — destinations require case-by-case ODPC assessment, not enumerable in this profile. validate_transfer will refuse concrete destinations until that list is filled.",
-    "Digital Health Act 'serving copy' / national Health Data Bank: PARTIALLY modelled via transfer.requires_serving_copy = true as of 2026-07-25; national Health Data Bank submission obligations remain operator responsibility outside Solum's current scope.",
+    "Retention periods are configurable. 7300 days represents a conservative profile default aligned with Digital Health Act integrated-system expectations, not a universal private-sector retention mandate. Private deployments require operator/legal confirmation of retention policy.",
+    "No ODPC-specific audit retention period identified; Solum uses a conservative evidence-retention period (7300 days), not a claimed statutory minimum.",
+    "Research and secondary-use purposes require separate lawful basis and governance approval; they are not implied by clinical-care consent. Research is optional_purposes only.",
+    "Empty permitted_destinations intentionally enforces fail-closed behaviour for cross-border transfers. Listed mechanisms are pathways, not permits. Populate destinations only after TIA + operator approval + contract/safeguards.",
+    "Solum provides technical controls for lawful processing. Obligations to register, submit, disclose, or report health information (incl. National Health Data Bank) remain with the data controller/operator. HDB integration / automatic submission / regulatory registration are explicit non-goals.",
+    "Edge / offline (engineering policy pending field wiring): offline_cache_region must equal deployment_region (KE); encrypted local cache only; no master keys on Pi; customer_held keys; on consent.unknown / unreconciled revoke prefer restrict non-emergency processing until sync.",
 ]

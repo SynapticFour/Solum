@@ -60,7 +60,7 @@ Declarative TOML under [`config/profiles/`](../config/profiles/) (Ferrum Lab Kit
 | Profile file | Intent |
 |--------------|--------|
 | `eu-ehds.toml` | **Present** — EU EHDS Annex II orientation, EEHRxF preparation |
-| `kenya-dpa.toml` | Planned — Kenya DPA + digital health framework |
+| `kenya-dpa.toml` | **Present** — PROVISIONAL-PRODUCTION-CANDIDATE (non-counsel Vorprüfung; real counsel still required) |
 | `nigeria-ndpa.toml` | Planned — Nigeria NDPA-oriented controls |
 | `south-africa-popia.toml` | Planned — POPIA-oriented controls |
 

@@ -58,7 +58,7 @@ pub enum ConsentStatus {
 #[derive(Debug, Error)]
 pub enum ConsentError {
     #[error(
-        "purpose '{purpose}' is not among the jurisdiction profile's required_purposes {allowed:?}"
+        "purpose '{purpose}' is not among the jurisdiction profile's required_purposes/optional_purposes {allowed:?}"
     )]
     PurposeNotRecognised {
         purpose: String,
@@ -235,20 +235,23 @@ impl ConsentStore {
 }
 
 /// Validate that `purpose` is one the active jurisdiction profile
-/// recognises. Call before [`ConsentStore::grant`] so an unrecognised
-/// purpose fails before it is persisted, not after.
+/// recognises (`required_purposes` ∪ `optional_purposes`). Call before
+/// [`ConsentStore::grant`] so an unrecognised purpose fails before it is
+/// persisted, not after.
 pub fn validate_purpose(profile: &JurisdictionProfile, purpose: &str) -> Result<(), ConsentError> {
-    if profile
+    let allowed: Vec<String> = profile
         .consent
         .required_purposes
         .iter()
-        .any(|p| p == purpose)
-    {
+        .chain(profile.consent.optional_purposes.iter())
+        .cloned()
+        .collect();
+    if allowed.iter().any(|p| p == purpose) {
         Ok(())
     } else {
         Err(ConsentError::PurposeNotRecognised {
             purpose: purpose.to_string(),
-            allowed: profile.consent.required_purposes.clone(),
+            allowed,
         })
     }
 }
