@@ -121,6 +121,8 @@ curl -sS "$BASE/v1/consent/status?subject=patient%2F42&purpose=care_provision" \
   -H "X-Solum-Sidecar-Token: $TOKEN"
 # → {"status":"granted"|"revoked"|"unknown"}
 
+**Ferrum (H2.1 Teeth):** When Ferrum is configured with `FERRUM_SOLUM__BASE_URL` pointing at this sidecar and a shared sidecar token, the gateway calls this status endpoint before bound DRS byte access and WES `POST /runs`. Only `granted` allows; `revoked` / `unknown` / unreachable sidecar → Ferrum **403**. Status remains token-gated (no `CAP_*`). See Showcase [ADR 0001](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/adr/0001-solum-ferrum-consent-access.md) and Ferrum [customer-runbook](https://github.com/SynapticFour/Ferrum/blob/main/docs/customer-runbook.md).
+
 curl -sS -X POST "$BASE/v1/consent/revoke" \
   -H "Content-Type: application/json" \
   -H "X-Solum-Sidecar-Token: $TOKEN" \

@@ -18,6 +18,10 @@ Ferrum is the GA4GH-oriented genomic platform. Solum is a clinical **compliance 
 - Become a durable clinical data lake — storage remains with the operator’s systems of record.
 - Re-host Ferrum’s Crypt4GH *proxy* / DRS re-wrap service (Solum uses the format; Ferrum owns genomic object delivery).
 
+## Consent status → Ferrum (H2.1)
+
+Ferrum may poll `GET /v1/consent/status` (sidecar token) to enforce purpose-bound deny on DRS/WES when `[solum]` is enabled. Solum remains the system of record for grant/revoke; Ferrum does not store consent. Contract: Showcase [ADR 0001](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/adr/0001-solum-ferrum-consent-access.md).
+
 ## Upstream references
 
 - Ferrum platform: <https://github.com/SynapticFour/Ferrum>
