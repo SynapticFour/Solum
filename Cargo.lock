@@ -4074,8 +4074,11 @@ dependencies = [
 name = "solum-identity"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "solum-crypto",
  "thiserror 1.0.69",
+ "toml",
 ]
 
 [[package]]
@@ -4108,10 +4111,16 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "clap 4.6.4",
+ "jsonwebtoken",
+ "rand 0.8.7",
  "reqwest",
+ "rsa",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "solum-auth-verify",
  "solum-core",
+ "solum-identity",
  "subtle",
  "tempfile",
  "tokio",

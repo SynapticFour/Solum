@@ -85,12 +85,19 @@ pub struct VerifiedClaims {
     pub subject: String,
     pub issuer: Option<String>,
     pub exp: Option<i64>,
+    /// Whitespace-split OAuth `scope` claim (unchanged Sprint-5 behaviour).
     pub scopes: Vec<String>,
+    /// Top-level `groups` claim when present (string or string array).
+    pub groups: Vec<String>,
+    /// Full JWT claims object for org-IAM `claim_path` extraction.
+    pub claims: serde_json::Map<String, serde_json::Value>,
     pub actor_source: ActorSource,
 }
 
 impl VerifiedClaims {
     /// Build a [`SolumActor`] using the preset-chosen [`ActorSource`].
+    ///
+    /// Scopes come from the JWT `scope` claim only (not org-IAM group mapping).
     pub fn into_solum_actor(self) -> SolumActor {
         SolumActor {
             subject_id: self.subject,
@@ -98,6 +105,12 @@ impl VerifiedClaims {
             source: self.actor_source,
             scopes: self.scopes,
         }
+    }
+
+    /// Claim values at `path` (ADS-style), for org-IAM CAP mapping.
+    pub fn claim_values(&self, path: &str) -> Vec<String> {
+        let value = serde_json::Value::Object(self.claims.clone());
+        solum_identity::claim_values_from_json(&value, path)
     }
 }
 
@@ -212,11 +225,41 @@ impl JwksVerifier {
             })
             .unwrap_or_default();
 
+        let mut claims_map = data.claims.rest;
+        claims_map
+            .entry("sub".to_string())
+            .or_insert_with(|| serde_json::Value::String(subject.clone()));
+        if let Some(ref iss) = data.claims.iss {
+            claims_map
+                .entry("iss".to_string())
+                .or_insert_with(|| serde_json::Value::String(iss.clone()));
+        }
+        if let Some(exp) = data.claims.exp {
+            claims_map
+                .entry("exp".to_string())
+                .or_insert_with(|| serde_json::json!(exp));
+        }
+        if let Some(ref scope) = data.claims.scope {
+            claims_map
+                .entry("scope".to_string())
+                .or_insert_with(|| serde_json::Value::String(scope.clone()));
+        }
+        if let Some(ref aud) = data.claims.aud {
+            claims_map
+                .entry("aud".to_string())
+                .or_insert_with(|| aud.clone());
+        }
+
+        let claims_value = serde_json::Value::Object(claims_map.clone());
+        let groups = solum_identity::claim_values_from_json(&claims_value, "groups");
+
         Ok(VerifiedClaims {
             subject,
             issuer: data.claims.iss,
             exp: data.claims.exp,
             scopes,
+            groups,
+            claims: claims_map,
             actor_source: self.config.actor_source.clone(),
         })
     }
@@ -233,6 +276,9 @@ struct RawClaims {
     #[serde(default)]
     #[allow(dead_code)]
     aud: Option<serde_json::Value>,
+    /// Remaining claims (`groups`, nested objects, custom IdP fields).
+    #[serde(flatten)]
+    rest: serde_json::Map<String, serde_json::Value>,
 }
 
 fn map_decode_error(err: jsonwebtoken::errors::Error) -> AuthVerifyError {
@@ -378,6 +424,54 @@ mod tests {
         assert_eq!(
             actor.to_audit_string(),
             "ferrum:passport:researcher@example.org"
+        );
+    }
+
+    #[test]
+    fn extracts_groups_claim_array() {
+        let key = mint_rsa_material();
+        let t = now_secs();
+        let token = sign_rs256(
+            &key,
+            json!({
+                "sub": "alice",
+                "exp": t + 3600,
+                "groups": ["solum-consent-ops", "staff"],
+            }),
+        );
+        let verifier =
+            JwksVerifier::from_jwks_json(&key.jwks_json, VerifyConfig::for_ferrum_passport())
+                .unwrap();
+        let claims = verifier.verify(&token).expect("verify");
+        assert_eq!(
+            claims.groups,
+            vec!["solum-consent-ops".to_string(), "staff".to_string()]
+        );
+        assert_eq!(
+            claims.claim_values("groups"),
+            vec!["solum-consent-ops".to_string(), "staff".to_string()]
+        );
+    }
+
+    #[test]
+    fn extracts_dotted_realm_access_roles() {
+        let key = mint_rsa_material();
+        let t = now_secs();
+        let token = sign_rs256(
+            &key,
+            json!({
+                "sub": "bob",
+                "exp": t + 3600,
+                "realm_access": { "roles": ["researcher", "admin"] },
+            }),
+        );
+        let verifier =
+            JwksVerifier::from_jwks_json(&key.jwks_json, VerifyConfig::for_ferrum_passport())
+                .unwrap();
+        let claims = verifier.verify(&token).expect("verify");
+        assert_eq!(
+            claims.claim_values("realm_access.roles"),
+            vec!["researcher".to_string(), "admin".to_string()]
         );
     }
 

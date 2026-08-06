@@ -123,6 +123,32 @@ curl -sS "$BASE/v1/consent/status?subject=patient%2F42&purpose=care_provision" \
 
 **Ferrum (H2.1 Teeth):** When Ferrum is configured with `FERRUM_SOLUM__BASE_URL` pointing at this sidecar and a shared sidecar token, the gateway calls this status endpoint before bound DRS byte access and WES `POST /runs`. Only `granted` allows; `revoked` / `unknown` / unreachable sidecar → Ferrum **403**. Status remains token-gated (no `CAP_*`). See Showcase [ADR 0001](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/adr/0001-solum-ferrum-consent-access.md) and Ferrum [customer-runbook](https://github.com/SynapticFour/Ferrum/blob/main/docs/customer-runbook.md).
 
+### Org IAM (H2.2) — OIDC groups → CAP_*
+
+When started with `--org-iam-config` (plus `--jwks-url` or `--jwks-file`), mutating routes **ignore** body `capability[]` and require `Authorization: Bearer <jwt>`. Groups (or another `claim_path`) are mapped to Solum CAP strings via TOML (example: `config/org-iam/pilot-groups.toml`). Sidecar token remains required. CLI keeps `--capability` for offline ops.
+
+```bash
+solum-sidecar \
+  --org-iam-config config/org-iam/pilot-groups.toml \
+  --jwks-url http://localhost:8180/jwks.json \
+  --oidc-issuer http://localhost:8180 \
+  ...
+
+curl -sS -X POST "$BASE/v1/consent/grant" \
+  -H "Content-Type: application/json" \
+  -H "X-Solum-Sidecar-Token: $TOKEN" \
+  -H "Authorization: Bearer $OIDC_ACCESS_TOKEN" \
+  -d '{
+    "subject": "patient/42",
+    "purpose": "care_provision",
+    "actor": "display-only",
+    "capability": [],
+    "scope": ["patient_summary"]
+  }'
+```
+
+Contract: Showcase [ADR 0002](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/adr/0002-solum-org-iam-cap.md).
+
 curl -sS -X POST "$BASE/v1/consent/revoke" \
   -H "Content-Type: application/json" \
   -H "X-Solum-Sidecar-Token: $TOKEN" \

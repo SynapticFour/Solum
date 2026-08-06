@@ -28,8 +28,10 @@
 //!
 //! 1. **Sidecar gate** — shared secret header (`X-Solum-Sidecar-Token`),
 //!    constant-time compare. Fail → 401, no `Deployment` call.
-//! 2. **GTM-1** — `actor` + `capability[]` → [`SolumActor`] (same as CLI
-//!    `cli_actor`), checked inside `*_as`. Fail → 403, no side effect.
+//! 2. **GTM-1 capabilities** — default: body `capability[]` → [`SolumActor`]
+//!    (same as CLI). **H2.2 org-IAM mode:** Bearer JWT verified via JWKS;
+//!    OIDC groups mapped to `CAP_*` from a TOML file; body `capability[]`
+//!    ignored. Fail → 403, no side effect.
 
 #![forbid(unsafe_code)]
 
@@ -47,6 +49,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use solum_auth_verify::{JwksVerifier, VerifyConfig};
 use solum_core::audit::FileAuditStore;
 use solum_core::crypto::{
     Crypt4ghKeyProvider, Crypt4ghKeys, CustomerHeldKeyProvider, EncryptedField,
@@ -55,6 +58,7 @@ use solum_core::crypto::{
 use solum_core::{
     example_eu_runtime, query_consent_status, ActorSource, Deployment, SolumActor, SolumError,
 };
+use solum_identity::OrgCapMapping;
 use subtle::ConstantTimeEq;
 use tower_http::trace::TraceLayer;
 
@@ -219,6 +223,15 @@ pub struct AppState {
     consent_path: PathBuf,
     /// Raw shared-secret bytes (from env); compared with [`subtle::ConstantTimeEq`].
     token: Vec<u8>,
+    /// When set, mutating routes derive CAP_* from verified JWT groups (H2.2).
+    org_iam: Option<OrgIamRuntime>,
+}
+
+/// Org-IAM runtime: JWKS verifier + group→CAP mapping.
+#[derive(Clone)]
+pub struct OrgIamRuntime {
+    mapping: OrgCapMapping,
+    verifier: JwksVerifier,
 }
 
 /// Startup configuration (CLI flags / env).
@@ -233,6 +246,16 @@ pub struct SidecarConfig {
     pub keys_dir: Option<PathBuf>,
     /// Dev-only ephemeral keys (conflicts with `keys_dir` at the CLI layer).
     pub ephemeral: bool,
+    /// Org-IAM mapping TOML (`config/org-iam/*.toml`). Enables H2.2 mode when set.
+    pub org_iam_config: Option<PathBuf>,
+    /// JWKS URL (used when org-IAM is enabled). Env: `SOLUM_ORG_IAM_JWKS_URL`.
+    pub jwks_url: Option<String>,
+    /// Local JWKS JSON file (alternative to URL). Env: `SOLUM_ORG_IAM_JWKS_FILE`.
+    pub jwks_file: Option<PathBuf>,
+    /// Expected JWT issuer when org-IAM is enabled.
+    pub oidc_issuer: Option<String>,
+    /// Optional JWT audience (standalone OIDC).
+    pub oidc_audience: Option<String>,
 }
 
 impl SidecarConfig {
@@ -329,7 +352,7 @@ fn load_customer_held_from_dir(dir: &Path) -> Result<CustomerHeldKeyProvider, St
 }
 
 /// Build [`AppState`] (validates custody flags, profile, opens stores).
-pub fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String> {
+pub async fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String> {
     if config.token.is_empty() {
         return Err("sidecar token must not be empty (set SOLUM_SIDECAR_TOKEN)".into());
     }
@@ -340,6 +363,8 @@ pub fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String> {
     if !config.ephemeral && config.keys_dir.is_none() {
         return Err("either --keys-dir or --ephemeral required".into());
     }
+
+    let org_iam = load_org_iam(config).await?;
 
     let (keys, custody) = if config.ephemeral {
         require_ephemeral_gate()?;
@@ -379,7 +404,47 @@ pub fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String> {
         audit_path: config.audit.clone(),
         consent_path: config.consent_store.clone(),
         token: config.token.as_bytes().to_vec(),
+        org_iam,
     }))
+}
+
+async fn load_org_iam(config: &SidecarConfig) -> Result<Option<OrgIamRuntime>, String> {
+    let Some(path) = config.org_iam_config.as_ref() else {
+        return Ok(None);
+    };
+    let mapping = OrgCapMapping::load_from_path(path)?;
+    let verify_config = if let Some(aud) = config.oidc_audience.as_ref() {
+        let issuer = config
+            .oidc_issuer
+            .clone()
+            .ok_or_else(|| "org-IAM with --oidc-audience requires --oidc-issuer".to_string())?;
+        VerifyConfig::for_standalone_oidc(issuer, aud.clone())
+    } else {
+        let mut cfg = VerifyConfig::for_ferrum_passport();
+        cfg.expected_issuer = config.oidc_issuer.clone();
+        cfg
+    };
+
+    let verifier = if let Some(file) = config.jwks_file.as_ref() {
+        let json = std::fs::read_to_string(file)
+            .map_err(|e| format!("failed to read JWKS file {}: {e}", file.display()))?;
+        JwksVerifier::from_jwks_json(&json, verify_config).map_err(|e| e.to_string())?
+    } else if let Some(url) = config.jwks_url.as_ref() {
+        JwksVerifier::from_url(url, verify_config)
+            .await
+            .map_err(|e| e.to_string())?
+    } else {
+        return Err(
+            "org-IAM requires --jwks-url or --jwks-file when --org-iam-config is set".into(),
+        );
+    };
+
+    tracing::info!(
+        claim_path = %mapping.claim_path,
+        entries = mapping.entries.len(),
+        "org-IAM enabled (H2.2): Bearer JWT groups → CAP_*"
+    );
+    Ok(Some(OrgIamRuntime { mapping, verifier }))
 }
 
 /// Axum router with auth middleware and `/v1/*` routes.
@@ -411,6 +476,72 @@ pub fn sidecar_actor(subject_id: String, capabilities: Vec<String>) -> SolumActo
         source: ActorSource::LocalDev,
         scopes: capabilities,
     }
+}
+
+/// Resolve the actor for a mutating request (org-IAM or client capability[]).
+fn resolve_mutating_actor(
+    state: &AppState,
+    headers: &HeaderMap,
+    body_actor: String,
+    body_capability: Vec<String>,
+) -> Result<SolumActor, Box<Response>> {
+    let Some(org) = state.org_iam.as_ref() else {
+        return Ok(sidecar_actor(body_actor, body_capability));
+    };
+
+    let bearer = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| {
+            v.strip_prefix("Bearer ")
+                .or_else(|| v.strip_prefix("bearer "))
+        })
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+
+    let Some(token) = bearer else {
+        return Err(Box::new(
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(ErrorBody {
+                    error: "unauthorized".into(),
+                    message: "org-IAM requires Authorization: Bearer <jwt>".into(),
+                }),
+            )
+                .into_response(),
+        ));
+    };
+
+    let verified = match org.verifier.verify(token) {
+        Ok(v) => v,
+        Err(e) => {
+            return Err(Box::new(
+                (
+                    StatusCode::UNAUTHORIZED,
+                    Json(ErrorBody {
+                        error: "unauthorized".into(),
+                        message: format!("org-IAM JWT verify failed: {e}"),
+                    }),
+                )
+                    .into_response(),
+            ));
+        }
+    };
+
+    let claim_vals = verified.claim_values(&org.mapping.claim_path);
+    let scopes = org.mapping.resolve_capabilities(&claim_vals);
+    // body.capability intentionally ignored in org-IAM mode
+    let _ = body_capability;
+    Ok(SolumActor {
+        subject_id: verified.subject,
+        display: if body_actor.is_empty() {
+            None
+        } else {
+            Some(body_actor)
+        },
+        source: verified.actor_source,
+        scopes,
+    })
 }
 
 async fn sidecar_token_middleware(
@@ -610,9 +741,13 @@ struct AuditVerifyResponse {
 
 async fn consent_grant(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(body): Json<ConsentGrantRequest>,
 ) -> Response {
-    let actor = sidecar_actor(body.actor, body.capability);
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
     let mut deployment = match state.deployment.lock() {
         Ok(g) => g,
         Err(_) => {
@@ -634,9 +769,13 @@ async fn consent_grant(
 
 async fn consent_revoke(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(body): Json<ConsentRevokeRequest>,
 ) -> Response {
-    let actor = sidecar_actor(body.actor, body.capability);
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
     let mut deployment = match state.deployment.lock() {
         Ok(g) => g,
         Err(_) => {
@@ -689,6 +828,7 @@ async fn consent_status(
 
 async fn crypto_encrypt(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(body): Json<EncryptRequest>,
 ) -> Response {
     let plaintext = match base64::engine::general_purpose::STANDARD.decode(&body.plaintext_base64) {
@@ -708,7 +848,10 @@ async fn crypto_encrypt(
     if let Err(resp) = ensure_ephemeral_key_for_encrypt(&state.keys, &key_ref) {
         return *resp;
     }
-    let actor = sidecar_actor(body.actor, body.capability);
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
     let mut deployment = match state.deployment.lock() {
         Ok(g) => g,
         Err(_) => {
@@ -736,10 +879,14 @@ async fn crypto_encrypt(
 
 async fn crypto_decrypt(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(body): Json<DecryptRequest>,
 ) -> Response {
     let key_ref = KeyRef::new(body.key_ref);
-    let actor = sidecar_actor(body.actor, body.capability);
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
     let mut deployment = match state.deployment.lock() {
         Ok(g) => g,
         Err(_) => {
@@ -830,7 +977,7 @@ async fn audit_verify(State(state): State<Arc<AppState>>) -> Response {
 
 /// Serve the router on `config.bind` until the process is stopped.
 pub async fn serve(config: SidecarConfig) -> Result<(), String> {
-    let state = build_state(&config)?;
+    let state = build_state(&config).await?;
     let app = app_router(state);
     let listener = tokio::net::TcpListener::bind(config.bind)
         .await

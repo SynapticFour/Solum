@@ -52,6 +52,27 @@ struct Cli {
     /// that lists `ephemeral_test` (e.g. `dev-local.toml`).
     #[arg(long, default_value_t = false, conflicts_with = "keys_dir")]
     ephemeral: bool,
+
+    /// Org-IAM mapping TOML (H2.2). When set, mutating routes require Bearer JWT
+    /// and derive CAP_* from OIDC groups (body capability[] ignored).
+    #[arg(long = "org-iam-config", env = "SOLUM_ORG_IAM_CONFIG")]
+    org_iam_config: Option<PathBuf>,
+
+    /// JWKS URL for org-IAM JWT verification.
+    #[arg(long = "jwks-url", env = "SOLUM_ORG_IAM_JWKS_URL")]
+    jwks_url: Option<String>,
+
+    /// Local JWKS JSON file (alternative to --jwks-url).
+    #[arg(long = "jwks-file", env = "SOLUM_ORG_IAM_JWKS_FILE")]
+    jwks_file: Option<PathBuf>,
+
+    /// Expected JWT issuer (optional for Ferrum Passport style; required with --oidc-audience).
+    #[arg(long = "oidc-issuer", env = "SOLUM_ORG_IAM_ISSUER")]
+    oidc_issuer: Option<String>,
+
+    /// Optional JWT audience (standalone OIDC).
+    #[arg(long = "oidc-audience", env = "SOLUM_ORG_IAM_AUDIENCE")]
+    oidc_audience: Option<String>,
 }
 
 #[tokio::main]
@@ -73,6 +94,11 @@ async fn main() -> ExitCode {
         token: cli.token,
         keys_dir: cli.keys_dir,
         ephemeral: cli.ephemeral,
+        org_iam_config: cli.org_iam_config,
+        jwks_url: cli.jwks_url,
+        jwks_file: cli.jwks_file,
+        oidc_issuer: cli.oidc_issuer,
+        oidc_audience: cli.oidc_audience,
     };
 
     match serve(config).await {

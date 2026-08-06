@@ -18,6 +18,8 @@ clap = { workspace = true, features = ["derive", "env"] }
 serde.workspace = true
 serde_json.workspace = true
 solum-core.workspace = true
+solum-identity.workspace = true
+solum-auth-verify = { workspace = true, features = ["http"] }
 subtle = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
 tower = "0.5"
@@ -31,3 +33,8 @@ base64 = "0.22"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tempfile.workspace = true
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+rand = "0.8"
+rsa = { version = "0.9", features = ["pem"] }
+sha2.workspace = true
+serde_json.workspace = true

@@ -40,6 +40,7 @@ fn write_keypair_file(dir: &Path, key_ref: &str) -> PathBuf {
 }
 
 /// Ephemeral sidecar: `--ephemeral` + env gate + `dev-local` profile.
+#[allow(clippy::await_holding_lock)] // env gate must stay set for the whole build_state
 async fn spawn_ephemeral_sidecar(token: &str) -> (SocketAddr, tempfile::TempDir) {
     let _guard = env_lock().lock().unwrap();
     std::env::set_var("SOLUM_ALLOW_EPHEMERAL", "1");
@@ -52,8 +53,13 @@ async fn spawn_ephemeral_sidecar(token: &str) -> (SocketAddr, tempfile::TempDir)
         token: token.to_string(),
         keys_dir: None,
         ephemeral: true,
+        org_iam_config: None,
+        jwks_url: None,
+        jwks_file: None,
+        oidc_issuer: None,
+        oidc_audience: None,
     };
-    let state = build_state(&config).expect("build_state ephemeral");
+    let state = build_state(&config).await.expect("build_state ephemeral");
     // SOLUM_ALLOW_EPHEMERAL is read only synchronously inside build_state()
     // (require_ephemeral_gate()); app_router() and the TCP bind do not touch
     // the env var. Release before the first .await so we do not hold
@@ -85,8 +91,15 @@ async fn spawn_customer_held_sidecar(
         token: token.to_string(),
         keys_dir: Some(keys_dir),
         ephemeral: false,
+        org_iam_config: None,
+        jwks_url: None,
+        jwks_file: None,
+        oidc_issuer: None,
+        oidc_audience: None,
     };
-    let state = build_state(&config).expect("build_state customer-held");
+    let state = build_state(&config)
+        .await
+        .expect("build_state customer-held");
     let app = app_router(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -486,8 +499,8 @@ async fn customer_held_unknown_key_ref_does_not_auto_generate() {
     );
 }
 
-#[test]
-fn build_state_requires_keys_dir_or_ephemeral() {
+#[tokio::test]
+async fn build_state_requires_keys_dir_or_ephemeral() {
     let dir = tempdir().unwrap();
     let err = match build_state(&SidecarConfig {
         bind: "127.0.0.1:0".parse().unwrap(),
@@ -497,7 +510,14 @@ fn build_state_requires_keys_dir_or_ephemeral() {
         token: "tok".into(),
         keys_dir: None,
         ephemeral: false,
-    }) {
+        org_iam_config: None,
+        jwks_url: None,
+        jwks_file: None,
+        oidc_issuer: None,
+        oidc_audience: None,
+    })
+    .await
+    {
         Ok(_) => panic!("must require custody flag"),
         Err(e) => e,
     };
@@ -507,8 +527,9 @@ fn build_state_requires_keys_dir_or_ephemeral() {
     );
 }
 
-#[test]
-fn build_state_ephemeral_requires_allow_env() {
+#[tokio::test]
+#[allow(clippy::await_holding_lock)] // env must stay unset for the whole build_state
+async fn build_state_ephemeral_requires_allow_env() {
     let _guard = env_lock().lock().unwrap();
     std::env::remove_var("SOLUM_ALLOW_EPHEMERAL");
     let dir = tempdir().unwrap();
@@ -520,11 +541,181 @@ fn build_state_ephemeral_requires_allow_env() {
         token: "tok".into(),
         keys_dir: None,
         ephemeral: true,
-    }) {
+        org_iam_config: None,
+        jwks_url: None,
+        jwks_file: None,
+        oidc_issuer: None,
+        oidc_audience: None,
+    })
+    .await
+    {
         Ok(_) => panic!("must require SOLUM_ALLOW_EPHEMERAL"),
         Err(e) => e,
     };
     assert!(err.contains("SOLUM_ALLOW_EPHEMERAL"), "err={err}");
     // Restore for sibling ephemeral HTTP tests that may run after in the same process.
     std::env::set_var("SOLUM_ALLOW_EPHEMERAL", "1");
+}
+
+// --- H2.2 org-IAM ---
+
+fn mint_rsa_jwks_and_token(groups: &[&str]) -> (PathBuf, String, tempfile::TempDir) {
+    use base64::Engine;
+    use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+    use rand::rngs::OsRng;
+    use rsa::pkcs8::{EncodePrivateKey, LineEnding};
+    use rsa::traits::PublicKeyParts;
+    use rsa::{RsaPrivateKey, RsaPublicKey};
+    use serde_json::json;
+    use sha2::{Digest, Sha256};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let dir = tempdir().unwrap();
+    let mut rng = OsRng;
+    let private = RsaPrivateKey::new(&mut rng, 2048).unwrap();
+    let public = RsaPublicKey::from(&private);
+    let pem = private.to_pkcs8_pem(LineEnding::LF).unwrap().to_string();
+    let encoding = EncodingKey::from_rsa_pem(pem.as_bytes()).unwrap();
+    let n = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(public.n().to_bytes_be());
+    let e = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(public.e().to_bytes_be());
+    let kid = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(Sha256::digest(public.n().to_bytes_be()));
+    let jwks = json!({
+        "keys": [{
+            "kty": "RSA",
+            "kid": kid,
+            "use": "sig",
+            "alg": "RS256",
+            "n": n,
+            "e": e,
+        }]
+    });
+    let jwks_path = dir.path().join("jwks.json");
+    std::fs::write(&jwks_path, jwks.to_string()).unwrap();
+
+    let t = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let mut header = Header::new(Algorithm::RS256);
+    header.kid = Some(kid);
+    let token = encode(
+        &header,
+        &json!({
+            "sub": "practitioner/org-iam",
+            "exp": t + 3600,
+            "groups": groups,
+        }),
+        &encoding,
+    )
+    .unwrap();
+    (jwks_path, token, dir)
+}
+
+#[allow(clippy::await_holding_lock)]
+async fn spawn_org_iam_sidecar(
+    token: &str,
+    jwks_file: PathBuf,
+    mapping_path: PathBuf,
+) -> (SocketAddr, tempfile::TempDir) {
+    let _guard = env_lock().lock().unwrap();
+    std::env::set_var("SOLUM_ALLOW_EPHEMERAL", "1");
+    let dir = tempdir().unwrap();
+    let config = SidecarConfig {
+        bind: "127.0.0.1:0".parse().unwrap(),
+        profile: dev_local_profile(),
+        audit: dir.path().join("audit.jsonl"),
+        consent_store: dir.path().join("consent.jsonl"),
+        token: token.to_string(),
+        keys_dir: None,
+        ephemeral: true,
+        org_iam_config: Some(mapping_path),
+        jwks_url: None,
+        jwks_file: Some(jwks_file),
+        oidc_issuer: None,
+        oidc_audience: None,
+    };
+    let state = build_state(&config).await.expect("build_state org-iam");
+    drop(_guard);
+    let app = app_router(state);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    (addr, dir)
+}
+
+#[tokio::test]
+async fn org_iam_grant_with_mapped_group() {
+    let mapping =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/org-iam/pilot-groups.toml");
+    let (jwks, jwt, _keydir) = mint_rsa_jwks_and_token(&["solum-consent-ops"]);
+    let token = "org-iam-secret";
+    let (addr, _dir) = spawn_org_iam_sidecar(token, jwks, mapping).await;
+    let url = format!("http://{addr}/v1/consent/grant");
+    let res = client()
+        .post(&url)
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .header("Authorization", format!("Bearer {jwt}"))
+        .json(&serde_json::json!({
+            "subject": "patient/42",
+            "purpose": "care_provision",
+            "actor": "ignored-for-caps",
+            "capability": [],
+            "scope": ["patient_summary"]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201, "body={}", res.text().await.unwrap());
+}
+
+#[tokio::test]
+async fn org_iam_rejects_capability_only_without_group() {
+    let mapping =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/org-iam/pilot-groups.toml");
+    let (jwks, jwt, _keydir) = mint_rsa_jwks_and_token(&["unrelated-group"]);
+    let token = "org-iam-secret-deny";
+    let (addr, _dir) = spawn_org_iam_sidecar(token, jwks, mapping).await;
+    let url = format!("http://{addr}/v1/consent/grant");
+    let res = client()
+        .post(&url)
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .header("Authorization", format!("Bearer {jwt}"))
+        .json(&serde_json::json!({
+            "subject": "patient/42",
+            "purpose": "care_provision",
+            "actor": "attacker",
+            "capability": ["solum:consent:grant"],
+            "scope": ["patient_summary"]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 403, "body={}", res.text().await.unwrap());
+}
+
+#[tokio::test]
+async fn org_iam_requires_bearer() {
+    let mapping =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/org-iam/pilot-groups.toml");
+    let (jwks, _jwt, _keydir) = mint_rsa_jwks_and_token(&["solum-consent-ops"]);
+    let token = "org-iam-secret-nobearer";
+    let (addr, _dir) = spawn_org_iam_sidecar(token, jwks, mapping).await;
+    let url = format!("http://{addr}/v1/consent/grant");
+    let res = client()
+        .post(&url)
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "subject": "patient/42",
+            "purpose": "care_provision",
+            "actor": "practitioner/7",
+            "capability": ["solum:consent:grant"],
+            "scope": ["patient_summary"]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 401, "body={}", res.text().await.unwrap());
 }

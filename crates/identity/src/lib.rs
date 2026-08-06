@@ -34,6 +34,10 @@
 
 #![forbid(unsafe_code)]
 
+mod org_cap;
+
+pub use org_cap::{claim_values_from_json, OrgCapMapEntry, OrgCapMapping};
+
 use thiserror::Error;
 
 /// Where a [`SolumActor`] was constructed from (auth world), not a storage tag.
