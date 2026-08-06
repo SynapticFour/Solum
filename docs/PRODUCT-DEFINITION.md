@@ -9,11 +9,13 @@ This document is the in-repo product anchor for contributors and operators. It s
 | | [Ferrum](https://github.com/SynapticFour/Ferrum) | **Solum** |
 |---|---|---|
 | Domain | Genomic / -omic data under GA4GH | Clinical electronic health data |
-| Role | Platform services for genomic exchange | **Compliance layer**: enforce, translate, and evidence conforming processing/exchange |
-| Persistence | Data platform (operator-deployed) | Does **not** own durable clinical storage — works with data wherever it already lives |
+| Role | Platform services for genomic exchange | **Compliance layer** *and* (optionally) **clinical data plane**: enforce, translate, evidence — and, when enabled, persist clinical content via open standards |
+| Persistence | Data platform (operator-deployed) | **Track A (default):** does not replace the EHR — works with data wherever it already lives (sidecar). **Track B (planned):** optional openEHR CDR + FHIR APIs as a standards-native clinical store so sites can migrate *toward* Solum over time |
 | Docs | GA4GH / Crypt4GH / genomic EHDS notes | Links to Ferrum for GA4GH; does not duplicate it |
 
 Both share a sovereignty philosophy (customer-held control, open standards, no lock-in to proprietary interchange formats) but are **separate brands, repositories, and regulatory perimeters**.
+
+**Why Track B exists:** a pure EHDS/compliance shim is valuable early and vulnerable later as incumbents catch up. An optional openEHR-backed clinical store (APIs for others to build EHR UIs — **not** a full Synaptic Four EHR product) makes Solum a durable home for clinical data beside Ferrum genomics, with an explicit wrap → mirror → prefer → cut-over migration path. See the portfolio [coordinated roadmap](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/COORDINATED-PORTFOLIO-ROADMAP.md).
 
 ## 2. Markets
 
@@ -72,10 +74,11 @@ Solum prepares stable export shapes (`solum-audit`) and intends to consume HELIO
 
 ## 8. Roadmap stages
 
-See [roadmap.md](roadmap.md).
+See [roadmap.md](roadmap.md) and the portfolio [coordinated roadmap](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/COORDINATED-PORTFOLIO-ROADMAP.md).
 
-- **Stage 1 (build now):** secure processing controls, consent/access-rights management, evidence generation hooks, profile system (EU profile + extensible schema).
-- **Stage 2 (planned):** deeper FHIR/IHE EEHRxF category coverage, openEHR depth, SaaS operating model on stage-1 foundations, additional jurisdiction profiles on demand.
+- **Stage 1 (build now / Track A):** secure processing controls, consent/access-rights management, evidence generation hooks, profile system (EU profile + extensible schema), sidecar for legacy EHR wrap.
+- **Stage 2 (planned / Track B start):** deeper FHIR/IHE EEHRxF category coverage, **openEHR CDR MVP + migration toolkit** (mirror/cut-over), additional jurisdiction profiles; SaaS *preparedness* (tenancy/key boundaries) without SaaS as default delivery.
+- **Not planned as Solum:** a full hospital EHR UI, diagnostic/therapeutic decision support, or absorbing Ferrum’s genomic platform.
 
 ## 9. Certification partner model (concept)
 
