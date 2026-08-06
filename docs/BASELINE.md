@@ -140,7 +140,7 @@ From `crates/fhir/src/patient_summary.rs` (`ANNAHME` markers). These are stage-1
 
 ### CLI crypto — CustomerHeld `--keypair` vs gated ephemeral
 
-Evaluation / pilot CLI path: `crypto keygen` + `--keypair` (CustomerHeld file, 0600 on Unix). Ephemeral (`--ephemeral`) requires `SOLUM_ALLOW_EPHEMERAL=1` and a profile allowing `ephemeral_test` (`dev-local.toml`); pilot profiles refuse `EphemeralTest` custody. Ephemeral sidecars remain plaintext JSON (0600 on Unix). Not an HSM; zeroize-on-drop still open.
+Evaluation / pilot CLI path: `crypto keygen` + `--keypair` (CustomerHeld file, 0600 on Unix). Ephemeral (`--ephemeral`) requires `SOLUM_ALLOW_EPHEMERAL=1` and a profile allowing `ephemeral_test` (`dev-local.toml`); pilot profiles refuse `EphemeralTest` custody. Ephemeral sidecars remain plaintext JSON (0600 on Unix). Not an HSM. Private seeds in `CustomerHeldKeyProvider` / `AwsKmsKeyProvider` use **best-effort `ZeroizeOnDrop`** (H2) — not a TEE.
 
 ### AWS-KMS — library-only; neither CLI nor Sidecar wired
 
@@ -164,7 +164,7 @@ Live HELIOS CLI/API signing is **deferred / not productized** for Stage‑1 eval
 
 ### `AwsKmsKeyProvider` — plaintext seed in memory / no EncryptionContext / no live AWS in CI
 
-`AwsKmsKeyProvider` hält den entschlüsselten Seed als normalen `Vec<u8>` ohne explizites Zeroize-on-Drop — identisch zum bestehenden Verhalten von `CustomerHeldKeyProvider`. Keine KMS-EncryptionContext-Bindung (AAD) für zusätzliche Integritäts-/Policy-Bindung. Keine Live-AWS-Tests in CI (nur aws-smithy-mocks).
+`AwsKmsKeyProvider` hält den entschlüsselten Seed in Prozessspeicher mit **best-effort `ZeroizeOnDrop`** (wie `CustomerHeldKeyProvider`). Keine KMS-EncryptionContext-Bindung (AAD) für zusätzliche Integritäts-/Policy-Bindung. Keine Live-AWS-Tests in CI (nur aws-smithy-mocks).
 
 ### Legacy LIBRARY actor paths skip authorization / keine Capability-Wildcards
 
@@ -201,7 +201,7 @@ Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFI
 | `docs/GTM-READINESS.md` (GTM-1 through GTM-4) | **Vollständig umgesetzt** in this baseline — no longer an open GTM readiness gap; remaining Stage‑2 / post-GTM items above stay open |
 | Migrationspfad / Deprecation für die Legacy-`&str`-Methoden (Library) | GTM-1 design: `*_as` enforced, `&str` legacy intentionally unchecked for library callers — see accepted-risk note; CLI already migrated |
 | Capability-Hierarchien oder Wildcards | GTM-1 exact-match only; no `solum:*` hierarchy |
-| Zeroize-on-Drop für Schlüsselmaterial | Accepted-risk note above; not implemented for CustomerHeld or AwsKms |
+| Zeroize-on-Drop für Schlüsselmaterial | Best-effort `ZeroizeOnDrop` on held seeds (H2); not a TEE |
 | KMS-Provisioning-CLI (`wrap_seed` ist nur Bibliotheks-API) | GTM-3 library surface only; no CLI wrapper |
 | KMS EncryptionContext/AAD-Bindung | See accepted-risk note; not wired |
 

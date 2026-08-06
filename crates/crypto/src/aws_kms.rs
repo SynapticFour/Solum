@@ -25,6 +25,7 @@ use crypt4gh::keys::get_public_key_from_private_key;
 use crypt4gh::Keys;
 
 use crate::{Crypt4ghKeyProvider, CryptoError, KeyRef};
+use zeroize::ZeroizeOnDrop;
 
 /// Re-export for `tests/aws_kms.rs` (`mock_client!(aws_sdk_kms, …)` / SDK types).
 /// Gated with this module behind `aws-kms`; not available in default builds.
@@ -32,7 +33,9 @@ pub use aws_sdk_kms;
 /// Re-export mock harness for the feature-gated integration test.
 pub use aws_smithy_mocks;
 
+#[derive(Clone, ZeroizeOnDrop)]
 struct HeldKeypair {
+    #[zeroize(skip)]
     pubkey: Vec<u8>,
     privkey: Vec<u8>,
 }

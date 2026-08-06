@@ -74,7 +74,7 @@ AWS KMS is an **optional**, feature-gated custody path (default off). It is **no
 **Operational caveats (current baseline):**
 
 - Provisioning helpers exist as a **library API** (`wrap_seed` / `from_wrapped_seed`) — **there is no CLI command** for KMS provisioning yet. ([BASELINE.md](../BASELINE.md) — *Explizit außerhalb*)
-- Unwrapped seed material is held in ordinary process memory **without** explicit zeroize-on-drop. ([BASELINE.md](../BASELINE.md) — accepted risk)
+- Unwrapped seed material is held in ordinary process memory with **best-effort `ZeroizeOnDrop`** (not a TEE). ([BASELINE.md](../BASELINE.md))
 - No KMS EncryptionContext / AAD binding is wired yet. ([BASELINE.md](../BASELINE.md))
 - CI covers mocked KMS behaviour, not live AWS accounts. ([BASELINE.md](../BASELINE.md))
 
@@ -144,7 +144,7 @@ The following are **accepted or open limitations** of the current baseline, rest
 
 4. **IPS / FHIR Patient Summary structural assumptions are unchecked by a FHIR/IPS specialist.** Stage‑1 choices (document/section codes, empty-section encoding, MedicationStatement-only, no IPS terminology binding, display-only author) are **not** claimed IPS IG conformance. Subject-matter review is required before treating this as production interchange. ([BASELINE.md](../BASELINE.md))
 
-5. **No zeroize-on-drop for key material** in customer-held or AWS-KMS-backed providers (plaintext seed / key bytes in ordinary memory). ([BASELINE.md](../BASELINE.md))
+5. **Best-effort zeroize-on-drop only** for key material in customer-held or AWS-KMS-backed providers (not a TEE / memory-dump proof). ([BASELINE.md](../BASELINE.md))
 
 6. **Kenya profile is a draft.** See §7 — not a closed, production-ready jurisdiction package. ([BASELINE.md](../BASELINE.md); [profiles.md](../profiles.md))
 

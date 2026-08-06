@@ -34,6 +34,7 @@ use crypt4gh::keys::{generate_private_key, get_public_key_from_private_key};
 use crypt4gh::{decrypt, encrypt, Keys};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use zeroize::ZeroizeOnDrop;
 
 /// Re-export Crypt4GH key material type used by [`Crypt4ghKeyProvider::private_keys`].
 /// Required so out-of-crate providers (e.g. sidecar shared ephemeral handle) can
@@ -133,8 +134,9 @@ pub trait Crypt4ghKeyProvider {
     fn private_keys(&self, key_ref: &KeyRef) -> Result<Vec<Keys>, CryptoError>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, ZeroizeOnDrop)]
 struct HeldKeypair {
+    #[zeroize(skip)]
     pubkey: Vec<u8>,
     /// 32-byte Crypt4GH private key seed (age-compatible layout as used by crypt4gh-rust).
     privkey: Vec<u8>,

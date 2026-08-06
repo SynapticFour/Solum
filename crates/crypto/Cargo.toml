@@ -29,6 +29,9 @@ tracing.workspace = true
 # workspace [patch.crates-io] — see root Cargo.toml and docs/CRYPTO.md.
 crypt4gh = "0.4.1"
 
+# Best-effort wipe of private seeds when HeldKeypair drops (H2).
+zeroize = { version = "1.8", features = ["derive"] }
+
 # Pin must stay in sync with config/ci/ferrum-revision.txt (full git SHA).
 ferrum-core = { git = "https://github.com/SynapticFour/Ferrum.git", rev = "27a6a8e9a719fd1a171da28b20462a777f95cf65" }
 

@@ -161,7 +161,7 @@ Pilot profiles (`eu-ehds`, `kenya-dpa`) list only `customer_held`. Declaring `Ep
 
 It writes a plaintext `*.ephemeral-keypair.json` sidecar (0600 on Unix). **Never for real patient data or paid evaluations.**
 
-Neither customer-held nor AWS-KMS providers currently implement zeroize-on-drop for key material in memory. ([BASELINE.md](../BASELINE.md))
+Neither customer-held nor AWS-KMS providers claim TEE isolation; private seeds use best-effort `ZeroizeOnDrop` in process memory. ([BASELINE.md](../BASELINE.md))
 
 ---
 
