@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **ADR 0002 — CDR engine** — front EHRbase (Apache 2.0) as Track B default; Solum keeps compliance/façade/migration ([docs/adr/0002-cdr-engine-ehrbase.md](docs/adr/0002-cdr-engine-ehrbase.md)).
+- **Kenya K1 counsel brief** — external-review package for DRAFT `kenya-dpa` retention/transfer/HDB/offline questions ([docs/counsel/KENYA-K1-BRIEF.md](docs/counsel/KENYA-K1-BRIEF.md)).
 - **ADR 0001 + migration strangler** — optional openEHR clinical data plane (Track B) and wrap→mirror→prefer→cut-over path ([docs/adr/0001-openehr-cdr-and-migration.md](docs/adr/0001-openehr-cdr-and-migration.md), [docs/MIGRATION-STRANGLER.md](docs/MIGRATION-STRANGLER.md)).
 - **Phase C evaluation pack — CustomerHeld CLI crypto** — `solum crypto keygen` writes operator keypair files; encrypt/decrypt require `--keypair` for CustomerHeld custody (pilot / paid-evaluation path).
 - **Ephemeral gate** — `--ephemeral` requires `SOLUM_ALLOW_EPHEMERAL=1` and a profile that allows `ephemeral_test` (`config/profiles/dev-local.toml`). Pilot profiles (`eu-ehds`, `kenya-dpa`) refuse `EphemeralTest` custody at startup.
@@ -22,8 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Notes
 
-- Kenya profile remains **DRAFT**; portfolio H4 names Kenya as first non-EU pack to harden ([Showcase H4 decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md)).
-- Stage-1 evaluation language unchanged; Track B CDR is architecture-only until H3 implementation.
+- Kenya profile remains **DRAFT**; counsel brief ready ([docs/counsel/KENYA-K1-BRIEF.md](docs/counsel/KENYA-K1-BRIEF.md)); portfolio H4 names Kenya as first non-EU pack ([Showcase H4 decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md)).
+- Stage-1 evaluation language unchanged; Track B CDR is architecture-only (ADR 0001 + 0002) until H3 implementation.
 - Do **not** cut a production `v*` tag until release CI binaries build successfully.
 
 [Unreleased]: https://github.com/SynapticFour/Solum/compare/stage1-baseline-website-2026-07-30...HEAD

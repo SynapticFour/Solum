@@ -3,7 +3,7 @@
 - **Status:** Accepted (architecture) — implementation deferred to H3
 - **Date:** 2026-08-06
 - **Product:** Solum
-- **Related:** [PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md), [MIGRATION-STRANGLER.md](../MIGRATION-STRANGLER.md), portfolio [COORDINATED-PORTFOLIO-ROADMAP](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/COORDINATED-PORTFOLIO-ROADMAP.md)
+- **Related:** [ADR 0002 — EHRbase engine](0002-cdr-engine-ehrbase.md), [PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md), [MIGRATION-STRANGLER.md](../MIGRATION-STRANGLER.md), portfolio [COORDINATED-PORTFOLIO-ROADMAP](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/COORDINATED-PORTFOLIO-ROADMAP.md)
 
 ## Context
 

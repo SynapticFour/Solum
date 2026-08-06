@@ -40,7 +40,9 @@ Across Synaptic Four Rust products you should expect:
 
 - [Product definition](PRODUCT-DEFINITION.md) (Track A sidecar + Track B CDR)
 - [ADR 0001 — openEHR CDR + migration](adr/0001-openehr-cdr-and-migration.md)
+- [ADR 0002 — CDR engine = EHRbase](adr/0002-cdr-engine-ehrbase.md)
 - [Migration strangler](MIGRATION-STRANGLER.md)
+- [Kenya K1 counsel brief](counsel/KENYA-K1-BRIEF.md) (profile remains DRAFT)
 - Portfolio [coordinated roadmap](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/COORDINATED-PORTFOLIO-ROADMAP.md)
 - [Ferrum relationship](ferrum.md)
 - [HELIOS relationship](helios.md)
