@@ -12,6 +12,8 @@ Solum shares Synaptic Four’s sovereignty philosophy with Ferrum but is a **sep
 | [Ferrum](https://github.com/SynapticFour/Ferrum) | GA4GH genomic data/compute plane | BUSL-1.1 | Sibling product; Solum pins `ferrum-core` |
 | [Ferrum-Lab-Kit](https://github.com/SynapticFour/Ferrum-Lab-Kit) | Ferrum deploy/profile on-ramp | BUSL-1.1 | Same profile/pin patterns; not a Solum dependency |
 | [HELIOS](https://github.com/SynapticFour/HELIOS) | Signed, reproducible evidence tooling | Apache-2.0 | Solum prepares audit export for HELIOS-class evidence |
+| [Solum-Demo](https://github.com/SynapticFour/Solum-Demo) | Local Stage-1 demo (fail-closed authz + tamper-evident audit) | — | Consumes pinned Solum tags; does not modify Solum |
+| [SynapticFour-Showcase](https://github.com/SynapticFour/SynapticFour-Showcase) | Multi-repo evidence-chain integrator | Apache-2.0 | Orchestrates Ferrum demo + HELIOS + BRA; Solum stage planned — see Showcase `docs/IMPLEMENTATION-PLAN-EVIDENCE-CHAIN.md` |
 
 ## Ownership boundaries
 
