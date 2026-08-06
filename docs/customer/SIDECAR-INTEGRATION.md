@@ -17,7 +17,9 @@ It does **not** introduce new compliance business logic. Fail-closed GTM‑1 cap
 
 ## 2. Key custody (same posture as the CLI)
 
-### Recommended: CustomerHeld via `--keys-dir`
+### Recommended (default): CustomerHeld via `--keys-dir`
+
+**On-prem / multi-cloud default.** No AWS (or other cloud) account is required. Same path on bare metal, Hetzner, Azure, Alibaba, AWS VPC, or custom private cloud.
 
 For evaluations and pilots, run the sidecar with **`--keys-dir`** pointing at a directory of operator keypair JSON files — the **same layout** as `solum crypto keygen`:
 
@@ -39,7 +41,7 @@ cargo run -p solum-sidecar -- \
 
 At startup the sidecar loads **every regular file** in `--keys-dir` as JSON, registers each `key_ref` from the **file contents** (not the filename), and refuses to start on invalid JSON or an empty directory. Encrypt/decrypt only succeed for those pre-registered refs — there is **no** automatic key generation in CustomerHeld mode.
 
-AWS KMS (optional feature `aws-kms`): `--wrapped-keys-dir` loads `solum crypto wrap-seed` JSON; CustomerHeld custody with `provider=aws-kms`. Seeds unwrap into process memory (ZeroizeOnDrop) — envelope, **not** HSM/TEE. Requires rebuild with `--features aws-kms`, rustc **≥ 1.94.1**, and env credentials (`AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`).
+AWS KMS (optional feature `aws-kms`, **not** the default): `--wrapped-keys-dir` loads `solum crypto wrap-seed` JSON; CustomerHeld custody with `provider=aws-kms`. Seeds unwrap into process memory (ZeroizeOnDrop) — envelope, **not** HSM/TEE. Requires rebuild with `--features aws-kms`, rustc **≥ 1.94.1**, and env credentials (`AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`). Azure Key Vault / Alibaba / other KMS: **not wired** — stay on `--keys-dir`.
 
 ### Not for production: gated `--ephemeral`
 

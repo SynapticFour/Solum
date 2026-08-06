@@ -10,7 +10,7 @@ Jede GTM-Erweiterung bleibt additiv zu beiden Betriebsmodi (Standalone, Ferrum-C
 
 ## Identifizierte Blocker
 
-1. **Schlüsselverwaltung (teilweise geschlossen).** CLI-Evaluationspfad: CustomerHeld via `crypto keygen` + `--keypair`. Ephemeral nur mit `SOLUM_ALLOW_EPHEMERAL=1` + `dev-local`. Pilot-Profile verweigern `EphemeralTest`. AWS-KMS-Envelope bleibt library-only (GTM-3). HSM-Anbindung / Zeroize bleiben offen.
+1. **Schlüsselverwaltung (teilweise geschlossen).** Default/Target: on-prem CustomerHeld via `crypto keygen` + `--keypair` / sidecar `--keys-dir` (cloud-agnostisch). Ephemeral nur mit `SOLUM_ALLOW_EPHEMERAL=1` + `dev-local`. Pilot-Profile verweigern `EphemeralTest`. Optional `aws-kms` (H2.4): CLI/Sidecar Envelope für AWS-CMKs — nicht Default, nicht Azure/Alibaba/Hetzner. HSM-Anbindung bleibt offen; Zeroize best-effort.
 2. **Keine durchgesetzte Autorisierung.** `SolumActor.scopes` wird aufgezeichnet, aber nirgends geprüft — jeder Actor-String kann jede Operation auslösen.
 3. **Keine kundenlesbare Sicherheits-/Compliance-Doku.** Bestehende Docs sind entwicklerorientiert.
 4. **Kein Deployment-Runbook.** `scripts/verify.sh` ist ein Entwicklertool, kein Kunden-Onboarding.

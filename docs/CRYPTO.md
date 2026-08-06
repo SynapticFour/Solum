@@ -16,17 +16,30 @@ Crypt4GH is a **universal envelope encryption scheme** (X25519 header packets + 
 | Genomic DRS encrypt / re-wrap / proxy | [Ferrum `ferrum-crypt4gh`](https://github.com/SynapticFour/Ferrum/blob/main/docs/CRYPT4GH.md) |
 | Clinical category encrypt + custody policy | `solum-crypto` (`crypt4gh-v1` on [`EncryptedField`](../crates/crypto/src/lib.rs)) |
 
-## Customer-held keys
+## Customer-held keys (default / target)
+
+**On-prem CustomerHeld files are the default and the product target.** Solum does not require AWS, Azure, Alibaba, Hetzner, or any public cloud. Operators who run Solum on bare metal, private cloud, or a custom VPC use the same path.
 
 Under `KeyCustody::CustomerHeld`, Solum does not mint keys *during encrypt* for regulated custody. Operators supply material via:
 
 | Path | Use |
 |------|-----|
-| CLI `solum crypto keygen` + `--keypair` | Stage‑1 evaluation / pilot operator path (file-based CustomerHeld) |
+| CLI `solum crypto keygen` + `--keypair` | **Default** Stage‑1 evaluation / pilot / on-prem path (file-based CustomerHeld) |
+| Sidecar `--keys-dir` | Same JSON layout as `crypto keygen`; production sidecar default |
 | `CustomerHeldKeyProvider::register_customer_keypair` | Library integrators |
-| Optional `AwsKmsKeyProvider` (`aws-kms` feature) | KMS-wrapped seeds; CLI `wrap-seed` / `--wrapped-keypair`; sidecar `--wrapped-keys-dir` |
+| Optional `AwsKmsKeyProvider` (`aws-kms` feature) | **Vendor-specific** envelope for AWS CMKs only — not the default |
 
 `generate_operator_keypair` / `crypto keygen` produce bytes for the operator to persist and register — Solum does not retain them after write.
+
+### Multi-cloud / custom cloud honesty
+
+| Environment | Custody today |
+|-------------|----------------|
+| On-prem / air-gapped / Hetzner / Azure / Alibaba / custom | **CustomerHeld** file keys (`--keypair` / `--keys-dir`) or library registration |
+| AWS (optional) | Same CustomerHeld files, **or** feature-gated `aws-kms` envelope if the buyer requires an AWS CMK |
+| Azure Key Vault / Alibaba KMS / other HSMs | **Not wired** as first-class providers; use CustomerHeld files (or HSM-exported material registered as CustomerHeld) until a future provider lands |
+
+The product story is **cloud-agnostic**: AWS KMS is one optional adapter, not a platform dependency. Do not market Solum as “AWS-only” because the `aws-kms` feature exists.
 
 ## Ephemeral / test keys (dev only)
 

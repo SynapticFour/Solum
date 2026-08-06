@@ -65,9 +65,13 @@ Ciphertext at rest is protected under customer-controlled key material. When a f
 
 ---
 
-## 4. Optional AWS KMS integration
+## 4. Key custody: on-prem default + optional cloud KMS
 
-AWS KMS is an **optional**, feature-gated custody path (default off). It is **not** a prerequisite for running Solum. ([GTM-READINESS.md](../GTM-READINESS.md) GTM‑2/GTM‑3; [BASELINE.md](../BASELINE.md))
+**Default and target:** on-premise (or customer VPC) **CustomerHeld** key files — CLI `--keypair`, sidecar `--keys-dir`. No cloud account is required. The same path works on bare metal, Hetzner, Azure, Alibaba, AWS, or a custom private cloud. ([CRYPTO.md](../CRYPTO.md); [BASELINE.md](../BASELINE.md))
+
+### Optional AWS KMS adapter (not the product default)
+
+AWS KMS is an **optional**, feature-gated custody path (default off). It is **not** a prerequisite for running Solum and does **not** make Solum AWS-only. ([GTM-READINESS.md](../GTM-READINESS.md) GTM‑2/GTM‑3; [BASELINE.md](../BASELINE.md))
 
 **Technical constraint (from GTM‑2 research):** AWS KMS does not hold Crypt4GH’s native X25519 keys directly. Solum therefore uses an **envelope model**: KMS protects the Crypt4GH private-key seed at rest; Solum unwraps that seed briefly in process for the Crypt4GH operation. ([GTM-READINESS.md](../GTM-READINESS.md))
 
@@ -77,8 +81,9 @@ AWS KMS is an **optional**, feature-gated custody path (default off). It is **no
 - Unwrapped seed material is held in ordinary process memory with **best-effort `ZeroizeOnDrop`** (not a TEE). ([BASELINE.md](../BASELINE.md))
 - No KMS EncryptionContext / AAD binding is wired yet. ([BASELINE.md](../BASELINE.md))
 - CI covers mocked KMS behaviour, not live AWS accounts. ([BASELINE.md](../BASELINE.md))
+- **Other clouds:** Azure Key Vault, Alibaba KMS, Hetzner-native secrets, and custom HSMs are **not** first-class Solum providers yet — use CustomerHeld files (or export material into CustomerHeld registration) until those adapters exist. ([CRYPTO.md](../CRYPTO.md))
 
-Manual registration of customer-supplied key material (without AWS) remains available via the library for non-AWS deployments. ([BASELINE.md](../BASELINE.md); [CRYPTO.md](../CRYPTO.md))
+Manual registration of customer-supplied key material (without AWS) remains the primary path for non-AWS and multi-cloud deployments. ([BASELINE.md](../BASELINE.md); [CRYPTO.md](../CRYPTO.md))
 
 ---
 
