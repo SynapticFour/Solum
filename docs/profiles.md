@@ -26,7 +26,7 @@ Profiles live in [`config/profiles/`](../config/profiles/). Each file is a juris
 
 ### Kenya (provisional)
 
-`kenya-dpa.toml` is a **PROVISIONAL-PRODUCTION-CANDIDATE** after a **non-counsel** Vorprüfung ([KENYA-K1-VORPRUEFUNG.md](counsel/KENYA-K1-VORPRUEFUNG.md)). It is **not** PRODUCTION, **not** ODPC-certified, and **not** for live patient system-of-record until qualified Kenya counsel confirms [KENYA-K1-BRIEF.md](counsel/KENYA-K1-BRIEF.md).
+`kenya-dpa.toml` is a **PROVISIONAL-PRODUCTION-CANDIDATE** after a **non-counsel** Vorprüfung (counsel package (private)). It is **not** PRODUCTION, **not** ODPC-certified, and **not** for live patient system-of-record until qualified Kenya counsel confirms counsel package (private).
 
 Engineering posture after Vorprüfung:
 

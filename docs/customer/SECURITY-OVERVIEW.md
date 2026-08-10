@@ -15,13 +15,13 @@ This document is **not** legal advice, **not** a certification claim, and **not*
 
 Solum is a **compliance layer** for clinical electronic health data: it **enforces** jurisdiction policy, **translates** interchange formats (FHIR first; openEHR / EHRbase on optional Track B), and **produces evidence** of conforming processing and exchange. Track A works with data wherever it already lives; Track B may persist via a partner-facing CDR façade — still **not** a Synaptic Four hospital EHR product. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §1; [architecture.md](../architecture.md); [H3-EHRBASE-SPIKE.md](../H3-EHRBASE-SPIKE.md))
 
-Stage 1 delivery is **on-premise first**. A SaaS operating model is a prepared Stage‑2 path, not the initial delivery model. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §5; [architecture.md](../architecture.md); [GTM-READINESS.md](../GTM-READINESS.md))
+Stage 1 delivery is **on-premise first**. A SaaS operating model is a prepared Stage‑2 path, not the initial delivery model. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §5; [architecture.md](../architecture.md))
 
 ### What it is not
 
 - **Not a medical device (intended posture).** Solum’s intended posture is to manage, encrypt, log, translate (e.g. FHIR ↔ openEHR), and evidence conforming processing — **never** interpret clinical data for diagnosis, therapy, or risk support. Classification under MDR/IVDR/AI Act depends on intended purpose and facts; **qualified regulatory review is required before go-to-market claims**. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §3)
 - **Not a hospital EHR UI / full clinical SoR product.** Track A does not replace primary clinical systems; optional Track B is a partner CDR façade, not Synaptic Four’s EHR application. ([architecture.md](../architecture.md); [PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md))
-- **Not a hosted SaaS product in Stage 1.** ([GTM-READINESS.md](../GTM-READINESS.md); [architecture.md](../architecture.md))
+- **Not a hosted SaaS product in Stage 1.** ([architecture.md](../architecture.md))
 - **Not a declaration of legal compliance.** Operators must track applicable dates for certification, enforcement, and mandatory primary-use interoperability themselves; Solum aims to support **technical readiness**, not declare legal compliance. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §2)
 
 ---
@@ -71,9 +71,9 @@ Ciphertext at rest is protected under customer-controlled key material. When a f
 
 ### Optional AWS KMS adapter (not the product default)
 
-AWS KMS is an **optional**, feature-gated custody path (default off). It is **not** a prerequisite for running Solum and does **not** make Solum AWS-only. ([GTM-READINESS.md](../GTM-READINESS.md) GTM‑2/GTM‑3; [BASELINE.md](../BASELINE.md))
+AWS KMS is an **optional**, feature-gated custody path (default off). It is **not** a prerequisite for running Solum and does **not** make Solum AWS-only. ([BASELINE.md](../BASELINE.md))
 
-**Technical constraint (from GTM‑2 research):** AWS KMS does not hold Crypt4GH’s native X25519 keys directly. Solum therefore uses an **envelope model**: KMS protects the Crypt4GH private-key seed at rest; Solum unwraps that seed briefly in process for the Crypt4GH operation. ([GTM-READINESS.md](../GTM-READINESS.md))
+**Technical constraint (from GTM‑2 research):** AWS KMS does not hold Crypt4GH’s native X25519 keys directly. Solum therefore uses an **envelope model**: KMS protects the Crypt4GH private-key seed at rest; Solum unwraps that seed briefly in process for the Crypt4GH operation.
 
 **Operational caveats (current baseline):**
 
@@ -95,7 +95,7 @@ Consent is managed as grant / revoke decisions per **(subject, purpose)**, with 
 
 ### Role / capability checks (GTM‑1)
 
-On the structured-actor path (actor identity that carries **scopes / capabilities**), Solum checks **before** grant, revoke, encrypt, or decrypt whether the actor’s scopes contain the exact capability required for that operation. ([BASELINE.md](../BASELINE.md); [GTM-READINESS.md](../GTM-READINESS.md))
+On the structured-actor path (actor identity that carries **scopes / capabilities**), Solum checks **before** grant, revoke, encrypt, or decrypt whether the actor’s scopes contain the exact capability required for that operation. ([BASELINE.md](../BASELINE.md); [BASELINE.md](../BASELINE.md))
 
 **Capability-based, fail-closed — practical meaning for operators:**
 

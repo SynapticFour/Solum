@@ -102,7 +102,7 @@ impl From<&str> for SolumActor {
 
 /// Capability strings required by Deployment's `*_as` operations.
 /// Exact-match against [`SolumActor::scopes`] — kein Wildcard-Support in
-/// diesem Schritt (offener Punkt, siehe GTM-READINESS.md-Nachtrag).
+/// diesem Schritt (offener Punkt, siehe SECURITY-OVERVIEW / profiles docs).
 pub const CAP_CONSENT_GRANT: &str = "solum:consent:grant";
 pub const CAP_CONSENT_REVOKE: &str = "solum:consent:revoke";
 pub const CAP_CRYPTO_ENCRYPT: &str = "solum:crypto:encrypt";

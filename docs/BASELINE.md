@@ -117,7 +117,7 @@ From [`.gitleaks.toml`](../.gitleaks.toml) (`private-key` rule allowlist, `condi
 
 ### Kenya profile — provisional (counsel still required)
 
-`kenya-dpa.toml` is loadable as **PROVISIONAL-PRODUCTION-CANDIDATE** after a **non-counsel** Vorprüfung ([docs/counsel/KENYA-K1-VORPRUEFUNG.md](counsel/KENYA-K1-VORPRUEFUNG.md)). **Not** production SoR / **not** ODPC-certified. Real counsel via [KENYA-K1-BRIEF.md](counsel/KENYA-K1-BRIEF.md) remains mandatory before PRODUCTION.
+`kenya-dpa.toml` is loadable as **PROVISIONAL-PRODUCTION-CANDIDATE** after a **non-counsel** Vorprüfung (an internal non-counsel Vorprüfung). **Not** production SoR / **not** ODPC-certified. Real counsel via external counsel review remains mandatory before PRODUCTION.
 
 Honesty after Vorprüfung:
 
@@ -184,7 +184,7 @@ Legacy library `&str`-Methoden (`grant_consent`, `revoke_consent`, `encrypt_fiel
 
 ## Explizit außerhalb dieser Baseline
 
-Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md), [helios.md](helios.md), [architecture.md](architecture.md), [INTEGRATION-ROADMAP.md](INTEGRATION-ROADMAP.md), [GTM-READINESS.md](GTM-READINESS.md), and scaffold markers in crate docs:
+Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md), [helios.md](helios.md), [architecture.md](architecture.md), [INTEGRATION-ROADMAP.md](INTEGRATION-ROADMAP.md), and scaffold markers in crate docs:
 
 | Item | Source |
 |------|--------|
@@ -210,7 +210,6 @@ Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFI
 | Clinical interpretation / diagnosis / therapy support | Out of scope both stages — `docs/roadmap.md`, CONTRIBUTING MDCG boundary |
 | Kenya production-ready legal closure | Draft profile inside baseline; see “Bewusst akzeptierte Risiken” — not a closed jurisdiction package |
 | Wire Patient Summary encrypt/decrypt into `Deployment` / typed FHIR CLI surface | Stage-1 binding lives in `solum-fhir`; generic field encrypt/decrypt is on the CLI, typed Patient Summary path remains open |
-| `docs/GTM-READINESS.md` (GTM-1 through GTM-4) | **Vollständig umgesetzt** in this baseline — no longer an open GTM readiness gap; remaining Stage‑2 / post-GTM items above stay open |
 | Migrationspfad / Deprecation für die Legacy-`&str`-Methoden (Library) | GTM-1 design: `*_as` enforced, `&str` legacy intentionally unchecked for library callers — see accepted-risk note; CLI already migrated |
 | Capability-Hierarchien oder Wildcards | GTM-1 exact-match only; no `solum:*` hierarchy |
 | Zeroize-on-Drop für Schlüsselmaterial | Best-effort `ZeroizeOnDrop` on held seeds (H2); not a TEE |

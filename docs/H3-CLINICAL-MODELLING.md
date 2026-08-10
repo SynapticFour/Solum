@@ -24,6 +24,6 @@ Correlation for partners: audit events (`cdr.fhir.created`, `cdr.subject_link.up
 
 1. Choose and vendor an openEHR **patient-summary** (or site-agreed) OPT under Apache-2.0 / CKM licence terms.
 2. Replace `SOLUM_H3_TEMPLATE_ID` + fixture; keep `minimal_observation` as regression fixture only.
-3. Add field-level mapping table (FHIR element → OPT path) reviewed under [H3-MDCG-INTERNAL-REVIEW.md](counsel/H3-MDCG-INTERNAL-REVIEW.md) — still no inference.
+3. Add field-level mapping table (FHIR element → OPT path) reviewed under counsel package (private) — still no inference.
 
 Until then, greenfield pilots should treat Solum as **custody + evidence + join keys**, and render clinical UI from FHIR façade JSON (or partner EHR) rather than from openEHR AQL alone.

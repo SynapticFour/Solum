@@ -19,7 +19,7 @@ Implemented (not a Synaptic Four EHR UI; not MDR clearance):
 
 - EHRbase CDR façade (`/v1/cdr/*`), FHIR subset + AQL proxy, migration inventory + dual-write webhook, subject bridge, partner API docs
 - Depth: clinical-modelling honesty, backup runbook, MDCG internal + send pack
-- Follow-ons: patient-summary OPT pin; external RA before marketing clinical claims — [H3-CLINICAL-MODELLING.md](H3-CLINICAL-MODELLING.md), [counsel/H3-MDCG-SEND-CHECKLIST.md](counsel/H3-MDCG-SEND-CHECKLIST.md)
+- Follow-ons: patient-summary OPT pin; external RA before marketing clinical claims — [H3-CLINICAL-MODELLING.md](H3-CLINICAL-MODELLING.md), counsel package (private)
 
 ## H4 / H5 (portfolio)
 
