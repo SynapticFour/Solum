@@ -1,9 +1,9 @@
 # Solum — strangler migration (legacy → Track B)
 
-**Status:** Design (H3) — implements the path in [ADR 0001](adr/0001-openehr-cdr-and-migration.md)
+**Status:** H3.2 tooling shipped — `solum migrate fhir-import` / `dual-write-stub`; operator path in [MIGRATION-CUTOVER-CHECKLIST.md](MIGRATION-CUTOVER-CHECKLIST.md). Implements [ADR 0001](adr/0001-openehr-cdr-and-migration.md).
 **Audience:** integrators, pilot operators, Synaptic Four engineering
 
-This is **not** a claim that migration is automated today. Stage 1 ships Track A (sidecar). Track B CDR is planned.
+Stage 1 ships Track A (sidecar). Track B CDR persistence is via EHRbase (opt-in); H3.2 provides batch inventory + dead-letter dual-write stub — not a fully automated hospital migration product.
 
 ---
 
@@ -40,7 +40,7 @@ Genomic data stays in **Ferrum**; subjects are linked, not duplicated as BAM/VCF
 | Solum role | Track A + Track B CDR enabled |
 | Data flow | Dual-write: selected FHIR resources / compositions into CDR on create/update from adapter |
 | Reads | Still primarily legacy; Solum used for compliance + optional second read |
-| Tooling | Import job (batch FHIR → CDR); webhook/adapter for incremental dual-write |
+| Tooling | Import job (batch FHIR → CDR); webhook `POST /v1/migrate/dual-write` for incremental dual-write |
 | Exit criteria | Round-trip verify: N patients mirrored; audit events for each write; rollback = disable dual-write |
 
 ### Stage 3 — Prefer (H3+)

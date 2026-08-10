@@ -1,27 +1,33 @@
 # Roadmap
 
-Stages are both designed for from the start; **only stage 1 is under active implementation**.
+Stages are both designed for from the start. **Stage 1 (Track A) and H3 Track B engineering** are implemented; public product language may still say Stage 1 for installable maturity. Remaining gaps are counsel, OPT depth, and optional SaaS preparedness — see Showcase [HORIZON-OPEN-GATES.md](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/HORIZON-OPEN-GATES.md).
 
-## Stage 1 — build now
+## Stage 1 — Track A (shipped engineering)
 
 Spec-independent controls that already have a clear regulatory floor (e.g. EHDS Annex II security and logging themes):
 
-- Secure processing environment: encryption at rest / in transit (`solum-crypto` policy layer implemented; actual field-level encryption still open — see below), granular access control, complete audit log (`solum-audit::FileAuditStore` — persistent, hash-chained, implemented)
-- Consent and access-rights management (`solum-consent` — grant/revoke with purpose binding and full history, implemented; anticipating EEHRxF individual rights — access, who accessed, onward sharing, rectification / completion — where implementable without waiting for every implementing act)
-- Compliance evidence **export hooks** (HELIOS-oriented JSON envelope from `solum-audit` — hash-chained, operator-verifiable). **Live HELIOS signing is deferred / not productized** — see [helios.md](helios.md)
-- Jurisdiction [profile system](profiles.md), initially `eu-ehds`, schema ready for further countries; Kenya is **PROVISIONAL-PRODUCTION-CANDIDATE** (non-counsel Vorprüfung; real counsel still required)
-- CustomerHeld CLI operator path (`crypto keygen` + `--keypair`) for Stage‑1 evaluations; ephemeral keys gated to `dev-local` only
+- Secure processing environment: Crypt4GH field encryption (`solum-crypto`), granular access control, complete audit log (`solum-audit::FileAuditStore` — persistent, hash-chained)
+- Consent and access-rights management (`solum-consent` — grant/revoke with purpose binding and full history)
+- Compliance evidence **export hooks** (HELIOS-oriented JSON envelope). **Live HELIOS signing is deferred / not productized** — see [helios.md](helios.md)
+- Jurisdiction [profile system](profiles.md), `eu-ehds` + `kenya-dpa` (**PROVISIONAL-PRODUCTION-CANDIDATE** — non-counsel Vorprüfung; real counsel still required)
+- CustomerHeld CLI / sidecar path; ephemeral keys gated to `dev-local` only
+- Optional AWS KMS envelope (`--features aws-kms`); H2.1 Ferrum consent teeth; H2.2 org-IAM
 
-## Stage 2 — planned
+## Track B / H3 — clinical data plane (engineering exit)
 
-Communicated as evolving with specifications and demand — not implemented as stage-1 scope:
+Implemented (not a Synaptic Four EHR UI; not MDR clearance):
 
-- FHIR / IHE interoperability depth for EEHRxF priority categories (e.g. patient summary, laboratory results, discharge reports, imaging reports / manifests, prescriptions)
-- **openEHR clinical data plane (Track B)** — see [ADR 0001](adr/0001-openehr-cdr-and-migration.md), [ADR 0002 EHRbase](adr/0002-cdr-engine-ehrbase.md), and [MIGRATION-STRANGLER.md](MIGRATION-STRANGLER.md) (architecture + engine choice accepted; CDR MVP not built yet)
-- SaaS *preparedness* (tenancy / key boundaries) on stage-1 foundations — not SaaS as default delivery
-- Additional jurisdiction profiles; **Kenya pack hardening** first among African profiles (see Showcase [H4 geography decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md) and [counsel/KENYA-K1-BRIEF.md](counsel/KENYA-K1-BRIEF.md))
-- **Live HELIOS CLI/API signing bridge** (only after HELIOS release + custody story are clear — not claimed in Stage 1)
+- EHRbase CDR façade (`/v1/cdr/*`), FHIR subset + AQL proxy, migration inventory + dual-write webhook, subject bridge, partner API docs
+- Depth: clinical-modelling honesty, backup runbook, MDCG internal + send pack
+- Follow-ons: patient-summary OPT pin; external RA before marketing clinical claims — [H3-CLINICAL-MODELLING.md](H3-CLINICAL-MODELLING.md), [counsel/H3-MDCG-SEND-CHECKLIST.md](counsel/H3-MDCG-SEND-CHECKLIST.md)
 
-## Out of scope for both stages (default)
+## H4 / H5 (portfolio)
 
-Clinical interpretation for diagnosis, therapy, or risk support — see [CONTRIBUTING.md](../CONTRIBUTING.md) and [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md) §3.
+- **H4 Kenya:** K2 eng done; counsel send + named site still open ([Showcase H4 checklist](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-PILOT-CHECKLIST.md))
+- **H5:** optional SaaS-*ready* docs / `SOLUM_TENANT_ID` stamp — not SaaS launch ([H5-KEY-CUSTODY-MANAGED.md](H5-KEY-CUSTODY-MANAGED.md))
+- Nigeria / South Africa profiles: planned after Kenya counsel or commercial reorder
+- **Live HELIOS CLI/API signing bridge** — only after HELIOS release + custody story are clear
+
+## Out of scope (default)
+
+Clinical interpretation for diagnosis, therapy, or risk support — see [CONTRIBUTING.md](../CONTRIBUTING.md) and [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md) §3. Full hospital EHR UI — not planned as Solum.

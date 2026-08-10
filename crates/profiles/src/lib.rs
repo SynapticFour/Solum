@@ -550,6 +550,46 @@ mod tests {
         }
     }
 
+    #[test]
+    fn kenya_validate_transfer_fail_closed_empty_destinations() {
+        let p = kenya_dpa();
+        assert!(
+            p.transfer.permitted_destinations.is_empty(),
+            "kenya-dpa must keep empty destinations (fail-closed)"
+        );
+        // Mechanism may be listed (pathway), but empty destinations refuse every concrete dest.
+        for dest in ["KE", "EU", "US", "EAC", ""] {
+            let err = validate_transfer(&p, &TransferMechanism::HdabMediated, dest)
+                .expect_err("kenya-dpa must refuse every destination while list is empty");
+            match err {
+                ProfileError::TransferNotPermitted {
+                    mechanism,
+                    destination,
+                    reason,
+                } => {
+                    assert_eq!(mechanism, TransferMechanism::HdabMediated);
+                    assert_eq!(destination, dest);
+                    assert!(
+                        reason.contains("destination") || reason.contains("permitted_destinations"),
+                        "reason={reason}"
+                    );
+                }
+                other => panic!("expected TransferNotPermitted, got {other:?}"),
+            }
+        }
+        let err = validate_transfer(&p, &TransferMechanism::SafeguardsBased, "KE")
+            .expect_err("empty destinations refuse even with a listed mechanism");
+        match err {
+            ProfileError::TransferNotPermitted { reason, .. } => {
+                assert!(
+                    reason.contains("destination") || reason.contains("permitted_destinations"),
+                    "reason={reason}"
+                );
+            }
+            other => panic!("expected TransferNotPermitted, got {other:?}"),
+        }
+    }
+
     /// Minimal valid profile TOML with no `[transfer]` section — proves additive default.
     const PROFILE_WITHOUT_TRANSFER: &str = r#"
 schema_version = 1

@@ -59,6 +59,11 @@ async fn spawn_ephemeral_sidecar(token: &str) -> (SocketAddr, tempfile::TempDir)
         jwks_file: None,
         oidc_issuer: None,
         oidc_audience: None,
+        ehrbase_url: None,
+        cdr_template_opt: None,
+        fhir_store: None,
+        subject_link_store: None,
+        dual_write_dead_letter: None,
     };
     let state = build_state(&config).await.expect("build_state ephemeral");
     // SOLUM_ALLOW_EPHEMERAL is read only synchronously inside build_state()
@@ -98,6 +103,11 @@ async fn spawn_customer_held_sidecar(
         jwks_file: None,
         oidc_issuer: None,
         oidc_audience: None,
+        ehrbase_url: None,
+        cdr_template_opt: None,
+        fhir_store: None,
+        subject_link_store: None,
+        dual_write_dead_letter: None,
     };
     let state = build_state(&config)
         .await
@@ -518,6 +528,11 @@ async fn build_state_requires_keys_dir_or_ephemeral() {
         jwks_file: None,
         oidc_issuer: None,
         oidc_audience: None,
+        ehrbase_url: None,
+        cdr_template_opt: None,
+        fhir_store: None,
+        subject_link_store: None,
+        dual_write_dead_letter: None,
     })
     .await
     {
@@ -550,6 +565,11 @@ async fn build_state_ephemeral_requires_allow_env() {
         jwks_file: None,
         oidc_issuer: None,
         oidc_audience: None,
+        ehrbase_url: None,
+        cdr_template_opt: None,
+        fhir_store: None,
+        subject_link_store: None,
+        dual_write_dead_letter: None,
     })
     .await
     {
@@ -639,6 +659,11 @@ async fn spawn_org_iam_sidecar(
         jwks_file: Some(jwks_file),
         oidc_issuer: None,
         oidc_audience: None,
+        ehrbase_url: None,
+        cdr_template_opt: None,
+        fhir_store: None,
+        subject_link_store: None,
+        dual_write_dead_letter: None,
     };
     let state = build_state(&config).await.expect("build_state org-iam");
     drop(_guard);
@@ -723,4 +748,624 @@ async fn org_iam_requires_bearer() {
         .await
         .unwrap();
     assert_eq!(res.status(), 401, "body={}", res.text().await.unwrap());
+}
+
+/// Minimal EHRbase mock matching solum-openehr client paths.
+async fn spawn_mock_ehrbase() -> SocketAddr {
+    use axum::http::{HeaderMap, HeaderValue, StatusCode};
+    use axum::routing::{get, post};
+    use axum::{Json, Router};
+
+    async fn create_ehr() -> impl axum::response::IntoResponse {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::LOCATION,
+            HeaderValue::from_static(
+                "http://mock/ehrbase/rest/openehr/v1/ehr/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            ),
+        );
+        (StatusCode::CREATED, headers, Json(serde_json::json!({})))
+    }
+    async fn upload_template() -> StatusCode {
+        StatusCode::CREATED
+    }
+    async fn example_flat() -> impl axum::response::IntoResponse {
+        Json(serde_json::json!({
+            "_type": "COMPOSITION",
+            "name": { "value": "Minimal" },
+            "archetype_details": {
+                "template_id": { "value": "minimal_observation.en.v1" }
+            }
+        }))
+    }
+    async fn commit(
+        axum::extract::Path(ehr_id): axum::extract::Path<String>,
+    ) -> impl axum::response::IntoResponse {
+        let mut headers = HeaderMap::new();
+        let loc = format!(
+            "http://mock/ehrbase/rest/openehr/v1/ehr/{ehr_id}/composition/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        );
+        headers.insert(
+            axum::http::header::LOCATION,
+            HeaderValue::from_str(&loc).unwrap(),
+        );
+        (
+            StatusCode::CREATED,
+            headers,
+            Json(serde_json::json!({
+                "uid": { "value": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" },
+                "archetype_details": {
+                    "template_id": { "value": "minimal_observation.en.v1" }
+                }
+            })),
+        )
+    }
+    async fn get_comp(
+        axum::extract::Path((_e, uid)): axum::extract::Path<(String, String)>,
+    ) -> impl axum::response::IntoResponse {
+        Json(serde_json::json!({ "uid": { "value": uid } }))
+    }
+
+    let app = Router::new()
+        .route("/ehrbase/rest/openehr/v1/ehr", post(create_ehr))
+        .route(
+            "/ehrbase/rest/openehr/v1/definition/template/adl1.4",
+            post(upload_template),
+        )
+        .route(
+            "/ehrbase/rest/openehr/v1/definition/template/adl1.4/:id/example",
+            get(example_flat),
+        )
+        .route(
+            "/ehrbase/rest/openehr/v1/ehr/:ehr_id/composition",
+            post(commit),
+        )
+        .route(
+            "/ehrbase/rest/openehr/v1/ehr/:ehr_id/composition/:uid",
+            get(get_comp),
+        )
+        .route(
+            "/ehrbase/rest/openehr/v1/query/aql",
+            post(|| async {
+                axum::Json(serde_json::json!({
+                    "meta": { "_type": "RESULTSET" },
+                    "q": "SELECT c FROM EHR e CONTAINS COMPOSITION c",
+                    "rows": []
+                }))
+            }),
+        );
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    addr
+}
+
+#[allow(clippy::await_holding_lock)] // env gate must stay set for the whole build_state
+async fn spawn_ephemeral_sidecar_with_ehrbase(
+    token: &str,
+    ehrbase_url: String,
+) -> (SocketAddr, tempfile::TempDir) {
+    let _guard = env_lock().lock().unwrap();
+    std::env::set_var("SOLUM_ALLOW_EPHEMERAL", "1");
+    let dir = tempdir().unwrap();
+    let config = SidecarConfig {
+        bind: "127.0.0.1:0".parse().unwrap(),
+        profile: dev_local_profile(),
+        audit: dir.path().join("audit.jsonl"),
+        consent_store: dir.path().join("consent.jsonl"),
+        token: token.to_string(),
+        keys_dir: None,
+        ephemeral: true,
+        wrapped_keys_dir: None,
+        org_iam_config: None,
+        jwks_url: None,
+        jwks_file: None,
+        oidc_issuer: None,
+        oidc_audience: None,
+        ehrbase_url: Some(ehrbase_url),
+        cdr_template_opt: None,
+        fhir_store: None,
+        subject_link_store: None,
+        dual_write_dead_letter: None,
+    };
+    let state = build_state(&config)
+        .await
+        .expect("build_state ephemeral+cdr");
+    drop(_guard);
+    let app = app_router(state);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    (addr, dir)
+}
+
+#[tokio::test]
+async fn cdr_disabled_without_ehrbase_url() {
+    let token = "cdr-disabled-token";
+    let (addr, _dir) = spawn_ephemeral_sidecar(token).await;
+    let url = format!("http://{addr}/v1/cdr/ehr");
+    let res = client()
+        .post(&url)
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "actor": "practitioner/h3",
+            "capability": ["solum:cdr:write"]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 503, "body={}", res.text().await.unwrap());
+}
+
+#[tokio::test]
+async fn cdr_write_denied_without_capability() {
+    let ehr = spawn_mock_ehrbase().await;
+    let token = "cdr-deny-token";
+    let (addr, dir) =
+        spawn_ephemeral_sidecar_with_ehrbase(token, format!("http://{ehr}/ehrbase")).await;
+    let url = format!("http://{addr}/v1/cdr/ehr");
+    let res = client()
+        .post(&url)
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "actor": "practitioner/h3",
+            "capability": []
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 403, "body={}", res.text().await.unwrap());
+    let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
+    assert!(audit.contains("authorization.denied"));
+}
+
+#[tokio::test]
+async fn cdr_facade_write_read_and_audit() {
+    let ehr = spawn_mock_ehrbase().await;
+    let token = "cdr-ok-token";
+    let (addr, dir) =
+        spawn_ephemeral_sidecar_with_ehrbase(token, format!("http://{ehr}/ehrbase")).await;
+
+    let tmpl = client()
+        .post(format!("http://{addr}/v1/cdr/template"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "actor": "practitioner/h3",
+            "capability": ["solum:cdr:write"]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(tmpl.status(), 200, "body={}", tmpl.text().await.unwrap());
+
+    let ehr_res = client()
+        .post(format!("http://{addr}/v1/cdr/ehr"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "actor": "practitioner/h3",
+            "capability": ["solum:cdr:write"]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        ehr_res.status(),
+        201,
+        "body={}",
+        ehr_res.text().await.unwrap()
+    );
+    let ehr_body: Value = ehr_res.json().await.unwrap();
+    let ehr_id = ehr_body["ehr_id"].as_str().unwrap();
+
+    let comp_res = client()
+        .post(format!("http://{addr}/v1/cdr/ehr/{ehr_id}/composition"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "actor": "practitioner/h3",
+            "capability": ["solum:cdr:write"],
+            "use_example": true
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        comp_res.status(),
+        201,
+        "body={}",
+        comp_res.text().await.unwrap()
+    );
+    let comp: Value = comp_res.json().await.unwrap();
+    let uid = comp["composition_uid"].as_str().unwrap();
+
+    let get_res = client()
+        .get(format!(
+            "http://{addr}/v1/cdr/ehr/{ehr_id}/composition/{uid}"
+        ))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .query(&[
+            ("actor", "practitioner/h3"),
+            ("capability", "solum:cdr:read"),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        get_res.status(),
+        200,
+        "body={}",
+        get_res.text().await.unwrap()
+    );
+
+    let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
+    assert!(audit.contains("cdr.template.uploaded"), "audit={audit}");
+    assert!(audit.contains("cdr.ehr.created"), "audit={audit}");
+    assert!(audit.contains("cdr.composition.committed"), "audit={audit}");
+}
+
+#[tokio::test]
+async fn fhir_create_get_without_cdr_link() {
+    let token = "fhir-ok-token";
+    let (addr, dir) = spawn_ephemeral_sidecar(token).await;
+    let create = client()
+        .post(format!("http://{addr}/v1/fhir/Patient"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "actor": "practitioner/h3",
+            "capability": ["solum:cdr:write"],
+            "link_cdr": false,
+            "resource": {
+                "resourceType": "Patient",
+                "name": [{"family": "Doe", "given": ["Jane"]}]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        create.status(),
+        201,
+        "body={}",
+        create.text().await.unwrap()
+    );
+    let body: Value = create.json().await.unwrap();
+    let id = body["id"].as_str().unwrap();
+    let get = client()
+        .get(format!("http://{addr}/v1/fhir/Patient/{id}"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .query(&[
+            ("actor", "practitioner/h3"),
+            ("capability", "solum:cdr:read"),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(get.status(), 200, "body={}", get.text().await.unwrap());
+    let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
+    assert!(audit.contains("cdr.fhir.created"));
+}
+
+#[tokio::test]
+async fn aql_rejected_without_select() {
+    let ehr = spawn_mock_ehrbase().await;
+    let token = "aql-token";
+    let (addr, _dir) =
+        spawn_ephemeral_sidecar_with_ehrbase(token, format!("http://{ehr}/ehrbase")).await;
+    let res = client()
+        .post(format!("http://{addr}/v1/cdr/aql"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "actor": "practitioner/h3",
+            "capability": ["solum:cdr:read"],
+            "q": "DELETE FROM EHR"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400, "body={}", res.text().await.unwrap());
+}
+
+#[tokio::test]
+async fn aql_allowlisted_ok() {
+    let ehr = spawn_mock_ehrbase().await;
+    let token = "aql-ok-token";
+    let (addr, dir) =
+        spawn_ephemeral_sidecar_with_ehrbase(token, format!("http://{ehr}/ehrbase")).await;
+    let res = client()
+        .post(format!("http://{addr}/v1/cdr/aql"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "actor": "practitioner/h3",
+            "capability": ["solum:cdr:read"],
+            "q": "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 200, "body={}", res.text().await.unwrap());
+    let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
+    assert!(audit.contains("cdr.aql.executed"));
+}
+
+#[tokio::test]
+async fn subject_link_round_trip() {
+    let token = "subject-link-token";
+    let (addr, dir) = spawn_ephemeral_sidecar(token).await;
+    let put = client()
+        .post(format!("http://{addr}/v1/cdr/subject-link"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "actor": "practitioner/h3",
+            "capability": ["solum:cdr:write"],
+            "solum_subject_id": "subj-42",
+            "ferrum_drs_id": "drs.example/abc",
+            "phenopacket_id": "ppkt-1"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(put.status(), 200, "body={}", put.text().await.unwrap());
+    let get = client()
+        .get(format!("http://{addr}/v1/cdr/subject-link/subj-42"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .query(&[
+            ("actor", "practitioner/h3"),
+            ("capability", "solum:cdr:read"),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(get.status(), 200, "body={}", get.text().await.unwrap());
+    let body: Value = get.json().await.unwrap();
+    assert_eq!(body["ferrum_drs_id"], "drs.example/abc");
+    let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
+    assert!(audit.contains("cdr.subject_link.upserted"));
+}
+
+#[tokio::test]
+async fn fhir_patient_auto_subject_link() {
+    let token = "patient-bridge-token";
+    let (addr, dir) = spawn_ephemeral_sidecar(token).await;
+    let create = client()
+        .post(format!("http://{addr}/v1/fhir/Patient"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "actor": "practitioner/h3",
+            "capability": ["solum:cdr:write"],
+            "link_cdr": false,
+            "resource": {
+                "resourceType": "Patient",
+                "id": "bridge-patient-1",
+                "name": [{"family": "Bridge"}]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        create.status(),
+        201,
+        "body={}",
+        create.text().await.unwrap()
+    );
+    let get = client()
+        .get(format!(
+            "http://{addr}/v1/cdr/subject-link/bridge-patient-1"
+        ))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .query(&[
+            ("actor", "practitioner/h3"),
+            ("capability", "solum:cdr:read"),
+        ])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(get.status(), 200, "body={}", get.text().await.unwrap());
+    let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
+    assert!(audit.contains("cdr.subject_link.upserted"));
+}
+
+#[tokio::test]
+async fn dual_write_ok_without_cdr() {
+    let token = "dual-ok-token";
+    let (addr, dir) = spawn_ephemeral_sidecar(token).await;
+    let res = client()
+        .post(format!("http://{addr}/v1/migrate/dual-write"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "actor": "practitioner/h3",
+            "capability": ["solum:cdr:write"],
+            "link_cdr": false,
+            "source": "legacy-his",
+            "resource": {
+                "resourceType": "Patient",
+                "id": "dw-1",
+                "name": [{"family": "Mirror"}]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201, "body={}", res.text().await.unwrap());
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["dead_lettered"], false);
+    let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
+    assert!(audit.contains("cdr.dual_write.ok"));
+}
+
+#[tokio::test]
+async fn dual_write_dead_letters_on_cdr_failure() {
+    let token = "dual-dl-token";
+    let (addr, dir) =
+        spawn_ephemeral_sidecar_with_ehrbase(token, "http://127.0.0.1:1/ehrbase".into()).await;
+    let res = client()
+        .post(format!("http://{addr}/v1/migrate/dual-write"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "actor": "practitioner/h3",
+            "capability": ["solum:cdr:write"],
+            "link_cdr": true,
+            "source": "legacy-his",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "c-fail",
+                "code": {"text": "test"}
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 202, "body={}", res.text().await.unwrap());
+    let body: Value = res.json().await.unwrap();
+    assert_eq!(body["dead_lettered"], true);
+    let dl = std::fs::read_to_string(dir.path().join("dual_write_dead_letter.jsonl")).unwrap();
+    assert!(dl.contains("c-fail"), "dead-letter={dl}");
+    let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
+    assert!(audit.contains("cdr.dual_write.dead_lettered"));
+}
+
+fn kenya_profile() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/profiles/kenya-dpa.toml")
+}
+
+#[tokio::test]
+#[allow(clippy::await_holding_lock)]
+async fn kenya_dpa_refuses_ephemeral_even_with_allow_env() {
+    let _guard = env_lock().lock().unwrap();
+    std::env::set_var("SOLUM_ALLOW_EPHEMERAL", "1");
+    std::env::set_var("SOLUM_STORAGE_REGION", "KE");
+    let dir = tempdir().unwrap();
+    let config = SidecarConfig {
+        bind: "127.0.0.1:0".parse().unwrap(),
+        profile: kenya_profile(),
+        audit: dir.path().join("audit.jsonl"),
+        consent_store: dir.path().join("consent.jsonl"),
+        token: "kenya-eph".into(),
+        keys_dir: None,
+        ephemeral: true,
+        wrapped_keys_dir: None,
+        org_iam_config: None,
+        jwks_url: None,
+        jwks_file: None,
+        oidc_issuer: None,
+        oidc_audience: None,
+        ehrbase_url: None,
+        cdr_template_opt: None,
+        fhir_store: None,
+        subject_link_store: None,
+        dual_write_dead_letter: None,
+    };
+    let err = match build_state(&config).await {
+        Ok(_) => {
+            std::env::remove_var("SOLUM_STORAGE_REGION");
+            panic!("kenya-dpa must refuse EphemeralTest");
+        }
+        Err(e) => e,
+    };
+    std::env::remove_var("SOLUM_STORAGE_REGION");
+    assert!(
+        err.to_lowercase().contains("ephemeral")
+            || err.to_lowercase().contains("custody")
+            || err.to_lowercase().contains("startup")
+            || err.contains("kenya-dpa"),
+        "err={err}"
+    );
+}
+
+#[tokio::test]
+#[allow(clippy::await_holding_lock)]
+async fn kenya_dpa_refuses_wrong_storage_region() {
+    let _guard = env_lock().lock().unwrap();
+    std::env::set_var("SOLUM_STORAGE_REGION", "EU");
+    let dir = tempdir().unwrap();
+    let keys_dir = dir.path().join("keys");
+    std::fs::create_dir_all(&keys_dir).unwrap();
+    write_keypair_file(&keys_dir, "ke/wrong-region");
+    let config = SidecarConfig {
+        bind: "127.0.0.1:0".parse().unwrap(),
+        profile: kenya_profile(),
+        audit: dir.path().join("audit.jsonl"),
+        consent_store: dir.path().join("consent.jsonl"),
+        token: "kenya-region".into(),
+        keys_dir: Some(keys_dir),
+        ephemeral: false,
+        wrapped_keys_dir: None,
+        org_iam_config: None,
+        jwks_url: None,
+        jwks_file: None,
+        oidc_issuer: None,
+        oidc_audience: None,
+        ehrbase_url: None,
+        cdr_template_opt: None,
+        fhir_store: None,
+        subject_link_store: None,
+        dual_write_dead_letter: None,
+    };
+    let err = match build_state(&config).await {
+        Ok(_) => {
+            std::env::remove_var("SOLUM_STORAGE_REGION");
+            panic!("kenya-dpa must refuse EU storage_region");
+        }
+        Err(e) => e,
+    };
+    std::env::remove_var("SOLUM_STORAGE_REGION");
+    assert!(
+        err.contains("storage_region") || err.contains("EU") || err.contains("startup"),
+        "err={err}"
+    );
+}
+
+#[tokio::test]
+#[allow(clippy::await_holding_lock)]
+async fn kenya_dpa_customer_held_starts_with_ke_region() {
+    let _guard = env_lock().lock().unwrap();
+    std::env::set_var("SOLUM_STORAGE_REGION", "KE");
+    let dir = tempdir().unwrap();
+    let keys_dir = dir.path().join("keys");
+    std::fs::create_dir_all(&keys_dir).unwrap();
+    write_keypair_file(&keys_dir, "ke/ok");
+    let config = SidecarConfig {
+        bind: "127.0.0.1:0".parse().unwrap(),
+        profile: kenya_profile(),
+        audit: dir.path().join("audit.jsonl"),
+        consent_store: dir.path().join("consent.jsonl"),
+        token: "kenya-ok".into(),
+        keys_dir: Some(keys_dir),
+        ephemeral: false,
+        wrapped_keys_dir: None,
+        org_iam_config: None,
+        jwks_url: None,
+        jwks_file: None,
+        oidc_issuer: None,
+        oidc_audience: None,
+        ehrbase_url: None,
+        cdr_template_opt: None,
+        fhir_store: None,
+        subject_link_store: None,
+        dual_write_dead_letter: None,
+    };
+    let state = build_state(&config).await.expect("kenya CustomerHeld + KE");
+    std::env::remove_var("SOLUM_STORAGE_REGION");
+    drop(_guard);
+    let app = app_router(state);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let res = client()
+        .get(format!("http://{addr}/v1/audit/verify"))
+        .header(SIDECAR_TOKEN_HEADER, "kenya-ok")
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        res.status().is_success() || res.status().as_u16() == 400,
+        "sidecar up: {}",
+        res.status()
+    );
 }

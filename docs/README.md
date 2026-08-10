@@ -1,6 +1,6 @@
 # Solum documentation
 
-Solum is the **clinical-data compliance layer** in the Synaptic Four portfolio: enforce, translate, and evidence conforming processing — not a durable clinical store, and not a Ferrum fork.
+Solum is the **clinical-data compliance layer** in the Synaptic Four portfolio (Track A default): enforce, translate, and evidence conforming processing. Optional **Track B** can front an openEHR CDR (EHRbase) for partner APIs — not a hospital EHR UI, and not a Ferrum fork. See [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md) · [H3-EHRBASE-SPIKE.md](H3-EHRBASE-SPIKE.md) · Demo [COVERAGE](https://github.com/SynapticFour/Solum-Demo/blob/main/docs/COVERAGE.md).
 
 | Product | Domain |
 |---------|--------|

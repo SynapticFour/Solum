@@ -153,5 +153,5 @@ notes = [
     "Research and secondary-use purposes require separate lawful basis and governance approval; they are not implied by clinical-care consent. Research is optional_purposes only.",
     "Empty permitted_destinations intentionally enforces fail-closed behaviour for cross-border transfers. Listed mechanisms are pathways, not permits. Populate destinations only after TIA + operator approval + contract/safeguards.",
     "Solum provides technical controls for lawful processing. Obligations to register, submit, disclose, or report health information (incl. National Health Data Bank) remain with the data controller/operator. HDB integration / automatic submission / regulatory registration are explicit non-goals.",
-    "Edge / offline (engineering policy pending field wiring): offline_cache_region must equal deployment_region (KE); encrypted local cache only; no master keys on Pi; customer_held keys; on consent.unknown / unreconciled revoke prefer restrict non-emergency processing until sync.",
+    "Edge / offline: policy written in docs/H4-OFFLINE-SYNC-POLICY.md (offline_cache_region must equal deployment_region KE; encrypted local cache only; no master keys on Pi; customer_held keys; on consent.unknown / unreconciled revoke prefer restrict non-emergency processing until sync). Field reconcile wiring = K3.",
 ]

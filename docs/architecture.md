@@ -8,12 +8,12 @@
      ┌──────────────┬────────────┬───────────┬────────────┬─────────────┬──────────────┐
      ▼              ▼            ▼           ▼            ▼             ▼
 solum-profiles  solum-crypto  solum-fhir  solum-openehr  solum-audit  solum-consent
-(TOML juris-    (ferrum-core  (stage 1)   (stage 2       (hash-chained (grant/revoke,
- diction         git pin)                  scaffold)      file log,     purpose
- profiles)                                                HELIOS export) binding)
+(TOML juris-    (ferrum-core  (stage 1)   (EHRbase       (hash-chained (grant/revoke,
+ diction         git pin)                  Track B        file log,     purpose
+ profiles)                                 client/façade) HELIOS export) binding)
 ```
 
-Solum is a **compliance layer**: it enforces policy, transforms interchange formats, and produces evidence. It is not the system of record for durable clinical storage.
+Solum is a **compliance layer** (Track A default): policy, interchange, evidence. Optional **Track B** fronts EHRbase as an openEHR CDR for partner APIs — not a Synaptic Four hospital EHR UI. See [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md), [adr/0002-cdr-engine-ehrbase.md](adr/0002-cdr-engine-ehrbase.md).
 
 ## Principles
 
@@ -55,7 +55,7 @@ Chosen for consistency with Ferrum-core and direct reuse of existing Rust buildi
 | `solum-profiles` | Load/validate jurisdiction TOML profiles |
 | `solum-crypto` | Crypt4GH field encryption + key custody; pins `ferrum-core` |
 | `solum-fhir` | FHIR adapter (stage 1 focus) |
-| `solum-openehr` | openEHR adapter (stage 2 scaffold) |
+| `solum-openehr` | openEHR / EHRbase client (Track B) |
 | `solum-audit` | Audit events; `FileAuditStore` persists a hash-chained, tamper-evident log + HELIOS-oriented JSON export |
 | `solum-consent` | Grant/revoke consent per `(subject, purpose)`; purpose validated against the active profile; full history persisted |
 

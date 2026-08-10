@@ -34,8 +34,20 @@
 //!    (same as CLI). **H2.2 org-IAM mode:** Bearer JWT verified via JWKS;
 //!    OIDC groups mapped to `CAP_*` from a TOML file; body `capability[]`
 //!    ignored. Fail → 403, no side effect.
+//!
+//! # Track B CDR (H3.0, opt-in)
+//!
+//! When `--ehrbase-url` / `SOLUM_EHRBASE_URL` is set, `/v1/cdr/*` routes front
+//! EHRbase and emit `cdr.*` audit events on successful writes. Without a URL,
+//! those routes return 503 Track B disabled.
 
 #![forbid(unsafe_code)]
+
+mod fhir_store;
+mod subject_link;
+
+pub use fhir_store::{fhir_type_allowed, FhirStore, StoredFhirResource, ALLOWED_FHIR_TYPES};
+pub use subject_link::{SubjectLink, SubjectLinkStore};
 
 use std::fs;
 use std::net::SocketAddr;
@@ -43,7 +55,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use axum::body::Body;
-use axum::extract::{Query, State};
+use axum::extract::{Path as AxumPath, Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, Request, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -61,8 +73,10 @@ use solum_core::{
     example_eu_runtime, query_consent_status, ActorSource, Deployment, SolumActor, SolumError,
 };
 use solum_identity::OrgCapMapping;
+use solum_openehr::{OpenEhrAdapter, OpenEhrError, PINNED_TEMPLATE_ID, PINNED_TEMPLATE_OPT};
 use subtle::ConstantTimeEq;
 use tower_http::trace::TraceLayer;
+use uuid::Uuid;
 
 /// Same warning text as the CLI (`solum-core` binary) ephemeral path.
 pub const EPHEMERAL_KEY_WARNING: &str = "\
@@ -277,6 +291,14 @@ pub struct AppState {
     token: Vec<u8>,
     /// When set, mutating routes derive CAP_* from verified JWT groups (H2.2).
     org_iam: Option<OrgIamRuntime>,
+    /// Track B EHRbase base URL adapter (disabled when `cdr_url` is None).
+    openehr: OpenEhrAdapter,
+    /// Optional path to OPT XML; when unset, embedded pinned fixture is used.
+    cdr_template_opt: Option<PathBuf>,
+    fhir_store: Mutex<FhirStore>,
+    subject_link_store: Mutex<SubjectLinkStore>,
+    /// Dual-write dead-letter JSONL (H3.2 live webhook). Always set at startup.
+    dual_write_dead_letter: PathBuf,
 }
 
 /// Org-IAM runtime: JWKS verifier + group→CAP mapping.
@@ -310,6 +332,16 @@ pub struct SidecarConfig {
     pub oidc_issuer: Option<String>,
     /// Optional JWT audience (standalone OIDC).
     pub oidc_audience: Option<String>,
+    /// EHRbase base URL including `/ehrbase` context (Track B). Env: `SOLUM_EHRBASE_URL`.
+    pub ehrbase_url: Option<String>,
+    /// Optional OPT file for template upload; default = embedded pinned fixture.
+    pub cdr_template_opt: Option<PathBuf>,
+    /// FHIR façade store (JSONL). Default: `<consent_store_dir>/fhir_store.jsonl`.
+    pub fhir_store: Option<PathBuf>,
+    /// Subject bridge store (JSONL). Default: `<consent_store_dir>/subject_links.jsonl`.
+    pub subject_link_store: Option<PathBuf>,
+    /// Dual-write dead-letter JSONL. Default: `<consent_store_dir>/dual_write_dead_letter.jsonl`.
+    pub dual_write_dead_letter: Option<PathBuf>,
 }
 
 impl SidecarConfig {
@@ -493,6 +525,34 @@ pub async fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String
     )
     .map_err(|e| e.to_string())?;
 
+    let fhir_path = config.fhir_store.clone().unwrap_or_else(|| {
+        config
+            .consent_store
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("fhir_store.jsonl")
+    });
+    let subject_path = config.subject_link_store.clone().unwrap_or_else(|| {
+        config
+            .consent_store
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("subject_links.jsonl")
+    });
+    let dual_write_dead_letter = config.dual_write_dead_letter.clone().unwrap_or_else(|| {
+        config
+            .consent_store
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("dual_write_dead_letter.jsonl")
+    });
+    if let Some(parent) = dual_write_dead_letter.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("dual-write dead-letter mkdir {}: {e}", parent.display()))?;
+    }
+    let fhir_store = FhirStore::open(&fhir_path)?;
+    let subject_link_store = SubjectLinkStore::open(&subject_path)?;
+
     Ok(Arc::new(AppState {
         deployment: Mutex::new(deployment),
         keys,
@@ -501,6 +561,19 @@ pub async fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String
         consent_path: config.consent_store.clone(),
         token: config.token.as_bytes().to_vec(),
         org_iam,
+        openehr: match config
+            .ehrbase_url
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
+            Some(url) => OpenEhrAdapter::with_cdr_url(url),
+            None => OpenEhrAdapter::new(),
+        },
+        cdr_template_opt: config.cdr_template_opt.clone(),
+        fhir_store: Mutex::new(fhir_store),
+        subject_link_store: Mutex::new(subject_link_store),
+        dual_write_dead_letter,
     }))
 }
 
@@ -553,6 +626,25 @@ pub fn app_router(state: Arc<AppState>) -> Router {
         .route("/v1/crypto/decrypt", post(crypto_decrypt))
         .route("/v1/audit/export", get(audit_export))
         .route("/v1/audit/verify", get(audit_verify))
+        .route("/v1/cdr/template", post(cdr_upload_template))
+        .route("/v1/cdr/ehr", post(cdr_create_ehr))
+        .route(
+            "/v1/cdr/ehr/:ehr_id/composition",
+            post(cdr_commit_composition),
+        )
+        .route(
+            "/v1/cdr/ehr/:ehr_id/composition/:composition_uid",
+            get(cdr_get_composition),
+        )
+        .route("/v1/cdr/aql", post(cdr_aql))
+        .route("/v1/cdr/subject-link", post(subject_link_upsert))
+        .route(
+            "/v1/cdr/subject-link/:solum_subject_id",
+            get(subject_link_get),
+        )
+        .route("/v1/fhir/:resource_type", post(fhir_create))
+        .route("/v1/fhir/:resource_type/:id", get(fhir_get))
+        .route("/v1/migrate/dual-write", post(migrate_dual_write))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             sidecar_token_middleware,
@@ -1069,6 +1161,838 @@ async fn audit_verify(State(state): State<Arc<AppState>>) -> Response {
             Json(ErrorBody {
                 error: "bad_request".into(),
                 message: e.to_string(),
+            }),
+        )
+            .into_response(),
+    }
+}
+
+// --- Track B CDR façade (H3.0) ---
+
+#[derive(Debug, Deserialize)]
+pub struct CdrActorBody {
+    pub actor: String,
+    #[serde(default)]
+    pub capability: Vec<String>,
+    /// When true (default for commit), fetch EHRbase canonical example for the template.
+    #[serde(default)]
+    pub use_example: Option<bool>,
+    /// Optional FLAT composition JSON (used when `use_example` is false).
+    #[serde(default)]
+    pub composition: Option<serde_json::Value>,
+    /// Template id; defaults to [`PINNED_TEMPLATE_ID`].
+    #[serde(default)]
+    pub template_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CdrReadQuery {
+    pub actor: String,
+    /// Comma-separated capability strings (GET cannot send JSON arrays cleanly).
+    #[serde(default)]
+    pub capability: String,
+}
+
+#[derive(Debug, Serialize)]
+struct CdrEhrResponse {
+    ehr_id: String,
+}
+
+#[derive(Debug, Serialize)]
+struct CdrCompositionResponse {
+    ehr_id: String,
+    composition_uid: String,
+    template_id: String,
+}
+
+#[derive(Debug, Serialize)]
+struct CdrTemplateResponse {
+    template_id: String,
+    status: String,
+}
+
+fn map_openehr_err(err: OpenEhrError) -> Response {
+    match err {
+        OpenEhrError::TrackBDisabled => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorBody {
+                error: "track_b_disabled".into(),
+                message: err.to_string(),
+            }),
+        )
+            .into_response(),
+        OpenEhrError::AqlRejected => (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorBody {
+                error: "aql_rejected".into(),
+                message: err.to_string(),
+            }),
+        )
+            .into_response(),
+        OpenEhrError::Status { status, body } => (
+            StatusCode::BAD_GATEWAY,
+            Json(ErrorBody {
+                error: "ehrbase_error".into(),
+                message: format!("EHRbase HTTP {status}: {body}"),
+            }),
+        )
+            .into_response(),
+        other => (
+            StatusCode::BAD_GATEWAY,
+            Json(ErrorBody {
+                error: "ehrbase_error".into(),
+                message: other.to_string(),
+            }),
+        )
+            .into_response(),
+    }
+}
+
+fn parse_capability_csv(s: &str) -> Vec<String> {
+    s.split(',')
+        .map(|x| x.trim().to_string())
+        .filter(|x| !x.is_empty())
+        .collect()
+}
+
+fn load_template_opt(state: &AppState) -> Result<String, Box<Response>> {
+    if let Some(path) = state.cdr_template_opt.as_ref() {
+        return fs::read_to_string(path).map_err(|e| {
+            Box::new(
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody {
+                        error: "internal".into(),
+                        message: format!("failed to read CDR template OPT {}: {e}", path.display()),
+                    }),
+                )
+                    .into_response(),
+            )
+        });
+    }
+    Ok(PINNED_TEMPLATE_OPT.to_string())
+}
+
+async fn cdr_upload_template(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<CdrActorBody>,
+) -> Response {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        if let Err(e) = dep.authorize_cdr_write_as(&actor) {
+            return map_solum_err(e);
+        }
+    }
+    let client = match state.openehr.client() {
+        Ok(c) => c,
+        Err(e) => return map_openehr_err(e),
+    };
+    let opt = match load_template_opt(&state) {
+        Ok(s) => s,
+        Err(r) => return *r,
+    };
+    if let Err(e) = client.upload_template_opt(&opt).await {
+        return map_openehr_err(e);
+    }
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        let mut details = serde_json::Map::new();
+        details.insert(
+            "template_id".into(),
+            serde_json::Value::String(PINNED_TEMPLATE_ID.into()),
+        );
+        if let Err(e) = dep.record_cdr_event_as(&actor, "cdr.template.uploaded", details) {
+            return map_solum_err(e);
+        }
+    }
+    (
+        StatusCode::OK,
+        Json(CdrTemplateResponse {
+            template_id: PINNED_TEMPLATE_ID.into(),
+            status: "ok".into(),
+        }),
+    )
+        .into_response()
+}
+
+async fn cdr_create_ehr(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<CdrActorBody>,
+) -> Response {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        if let Err(e) = dep.authorize_cdr_write_as(&actor) {
+            return map_solum_err(e);
+        }
+    }
+    let client = match state.openehr.client() {
+        Ok(c) => c,
+        Err(e) => return map_openehr_err(e),
+    };
+    let ehr_id = match client.create_ehr().await {
+        Ok(id) => id,
+        Err(e) => return map_openehr_err(e),
+    };
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        let mut details = serde_json::Map::new();
+        details.insert("ehr_id".into(), serde_json::Value::String(ehr_id.clone()));
+        if let Err(e) = dep.record_cdr_event_as(&actor, "cdr.ehr.created", details) {
+            return map_solum_err(e);
+        }
+    }
+    (StatusCode::CREATED, Json(CdrEhrResponse { ehr_id })).into_response()
+}
+
+async fn cdr_commit_composition(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    AxumPath(ehr_id): AxumPath<String>,
+    Json(body): Json<CdrActorBody>,
+) -> Response {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        if let Err(e) = dep.authorize_cdr_write_as(&actor) {
+            return map_solum_err(e);
+        }
+    }
+    let client = match state.openehr.client() {
+        Ok(c) => c,
+        Err(e) => return map_openehr_err(e),
+    };
+    let template_id = body
+        .template_id
+        .unwrap_or_else(|| PINNED_TEMPLATE_ID.to_string());
+    let use_example = body.use_example.unwrap_or(true);
+    let composition = if use_example {
+        match client.example_composition(&template_id).await {
+            Ok(v) => v,
+            Err(e) => return map_openehr_err(e),
+        }
+    } else {
+        match body.composition {
+            Some(v) => v,
+            None => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorBody {
+                        error: "bad_request".into(),
+                        message: "composition JSON required when use_example=false".into(),
+                    }),
+                )
+                    .into_response();
+            }
+        }
+    };
+    let commit = match client.commit_composition(&ehr_id, &composition).await {
+        Ok(c) => c,
+        Err(e) => return map_openehr_err(e),
+    };
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        let mut details = serde_json::Map::new();
+        details.insert(
+            "ehr_id".into(),
+            serde_json::Value::String(commit.ehr_id.clone()),
+        );
+        details.insert(
+            "composition_uid".into(),
+            serde_json::Value::String(commit.composition_uid.clone()),
+        );
+        details.insert(
+            "template_id".into(),
+            serde_json::Value::String(commit.template_id.clone()),
+        );
+        if let Err(e) = dep.record_cdr_event_as(&actor, "cdr.composition.committed", details) {
+            return map_solum_err(e);
+        }
+    }
+    (
+        StatusCode::CREATED,
+        Json(CdrCompositionResponse {
+            ehr_id: commit.ehr_id,
+            composition_uid: commit.composition_uid,
+            template_id: commit.template_id,
+        }),
+    )
+        .into_response()
+}
+
+async fn cdr_get_composition(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    AxumPath((ehr_id, composition_uid)): AxumPath<(String, String)>,
+    Query(q): Query<CdrReadQuery>,
+) -> Response {
+    let caps = parse_capability_csv(&q.capability);
+    let actor = match resolve_mutating_actor(&state, &headers, q.actor, caps) {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        if let Err(e) = dep.authorize_cdr_read_as(&actor) {
+            return map_solum_err(e);
+        }
+    }
+    let client = match state.openehr.client() {
+        Ok(c) => c,
+        Err(e) => return map_openehr_err(e),
+    };
+    match client.get_composition(&ehr_id, &composition_uid).await {
+        Ok(body) => (StatusCode::OK, Json(body)).into_response(),
+        Err(e) => map_openehr_err(e),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AqlRequest {
+    pub actor: String,
+    #[serde(default)]
+    pub capability: Vec<String>,
+    pub q: String,
+}
+
+async fn cdr_aql(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<AqlRequest>,
+) -> Response {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        if let Err(e) = dep.authorize_cdr_read_as(&actor) {
+            return map_solum_err(e);
+        }
+    }
+    let client = match state.openehr.client() {
+        Ok(c) => c,
+        Err(e) => return map_openehr_err(e),
+    };
+    let result = match client.execute_aql(&body.q).await {
+        Ok(v) => v,
+        Err(e) => return map_openehr_err(e),
+    };
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        let mut details = serde_json::Map::new();
+        details.insert(
+            "aql_len".into(),
+            serde_json::Value::Number(body.q.len().into()),
+        );
+        if let Err(e) = dep.record_cdr_event_as(&actor, "cdr.aql.executed", details) {
+            return map_solum_err(e);
+        }
+    }
+    (StatusCode::OK, Json(result)).into_response()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FhirWriteBody {
+    pub actor: String,
+    #[serde(default)]
+    pub capability: Vec<String>,
+    /// FHIR resource JSON (must include resourceType matching path, or Bundle).
+    pub resource: serde_json::Value,
+    /// When Track B is enabled, also commit pinned openEHR composition and link ids.
+    #[serde(default)]
+    pub link_cdr: Option<bool>,
+}
+
+async fn fhir_create(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    AxumPath(resource_type): AxumPath<String>,
+    Json(body): Json<FhirWriteBody>,
+) -> Response {
+    if !fhir_type_allowed(&resource_type) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorBody {
+                error: "bad_request".into(),
+                message: format!(
+                    "resourceType '{resource_type}' not in H3.1 allowlist {:?}",
+                    ALLOWED_FHIR_TYPES
+                ),
+            }),
+        )
+            .into_response();
+    }
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        if let Err(e) = dep.authorize_cdr_write_as(&actor) {
+            return map_solum_err(e);
+        }
+    }
+
+    let link_cdr = body.link_cdr.unwrap_or(true);
+    match persist_fhir_resource(&state, &actor, &resource_type, body.resource, link_cdr).await {
+        Ok(stored) => (StatusCode::CREATED, Json(stored.resource)).into_response(),
+        Err(msg) if msg.starts_with("body resourceType") => (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorBody {
+                error: "bad_request".into(),
+                message: msg,
+            }),
+        )
+            .into_response(),
+        Err(msg) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody {
+                error: "internal".into(),
+                message: msg,
+            }),
+        )
+            .into_response(),
+    }
+}
+
+struct PersistFhirOk {
+    resource: serde_json::Value,
+    ehr_id: Option<String>,
+    composition_uid: Option<String>,
+}
+
+/// Shared FHIR façade write used by `/v1/fhir/*` and `/v1/migrate/dual-write`.
+async fn persist_fhir_resource(
+    state: &AppState,
+    actor: &solum_core::SolumActor,
+    resource_type: &str,
+    mut resource: serde_json::Value,
+    link_cdr: bool,
+) -> Result<PersistFhirOk, String> {
+    let declared = resource
+        .get("resourceType")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if !declared.is_empty() && declared != resource_type {
+        return Err(format!(
+            "body resourceType '{declared}' != path '{resource_type}'"
+        ));
+    }
+    if declared.is_empty() {
+        if let Some(obj) = resource.as_object_mut() {
+            obj.insert(
+                "resourceType".into(),
+                serde_json::Value::String(resource_type.to_string()),
+            );
+        }
+    }
+    let id = resource
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    if let Some(obj) = resource.as_object_mut() {
+        obj.insert("id".into(), serde_json::Value::String(id.clone()));
+    }
+
+    let mut ehr_id = None;
+    let mut composition_uid = None;
+    if link_cdr && state.openehr.is_enabled() {
+        let client = state.openehr.client().map_err(|e| e.to_string())?;
+        let eid = client.create_ehr().await.map_err(|e| e.to_string())?;
+        let example = client
+            .example_composition(PINNED_TEMPLATE_ID)
+            .await
+            .map_err(|e| e.to_string())?;
+        // Mapping honesty: still `minimal_observation.en.v1` until patient-summary OPT is
+        // pinned (see docs/H3-CLINICAL-MODELLING.md). Correlation lives in audit + subject-link.
+        let commit = client
+            .commit_composition(&eid, &example)
+            .await
+            .map_err(|e| e.to_string())?;
+        ehr_id = Some(commit.ehr_id);
+        composition_uid = Some(commit.composition_uid);
+    }
+
+    let stored = StoredFhirResource {
+        resource_type: resource_type.to_string(),
+        id: id.clone(),
+        resource: resource.clone(),
+        ehr_id: ehr_id.clone(),
+        composition_uid: composition_uid.clone(),
+    };
+    {
+        let store = state.fhir_store.lock().expect("fhir store mutex");
+        store.upsert(&stored)?;
+    }
+
+    // Patient → subject bridge (H3.3): same id string partners should use as Ferrum solum_subject.
+    if resource_type == "Patient" {
+        let link = SubjectLink {
+            solum_subject_id: id.clone(),
+            ferrum_drs_id: None,
+            phenopacket_id: None,
+            ehr_id: ehr_id.clone(),
+        };
+        let store = state.subject_link_store.lock().expect("subject link mutex");
+        store.upsert(&link)?;
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        let mut details = serde_json::Map::new();
+        details.insert(
+            "solum_subject_id".into(),
+            serde_json::Value::String(id.clone()),
+        );
+        details.insert(
+            "source".into(),
+            serde_json::Value::String("fhir.Patient".into()),
+        );
+        dep.record_cdr_event_as(actor, "cdr.subject_link.upserted", details)
+            .map_err(|e| e.to_string())?;
+    }
+
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        let mut details = serde_json::Map::new();
+        details.insert(
+            "resource_type".into(),
+            serde_json::Value::String(resource_type.to_string()),
+        );
+        details.insert("id".into(), serde_json::Value::String(id));
+        if let Some(ref e) = ehr_id {
+            details.insert("ehr_id".into(), serde_json::Value::String(e.clone()));
+        }
+        if let Some(ref c) = composition_uid {
+            details.insert(
+                "composition_uid".into(),
+                serde_json::Value::String(c.clone()),
+            );
+        }
+        dep.record_cdr_event_as(actor, "cdr.fhir.created", details)
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(PersistFhirOk {
+        resource,
+        ehr_id,
+        composition_uid,
+    })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DualWriteBody {
+    pub actor: String,
+    #[serde(default)]
+    pub capability: Vec<String>,
+    /// FHIR resource JSON (must include resourceType).
+    pub resource: serde_json::Value,
+    /// Optional legacy system id / correlation for dead-letter triage.
+    #[serde(default)]
+    pub source: Option<String>,
+    /// When Track B is enabled, also commit pinned openEHR composition (default true).
+    #[serde(default)]
+    pub link_cdr: Option<bool>,
+}
+
+/// Live dual-write webhook: mirror FHIR into Solum façade (+ optional CDR).
+/// On mirror failure → append dead-letter JSONL and return **202** (never silent drop).
+async fn migrate_dual_write(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<DualWriteBody>,
+) -> Response {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor.clone(), body.capability)
+    {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        if let Err(e) = dep.authorize_cdr_write_as(&actor) {
+            return map_solum_err(e);
+        }
+    }
+
+    let resource_type = body
+        .resource
+        .get("resourceType")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if resource_type.is_empty() || !fhir_type_allowed(&resource_type) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorBody {
+                error: "bad_request".into(),
+                message: format!(
+                    "resourceType '{resource_type}' not in H3.1 allowlist {:?}",
+                    ALLOWED_FHIR_TYPES
+                ),
+            }),
+        )
+            .into_response();
+    }
+
+    let link_cdr = body.link_cdr.unwrap_or(true);
+    match persist_fhir_resource(
+        &state,
+        &actor,
+        &resource_type,
+        body.resource.clone(),
+        link_cdr,
+    )
+    .await
+    {
+        Ok(stored) => {
+            let mut dep = state.deployment.lock().expect("deployment mutex");
+            let mut details = serde_json::Map::new();
+            details.insert(
+                "resource_type".into(),
+                serde_json::Value::String(resource_type),
+            );
+            if let Some(s) = body.source {
+                details.insert("source".into(), serde_json::Value::String(s));
+            }
+            if let Some(e) = stored.ehr_id {
+                details.insert("ehr_id".into(), serde_json::Value::String(e));
+            }
+            if let Some(c) = stored.composition_uid {
+                details.insert("composition_uid".into(), serde_json::Value::String(c));
+            }
+            if let Err(e) = dep.record_cdr_event_as(&actor, "cdr.dual_write.ok", details) {
+                return map_solum_err(e);
+            }
+            (
+                StatusCode::CREATED,
+                Json(serde_json::json!({
+                    "dead_lettered": false,
+                    "resource": stored.resource,
+                })),
+            )
+                .into_response()
+        }
+        Err(reason) => {
+            let row = solum_core::dead_letter_row(
+                &reason,
+                &serde_json::json!({
+                    "source": body.source,
+                    "resource": body.resource,
+                }),
+            );
+            if let Err(e) = solum_core::append_dead_letter(&state.dual_write_dead_letter, &row) {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody {
+                        error: "internal".into(),
+                        message: format!("dual-write failed and dead-letter write failed: {e}"),
+                    }),
+                )
+                    .into_response();
+            }
+            {
+                let mut dep = state.deployment.lock().expect("deployment mutex");
+                let mut details = serde_json::Map::new();
+                details.insert("reason".into(), serde_json::Value::String(reason.clone()));
+                details.insert(
+                    "dead_letter".into(),
+                    serde_json::Value::String(state.dual_write_dead_letter.display().to_string()),
+                );
+                if let Err(e) =
+                    dep.record_cdr_event_as(&actor, "cdr.dual_write.dead_lettered", details)
+                {
+                    return map_solum_err(e);
+                }
+            }
+            (
+                StatusCode::ACCEPTED,
+                Json(serde_json::json!({
+                    "dead_lettered": true,
+                    "reason": reason,
+                    "dead_letter": state.dual_write_dead_letter.display().to_string(),
+                })),
+            )
+                .into_response()
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FhirReadQuery {
+    pub actor: String,
+    #[serde(default)]
+    pub capability: String,
+}
+
+async fn fhir_get(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    AxumPath((resource_type, id)): AxumPath<(String, String)>,
+    Query(q): Query<FhirReadQuery>,
+) -> Response {
+    if !fhir_type_allowed(&resource_type) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorBody {
+                error: "bad_request".into(),
+                message: format!("resourceType '{resource_type}' not allowed"),
+            }),
+        )
+            .into_response();
+    }
+    let caps = parse_capability_csv(&q.capability);
+    let actor = match resolve_mutating_actor(&state, &headers, q.actor, caps) {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        if let Err(e) = dep.authorize_cdr_read_as(&actor) {
+            return map_solum_err(e);
+        }
+    }
+    let found = {
+        let store = state.fhir_store.lock().expect("fhir store mutex");
+        match store.get(&resource_type, &id) {
+            Ok(v) => v,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody {
+                        error: "internal".into(),
+                        message: e,
+                    }),
+                )
+                    .into_response();
+            }
+        }
+    };
+    match found {
+        Some(entry) => (StatusCode::OK, Json(entry.resource)).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody {
+                error: "not_found".into(),
+                message: format!("{resource_type}/{id} not found"),
+            }),
+        )
+            .into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SubjectLinkBody {
+    pub actor: String,
+    #[serde(default)]
+    pub capability: Vec<String>,
+    pub solum_subject_id: String,
+    #[serde(default)]
+    pub ferrum_drs_id: Option<String>,
+    #[serde(default)]
+    pub phenopacket_id: Option<String>,
+    #[serde(default)]
+    pub ehr_id: Option<String>,
+}
+
+async fn subject_link_upsert(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<SubjectLinkBody>,
+) -> Response {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        if let Err(e) = dep.authorize_cdr_write_as(&actor) {
+            return map_solum_err(e);
+        }
+    }
+    let link = SubjectLink {
+        solum_subject_id: body.solum_subject_id.clone(),
+        ferrum_drs_id: body.ferrum_drs_id.clone(),
+        phenopacket_id: body.phenopacket_id.clone(),
+        ehr_id: body.ehr_id.clone(),
+    };
+    {
+        let store = state.subject_link_store.lock().expect("subject link mutex");
+        if let Err(e) = store.upsert(&link) {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    error: "internal".into(),
+                    message: e,
+                }),
+            )
+                .into_response();
+        }
+    }
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        let mut details = serde_json::Map::new();
+        details.insert(
+            "solum_subject_id".into(),
+            serde_json::Value::String(body.solum_subject_id),
+        );
+        if let Err(e) = dep.record_cdr_event_as(&actor, "cdr.subject_link.upserted", details) {
+            return map_solum_err(e);
+        }
+    }
+    (StatusCode::OK, Json(link)).into_response()
+}
+
+async fn subject_link_get(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    AxumPath(solum_subject_id): AxumPath<String>,
+    Query(q): Query<FhirReadQuery>,
+) -> Response {
+    let caps = parse_capability_csv(&q.capability);
+    let actor = match resolve_mutating_actor(&state, &headers, q.actor, caps) {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    {
+        let mut dep = state.deployment.lock().expect("deployment mutex");
+        if let Err(e) = dep.authorize_cdr_read_as(&actor) {
+            return map_solum_err(e);
+        }
+    }
+    let found = {
+        let store = state.subject_link_store.lock().expect("subject link mutex");
+        match store.get(&solum_subject_id) {
+            Ok(v) => v,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody {
+                        error: "internal".into(),
+                        message: e,
+                    }),
+                )
+                    .into_response();
+            }
+        }
+    };
+    match found {
+        Some(link) => (StatusCode::OK, Json(link)).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody {
+                error: "not_found".into(),
+                message: format!("subject link '{solum_subject_id}' not found"),
             }),
         )
             .into_response(),

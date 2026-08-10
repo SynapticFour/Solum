@@ -10,7 +10,7 @@ This document is the in-repo product anchor for contributors and operators. It s
 |---|---|---|
 | Domain | Genomic / -omic data under GA4GH | Clinical electronic health data |
 | Role | Platform services for genomic exchange | **Compliance layer** *and* (optionally) **clinical data plane**: enforce, translate, evidence — and, when enabled, persist clinical content via open standards |
-| Persistence | Data platform (operator-deployed) | **Track A (default):** does not replace the EHR — works with data wherever it already lives (sidecar). **Track B (planned):** optional openEHR CDR + FHIR APIs as a standards-native clinical store so sites can migrate *toward* Solum over time |
+| Persistence | Data platform (operator-deployed) | **Track A (default):** does not replace the EHR — works with data wherever it already lives (sidecar). **Track B (H3 engineering exit):** optional openEHR CDR (EHRbase) + Solum façade, FHIR subset, migration helpers, subject bridge — partners build EHR UI on APIs |
 | Docs | GA4GH / Crypt4GH / genomic EHDS notes | Links to Ferrum for GA4GH; does not duplicate it |
 
 Both share a sovereignty philosophy (customer-held control, open standards, no lock-in to proprietary interchange formats) but are **separate brands, repositories, and regulatory perimeters**.
@@ -77,7 +77,7 @@ Solum prepares stable export shapes (`solum-audit`) and intends to consume HELIO
 See [roadmap.md](roadmap.md) and the portfolio [coordinated roadmap](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/COORDINATED-PORTFOLIO-ROADMAP.md).
 
 - **Stage 1 (build now / Track A):** secure processing controls, consent/access-rights management, evidence generation hooks, profile system (EU profile + extensible schema), sidecar for legacy EHR wrap.
-- **Stage 2 (planned / Track B start):** deeper FHIR/IHE EEHRxF category coverage, **openEHR CDR MVP + migration toolkit** (mirror/cut-over), additional jurisdiction profiles; SaaS *preparedness* (tenancy/key boundaries) without SaaS as default delivery.
+- **Stage 2 (Track B / H3):** **H3 engineering exit** — EHRbase CDR façade, FHIR subset + AQL proxy, migration inventory/dead-letter, subject bridge, partner API docs; deeper EEHRxF categories and external RA counsel remain follow-ons; SaaS *preparedness* without SaaS as default delivery.
 - **Not planned as Solum:** a full hospital EHR UI, diagnostic/therapeutic decision support, or absorbing Ferrum’s genomic platform.
 
 ## 9. Certification partner model (concept)

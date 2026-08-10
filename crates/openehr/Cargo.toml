@@ -1,6 +1,6 @@
 [package]
 name = "solum-openehr"
-description = "Solum openEHR adapter (stage-2 scaffold)"
+description = "Solum openEHR adapter — EHRbase REST client (H3.0 Track B)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,6 +10,12 @@ publish.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+reqwest.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
+axum = "0.7"

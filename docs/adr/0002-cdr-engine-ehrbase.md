@@ -81,11 +81,11 @@ Constraints: on-prem first, open standards, customer-held keys / Solum audit, MD
 
 ## Follow-ups (implementation order)
 
-1. **Spike spike:** compose file `Solum-Demo` or Lab Kit profile: Solum sidecar + EHRbase + Postgres (dev-local only)
-2. Pin EHRbase Docker tag in Solum `VERSIONS` / docs
-3. Minimal write/read composition via Solum façade (one template)
-4. Audit event on each façade write
-5. Showcase fixture later (Path E+)
+1. **Spike compose:** Solum-Demo `docker-compose.ehrbase.yml` (+ optional `h3-sidecar` profile) — **H3.0**
+2. Pin EHRbase Docker tag in Solum [`VERSIONS`](../../VERSIONS) / [`docs/H3-EHRBASE-SPIKE.md`](../H3-EHRBASE-SPIKE.md) — **H3.0**
+3. Minimal write/read composition via Solum façade (one template: `minimal_observation.en.v1`) — **H3.0**
+4. Audit event on each façade write (`cdr.*`) — **H3.0**
+5. Showcase fixture later (Path E+) — **H3.5** (after H3.0)
 
 ## Alternatives rejected (summary)
 

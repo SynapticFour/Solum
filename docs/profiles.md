@@ -35,11 +35,11 @@ Engineering posture after Vorprüfung:
 - `required_purposes` = primary-care floor; research etc. in `optional_purposes` only
 - `permitted_destinations = []` fail-closed (strength); mechanisms are pathways, not permits
 - National Health Data Bank = operator obligation / Solum non-goal
-- Edge offline policies documented in `regulatory.notes` (enforcement = later K2/K3)
+- Edge offline policies: written in [H4-OFFLINE-SYNC-POLICY.md](H4-OFFLINE-SYNC-POLICY.md); field reconcile remains K3
 
-**Portfolio decision:** Kenya is the **first non-EU geography** to drive toward production-ready (provisional). Work breakdown: [H4 geography decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md) (K1 legal / K2 technical / K3 field).
+**Portfolio decision:** Kenya is the **first non-EU geography** to drive toward production-ready (provisional). Work breakdown: [H4 geography decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md) · Showcase [H4-PILOT-CHECKLIST.md](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-PILOT-CHECKLIST.md) (K1 legal / K2 technical / K3 field).
 
-Adding a jurisdiction: copy an existing TOML, adjust fields, drop it in the directory. `load_profiles_dir` picks up every `*.toml` without a code change (unless the schema itself is extended).
+Adding a jurisdiction: copy an existing TOML, adjust fields, drop it into the directory. `load_profiles_dir` picks up every `*.toml` without a code change (unless the schema itself is extended).
 
 ## Transfer policy
 
@@ -67,8 +67,29 @@ Example refusal: profile `eu-ehds` allows only `EU` / `EEA`, runtime sets `stora
 ## CLI smoke check
 
 ```bash
+# EU
 cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml
 
 SOLUM_STORAGE_REGION=us-east-1 cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml
 # expect non-zero exit
+
+# Kenya (H4) — storage region must be KE; CustomerHeld only (default check posture)
+SOLUM_STORAGE_REGION=KE cargo run -p solum-core -- check --profile config/profiles/kenya-dpa.toml
+
+SOLUM_STORAGE_REGION=EU cargo run -p solum-core -- check --profile config/profiles/kenya-dpa.toml
+# expect non-zero exit (residency)
+
+SOLUM_KEY_CUSTODY=ephemeral_test SOLUM_STORAGE_REGION=KE \
+  cargo run -p solum-core -- check --profile config/profiles/kenya-dpa.toml
+# expect non-zero exit (ephemeral refused)
+
+# Sidecar: same region env — CustomerHeld keys required
+SOLUM_STORAGE_REGION=KE solum-sidecar \
+  --profile config/profiles/kenya-dpa.toml \
+  --keys-dir /var/lib/solum/keys \
+  --audit /var/lib/solum/audit.jsonl \
+  --consent-store /var/lib/solum/consent.jsonl \
+  --token "$SOLUM_SIDECAR_TOKEN"
 ```
+
+`kenya-dpa` remains **PROVISIONAL-PRODUCTION-CANDIDATE** until counsel confirms — check success ≠ ODPC clearance.

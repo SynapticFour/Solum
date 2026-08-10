@@ -17,7 +17,7 @@ This runbook is derived from the public repository README, profile docs, and bas
 | **From source** | Supported today — build the `solum` CLI with the Rust toolchain (below). Prefer a **baseline tag** in [BASELINE.md](../BASELINE.md) or a SemVer tag once one exists. |
 | **GitHub Release assets** | Prepared — [`.github/workflows/release.yml`](../../.github/workflows/release.yml) builds platform tarballs on `v*` tags. **Use release assets only after a verified SemVer tag exists** (see [RELEASING.md](../../RELEASING.md)). Until then, treat binary install as unavailable and build from source. |
 
-**Stage‑1 evaluation:** Solum is a supervised Stage‑1 evaluation companion — not an unsupervised production EHR. Kenya profile remains **DRAFT**.
+**Stage‑1 evaluation:** Solum is a supervised Stage‑1 evaluation companion — not an unsupervised production EHR. Kenya profile is **PROVISIONAL-PRODUCTION-CANDIDATE** (not PRODUCTION / not patient SoR).
 
 ### Build prerequisites (from-source)
 
@@ -59,6 +59,8 @@ You may copy an existing TOML, adjust fields, and drop it into the directory; th
 
 At startup Solum **refuses to run** if runtime storage region, key-custody posture, mandatory audit events, or consent workflow contradict the active profile. ([profiles.md](../profiles.md); [PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md))
 
+**Managed single-tenant (H5):** one sidecar + stores = one customer. Optional `SOLUM_TENANT_ID` is stamped into audit `details.tenant_id` for evidence correlation only (see [H5-KEY-CUSTODY-MANAGED.md](../H5-KEY-CUSTODY-MANAGED.md)). Not a multi-tenant router.
+
 ---
 
 ## 3. First-time bring-up
@@ -74,11 +76,13 @@ mkdir -p /var/lib/solum
 # 1. Profile / runtime conformance
 cargo run -p solum-core -- check --profile "$PROFILE"
 
+# Kenya evaluation (PROVISIONAL — not patient SoR):
+# SOLUM_STORAGE_REGION=KE cargo run -p solum-core -- check --profile config/profiles/kenya-dpa.toml
+
 # Expect failure when residency is wrong (example):
 SOLUM_STORAGE_REGION=us-east-1 cargo run -p solum-core -- check --profile "$PROFILE"
 # → non-zero exit
 ```
-
 ### Consent (grant / status / revoke)
 
 Mutating consent commands require `--capability` (GTM-1). Omit it → fail-closed denial. `--scope` on grant is still a **consent data category**, not an authorization capability.

@@ -7,6 +7,8 @@
 | **Tag** | `stage1-baseline-sidecar-custody-2026-08-01` |
 | **Supersedes** | `stage1-baseline-sidecar-2026-07-30` (`211bb4f`) |
 
+> **Post-baseline (do not confuse with this freeze):** Optional Track B / H3 openEHR CDR (EHRbase façade, AQL, subject-link, dual-write) landed after this tag. Stage-1 Demo still pins this tag; H3 Demo builds current `../Solum`. See [H3-EHRBASE-SPIKE.md](H3-EHRBASE-SPIKE.md), Showcase [HORIZON-OPEN-GATES](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/HORIZON-OPEN-GATES.md), Solum-Demo [PINNED_VERSIONS.txt](https://github.com/SynapticFour/Solum-Demo/blob/main/PINNED_VERSIONS.txt).
+
 This document freezes the Solum workspace state that passed local `./scripts/verify.sh` and green GitHub Actions on that commit. Descriptions below are taken from crate `lib.rs` module docs, profile TOML, `deny.toml`, `.gitleaks.toml`, and `docs/` — not from aspirational product copy.
 
 Push-triggered workflows on this commit: **CI** and **Secret Scan** (CodeQL is weekly-only after `c82bb0c`; the stub Quality Gate workflow was removed).

@@ -1,0 +1,10 @@
+# Solum external dependency pins (H3 Track B / EHRbase).
+# Source of truth for compose overlays and docs/H3-EHRBASE-SPIKE.md.
+# Prefer semver tags over :latest / :next.
+
+EHRBASE_IMAGE=ehrbase/ehrbase:2.34.0
+EHRBASE_POSTGRES_IMAGE=ehrbase/ehrbase-v2-postgres:16.2
+
+# Pinned openEHR operational template for H3 façade smoke (fixture under crates/openehr/fixtures/).
+# Patient-summary OPT is the next pin — see docs/H3-CLINICAL-MODELLING.md (not claimed yet).
+SOLUM_H3_TEMPLATE_ID=minimal_observation.en.v1

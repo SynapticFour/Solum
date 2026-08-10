@@ -1,9 +1,9 @@
 # ADR 0001 — Optional openEHR clinical data plane + strangler migration
 
-- **Status:** Accepted (architecture) — implementation deferred to H3
+- **Status:** Accepted (architecture) — **H3.0 implementation in progress** (EHRbase client + sidecar façade); full MVP deferred to H3.1–H3.6
 - **Date:** 2026-08-06
 - **Product:** Solum
-- **Related:** [ADR 0002 — EHRbase engine](0002-cdr-engine-ehrbase.md), [PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md), [MIGRATION-STRANGLER.md](../MIGRATION-STRANGLER.md), portfolio [COORDINATED-PORTFOLIO-ROADMAP](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/COORDINATED-PORTFOLIO-ROADMAP.md)
+- **Related:** [ADR 0002 — EHRbase engine](0002-cdr-engine-ehrbase.md), [H3-EHRBASE-SPIKE.md](../H3-EHRBASE-SPIKE.md), [PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md), [MIGRATION-STRANGLER.md](../MIGRATION-STRANGLER.md), portfolio [COORDINATED-PORTFOLIO-ROADMAP](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/COORDINATED-PORTFOLIO-ROADMAP.md)
 
 ## Context
 
@@ -89,4 +89,4 @@ Mandatory product capability — see [MIGRATION-STRANGLER.md](../MIGRATION-STRAN
 
 ## Notes
 
-SaaS (portfolio H5) may host Track A and/or B as **managed single-tenant** later; this ADR does not authorize multi-tenant CDR design.
+SaaS (portfolio H5) may host Track A and/or B as **managed single-tenant** later; this ADR does not authorize multi-tenant CDR design. See Showcase [ADR 0003](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/adr/0003-tenant-boundaries.md) and Solum [H5-KEY-CUSTODY-MANAGED.md](../H5-KEY-CUSTODY-MANAGED.md).

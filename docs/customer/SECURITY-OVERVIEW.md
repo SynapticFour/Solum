@@ -13,14 +13,14 @@ This document is **not** legal advice, **not** a certification claim, and **not*
 
 ### What it is
 
-Solum is a **compliance layer** for clinical electronic health data: it **enforces** jurisdiction policy, **translates** interchange formats (FHIR first), and **produces evidence** of conforming processing and exchange. It does **not** own durable clinical storage — it works with data wherever it already lives. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §1; [architecture.md](../architecture.md))
+Solum is a **compliance layer** for clinical electronic health data: it **enforces** jurisdiction policy, **translates** interchange formats (FHIR first; openEHR / EHRbase on optional Track B), and **produces evidence** of conforming processing and exchange. Track A works with data wherever it already lives; Track B may persist via a partner-facing CDR façade — still **not** a Synaptic Four hospital EHR product. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §1; [architecture.md](../architecture.md); [H3-EHRBASE-SPIKE.md](../H3-EHRBASE-SPIKE.md))
 
 Stage 1 delivery is **on-premise first**. A SaaS operating model is a prepared Stage‑2 path, not the initial delivery model. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §5; [architecture.md](../architecture.md); [GTM-READINESS.md](../GTM-READINESS.md))
 
 ### What it is not
 
 - **Not a medical device (intended posture).** Solum’s intended posture is to manage, encrypt, log, translate (e.g. FHIR ↔ openEHR), and evidence conforming processing — **never** interpret clinical data for diagnosis, therapy, or risk support. Classification under MDR/IVDR/AI Act depends on intended purpose and facts; **qualified regulatory review is required before go-to-market claims**. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §3)
-- **Not a system of record** for durable clinical storage. ([architecture.md](../architecture.md))
+- **Not a hospital EHR UI / full clinical SoR product.** Track A does not replace primary clinical systems; optional Track B is a partner CDR façade, not Synaptic Four’s EHR application. ([architecture.md](../architecture.md); [PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md))
 - **Not a hosted SaaS product in Stage 1.** ([GTM-READINESS.md](../GTM-READINESS.md); [architecture.md](../architecture.md))
 - **Not a declaration of legal compliance.** Operators must track applicable dates for certification, enforcement, and mandatory primary-use interoperability themselves; Solum aims to support **technical readiness**, not declare legal compliance. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §2)
 

@@ -1,0 +1,57 @@
+# Builds solum-sidecar from the local Solum tree (H3.0 Track B façade).
+# Used by Solum-Demo docker-compose.ehrbase-sidecar.yml — not the Stage-1 tag pin.
+
+ARG RUST_VERSION=1.91.1
+
+FROM rust:${RUST_VERSION}-bookworm AS builder
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        git \
+        libsodium-dev \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY . .
+
+# Local sibling Ferrum path-patch (.cargo/config.toml) breaks in-image builds.
+# Use the git pin from crates/crypto/Cargo.toml instead.
+RUN rm -f .cargo/config.toml
+
+RUN cargo build --release -p solum-sidecar \
+    && strip target/release/solum-sidecar
+
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libsodium23 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --home /nonexistent --shell /usr/sbin/nologin solum
+
+COPY --from=builder /build/target/release/solum-sidecar /usr/local/bin/solum-sidecar
+COPY --from=builder /build/config/profiles/dev-local.toml /etc/solum/dev-local.toml
+COPY --from=builder /build/crates/openehr/fixtures/minimal_observation.opt \
+    /etc/solum/fixtures/minimal_observation.opt
+
+RUN mkdir -p /data && chown solum:solum /data
+
+USER solum
+WORKDIR /data
+
+ENV SOLUM_PROFILE=/etc/solum/dev-local.toml \
+    SOLUM_AUDIT=/data/audit.jsonl \
+    SOLUM_CONSENT_STORE=/data/consent.jsonl \
+    SOLUM_SIDECAR_BIND=0.0.0.0:8787 \
+    SOLUM_ALLOW_EPHEMERAL=1 \
+    SOLUM_EHRBASE_URL=http://ehrbase:8080/ehrbase \
+    SOLUM_CDR_TEMPLATE_OPT=/etc/solum/fixtures/minimal_observation.opt \
+    RUST_LOG=info
+
+EXPOSE 8787
+
+ENTRYPOINT ["solum-sidecar"]
+CMD ["--ephemeral", "--bind", "0.0.0.0:8787"]

@@ -37,4 +37,5 @@ Engineering applied the Vorprüfung recommendations to TOML + notes so the profi
 
 1. Send [KENYA-K1-BRIEF.md](KENYA-K1-BRIEF.md) package to Kenya counsel (attach this Vorprüfung as *engineering prior art*, not as legal conclusion).
 2. On counsel reply: amend TOML or keep provisional; only then consider PRODUCTION.
-3. K2: Edge offline policy enforcement (`offline_cache_region`, consent reconcile) when field path is scheduled.
+3. K2: Edge offline policy **written** ([H4-OFFLINE-SYNC-POLICY.md](../H4-OFFLINE-SYNC-POLICY.md)); field reconcile remains K3 when a site is scheduled.
+4. K1: Operator still executes [KENYA-K1-SEND-CHECKLIST.md](KENYA-K1-SEND-CHECKLIST.md) — in-repo cannot mark counsel sent.

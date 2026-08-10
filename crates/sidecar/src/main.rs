@@ -86,6 +86,26 @@ struct Cli {
     /// Optional JWT audience (standalone OIDC).
     #[arg(long = "oidc-audience", env = "SOLUM_ORG_IAM_AUDIENCE")]
     oidc_audience: Option<String>,
+
+    /// EHRbase base URL including `/ehrbase` context (H3.0 Track B). Opt-in.
+    #[arg(long = "ehrbase-url", env = "SOLUM_EHRBASE_URL")]
+    ehrbase_url: Option<String>,
+
+    /// Optional OPT XML path for `POST /v1/cdr/template` (default: embedded pinned fixture).
+    #[arg(long = "cdr-template-opt", env = "SOLUM_CDR_TEMPLATE_OPT")]
+    cdr_template_opt: Option<PathBuf>,
+
+    /// FHIR façade JSONL store (H3.1). Default beside consent store.
+    #[arg(long = "fhir-store", env = "SOLUM_FHIR_STORE")]
+    fhir_store: Option<PathBuf>,
+
+    /// Subject bridge JSONL store (H3.3). Default beside consent store.
+    #[arg(long = "subject-link-store", env = "SOLUM_SUBJECT_LINK_STORE")]
+    subject_link_store: Option<PathBuf>,
+
+    /// Dual-write dead-letter JSONL (H3.2 live webhook). Default beside consent store.
+    #[arg(long = "dual-write-dead-letter", env = "SOLUM_DUAL_WRITE_DEAD_LETTER")]
+    dual_write_dead_letter: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -113,6 +133,11 @@ async fn main() -> ExitCode {
         jwks_file: cli.jwks_file,
         oidc_issuer: cli.oidc_issuer,
         oidc_audience: cli.oidc_audience,
+        ehrbase_url: cli.ehrbase_url,
+        cdr_template_opt: cli.cdr_template_opt,
+        fhir_store: cli.fhir_store,
+        subject_link_store: cli.subject_link_store,
+        dual_write_dead_letter: cli.dual_write_dead_letter,
     };
 
     match serve(config).await {

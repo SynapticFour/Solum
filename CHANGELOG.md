@@ -7,8 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **H3 Demo Dockerfile** — `deploy/h3-ehrbase/Dockerfile.sidecar` drops local `.cargo/config.toml` Ferrum path-patch so `make up-h3` builds without a sibling mount.
+
+### Changed
+
+- **Roadmap / PRODUCT-DEFINITION** — Track B H3 engineering exit reflected; open gates pointed at Showcase [HORIZON-OPEN-GATES](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/HORIZON-OPEN-GATES.md).
+
 ### Added
 
+- **H5 preparedness (optional)** — `SOLUM_TENANT_ID` audit stamp (metadata only); [H5-KEY-CUSTODY-MANAGED.md](docs/H5-KEY-CUSTODY-MANAGED.md) for managed single-tenant custody + TEE sketch.
+- **H4 Kenya K2** — KE `validate_transfer` fail-closed tests; sidecar `kenya-dpa` refuse ephemeral / wrong region + CustomerHeld+KE start; [H4-OFFLINE-SYNC-POLICY.md](docs/H4-OFFLINE-SYNC-POLICY.md); `solum check` Kenya docs in [profiles.md](docs/profiles.md).
+- **H3 depth harden** — live dual-write webhook `POST /v1/migrate/dual-write` (201 / 202+dead-letter); Patient FHIR → auto subject-link; [H3-CLINICAL-MODELLING.md](docs/H3-CLINICAL-MODELLING.md); [H3-EHRBASE-BACKUP.md](docs/H3-EHRBASE-BACKUP.md); [H3-MDCG-SEND-CHECKLIST.md](docs/counsel/H3-MDCG-SEND-CHECKLIST.md).
+- **H3.1–H3.6 Track B MVP slices** — AQL proxy + FHIR façade (`/v1/fhir/*`, `/v1/cdr/aql`); `solum migrate fhir-import` / `dual-write-stub` + [MIGRATION-CUTOVER-CHECKLIST.md](docs/MIGRATION-CUTOVER-CHECKLIST.md); [ADR 0003 subject bridge](docs/adr/0003-subject-bridge.md) + `/v1/cdr/subject-link`; [PARTNER-EHR-API.md](docs/customer/PARTNER-EHR-API.md); [H3-MDCG-INTERNAL-REVIEW.md](docs/counsel/H3-MDCG-INTERNAL-REVIEW.md).
+- **H3.0 EHRbase Track B spike** — `VERSIONS` pins (`ehrbase:2.34.0`, `ehrbase-v2-postgres:16.2`); `solum-openehr` EHRbase REST client; sidecar `--ehrbase-url` + `/v1/cdr/*` façade; audit events `cdr.*`; Solum-Demo compose overlay; [docs/H3-EHRBASE-SPIKE.md](docs/H3-EHRBASE-SPIKE.md).
 - **H2.2 Org CAP** — sidecar `--org-iam-config` + JWKS maps OIDC groups to `CAP_*` (body `capability[]` ignored); `config/org-iam/pilot-groups.toml`; `solum-identity` mapper + `solum-auth-verify` groups claims.
 - **H2.1 Ferrum consumer** — document that Ferrum may poll `GET /v1/consent/status` for purpose-bound DRS/WES deny ([SIDECAR-INTEGRATION.md](docs/customer/SIDECAR-INTEGRATION.md), [ferrum.md](docs/ferrum.md)).
 - **H2 spine — zeroize** — best-effort `ZeroizeOnDrop` for CustomerHeld / AwsKms held Crypt4GH seeds.
@@ -31,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Notes
 
 - Kenya profile is **PROVISIONAL-PRODUCTION-CANDIDATE** after non-counsel Vorprüfung; [send checklist](docs/counsel/KENYA-K1-SEND-CHECKLIST.md) + [brief](docs/counsel/KENYA-K1-BRIEF.md) still required for real counsel; portfolio H4 names Kenya as first non-EU pack ([Showcase H4 decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md)).
-- Stage-1 evaluation language unchanged; Track B CDR is architecture-only (ADR 0001 + 0002) until H3 implementation.
+- Stage-1 evaluation language unchanged for the frozen tag; **Track B H3 engineering exit** (CDR façade + MVP slices) is available post-baseline — open gates (counsel/OPT/MDR) remain in Showcase [HORIZON-OPEN-GATES](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/HORIZON-OPEN-GATES.md).
 - Do **not** cut a production `v*` tag until release CI binaries build successfully.
 
 [Unreleased]: https://github.com/SynapticFour/Solum/compare/stage1-baseline-website-2026-07-30...HEAD

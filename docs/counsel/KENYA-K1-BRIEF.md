@@ -30,7 +30,7 @@ Synaptic Four will **not** claim ODPC registration, certification, or “Kenya-c
 |------|----------|
 | Enforce residency / key-custody / consent purposes / audit events declared in TOML at startup | Replace institutional DPA registration with ODPC |
 | Crypt4GH field encryption with customer-held keys | Act as Health Data Bank submission system |
-| Sidecar beside existing HMIS/EHR (Track A); optional future openEHR CDR (Track B) | Provide a full hospital EHR UI |
+| Sidecar beside existing HMIS/EHR (Track A); optional Track B openEHR CDR (H3 engineering exit; partner APIs, not a hospital EHR UI) | Provide a full hospital EHR UI |
 | Fail closed when runtime contradicts profile | Guarantee cross-border legality without case-by-case ODPC analysis |
 
 Primary statutes cited in the profile header: DPA 2019; Digital Health Act 2023; ODPC Guidance Note on Processing of Health Data (2024); ODPC Guidance Note on Cross-border Data Transfers (2026).

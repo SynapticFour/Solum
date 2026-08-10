@@ -3,7 +3,7 @@
 **Audience:** Synaptic Four operator / founder preparing external legal review
 **Brief:** [KENYA-K1-BRIEF.md](KENYA-K1-BRIEF.md)
 **Profile:** `config/profiles/kenya-dpa.toml` (**PROVISIONAL-PRODUCTION-CANDIDATE** — real counsel still required)
-**Portfolio:** Showcase [H4-GEOGRAPHY-DECISION.md](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md)
+**Portfolio:** Showcase [H4-GEOGRAPHY-DECISION.md](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md) · [H4-PILOT-CHECKLIST.md](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-PILOT-CHECKLIST.md) (K1.3 = this send — **human gate**, not closable by eng alone)
 
 This is an **ops send checklist**, not legal advice.
 

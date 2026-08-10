@@ -8,11 +8,11 @@ Solum shares Synaptic Four’s sovereignty philosophy with Ferrum but is a **sep
 
 | Repository | Role | License | Relation to Solum |
 |------------|------|---------|-------------------|
-| **Solum** (this repo) | Clinical compliance layer (+ planned optional openEHR data plane) | BUSL-1.1 | — |
+| **Solum** (this repo) | Clinical compliance layer (+ optional Track B openEHR CDR façade) | BUSL-1.1 | — |
 | [Ferrum](https://github.com/SynapticFour/Ferrum) | GA4GH genomic data/compute plane | BUSL-1.1 | Sibling product; Solum pins `ferrum-core` |
 | [Ferrum-Lab-Kit](https://github.com/SynapticFour/Ferrum-Lab-Kit) | Ferrum deploy/profile on-ramp | BUSL-1.1 | Same profile/pin patterns; not a Solum dependency |
 | [HELIOS](https://github.com/SynapticFour/HELIOS) | Signed, reproducible evidence tooling | Apache-2.0 | Solum prepares audit export for HELIOS-class evidence |
-| [Solum-Demo](https://github.com/SynapticFour/Solum-Demo) | Local Stage-1 demo (fail-closed authz + tamper-evident audit) | — | Consumes pinned Solum tags; does not modify Solum |
+| [Solum-Demo](https://github.com/SynapticFour/Solum-Demo) | Interactive + smokes: Stage-1 authz/audit/consent; optional H3 Track B | — | Stage-1 from pinned tag; H3 builds local `../Solum` — see Demo [COVERAGE](https://github.com/SynapticFour/Solum-Demo/blob/main/docs/COVERAGE.md) / `make smoke-all` |
 | [SynapticFour-Showcase](https://github.com/SynapticFour/SynapticFour-Showcase) | Multi-repo evidence-chain integrator | Apache-2.0 | Orchestrates Ferrum + HELIOS + BRA + Solum stages — see Showcase coordinated roadmap |
 
 ## Ownership boundaries
@@ -41,7 +41,10 @@ Across Synaptic Four Rust products you should expect:
 - [Product definition](PRODUCT-DEFINITION.md) (Track A sidecar + Track B CDR)
 - [ADR 0001 — openEHR CDR + migration](adr/0001-openehr-cdr-and-migration.md)
 - [ADR 0002 — CDR engine = EHRbase](adr/0002-cdr-engine-ehrbase.md)
-- [Migration strangler](MIGRATION-STRANGLER.md)
+- [ADR 0003 — subject bridge](adr/0003-subject-bridge.md)
+- [Partner EHR API](customer/PARTNER-EHR-API.md)
+- [Migration strangler](MIGRATION-STRANGLER.md) · [cut-over checklist](MIGRATION-CUTOVER-CHECKLIST.md)
+- [H3 MDCG internal review](counsel/H3-MDCG-INTERNAL-REVIEW.md)
 - [Kenya K1 counsel brief](counsel/KENYA-K1-BRIEF.md) (profile = provisional; counsel still required)
 - [Kenya K1 Vorprüfung](counsel/KENYA-K1-VORPRUEFUNG.md) (**not** counsel — engineering prior art)
 - [Kenya K1 send checklist](counsel/KENYA-K1-SEND-CHECKLIST.md)

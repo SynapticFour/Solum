@@ -68,6 +68,11 @@ enum Commands {
         #[command(subcommand)]
         command: AuditCmd,
     },
+    /// H3.2 migration helpers (fhir-import inventory + dual-write dead-letter).
+    Migrate {
+        #[command(subcommand)]
+        command: MigrateCmd,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -232,6 +237,32 @@ enum AuditCmd {
     },
 }
 
+#[derive(Debug, Subcommand)]
+enum MigrateCmd {
+    /// Parse a FHIR Bundle/resource file and print idempotent import inventory (H3.2).
+    /// Does not call EHRbase by itself — feed listed ids through sidecar `/v1/fhir/*`.
+    FhirImport {
+        #[arg(long)]
+        bundle: PathBuf,
+        /// Optional JSONL of already-imported `ResourceType/id` keys (skip duplicates).
+        #[arg(long)]
+        seen: Option<PathBuf>,
+        /// Write inventory JSONL of resources to import.
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Dual-write stub: append failed mirror payload to a dead-letter JSONL (never silent).
+    DualWriteStub {
+        #[arg(long)]
+        payload: PathBuf,
+        #[arg(long)]
+        dead_letter: PathBuf,
+        /// Simulated failure reason recorded in the dead-letter row.
+        #[arg(long, default_value = "dual_write_failed")]
+        reason: String,
+    },
+}
+
 /// Operator / CustomerHeld key material on disk (JSON).
 ///
 /// Same layout as the legacy demo ephemeral sidecar so existing fixtures remain
@@ -258,6 +289,7 @@ fn run(cli: Cli) -> Result<(), ExitCode> {
         Commands::Consent { command } => cmd_consent(command),
         Commands::Crypto { command } => cmd_crypto(command),
         Commands::Audit { command } => cmd_audit(command),
+        Commands::Migrate { command } => cmd_migrate(command),
     }
 }
 
@@ -909,6 +941,74 @@ fn cmd_audit(command: AuditCmd) -> Result<(), ExitCode> {
                     Err(ExitCode::FAILURE)
                 }
             }
+        }
+    }
+}
+
+fn cmd_migrate(command: MigrateCmd) -> Result<(), ExitCode> {
+    match command {
+        MigrateCmd::FhirImport { bundle, seen, out } => {
+            let doc = solum_core::load_fhir_json(&bundle)
+                .map_err(|e| fail(format!("load bundle: {e}")))?;
+            let resources = solum_core::extract_fhir_resources(&doc)
+                .map_err(|e| fail(format!("extract: {e}")))?;
+            let mut seen_keys = std::collections::HashSet::new();
+            if let Some(path) = seen {
+                if path.exists() {
+                    for line in fs::read_to_string(&path)
+                        .map_err(|e| fail(e.to_string()))?
+                        .lines()
+                    {
+                        let t = line.trim();
+                        if !t.is_empty() {
+                            seen_keys.insert(t.to_string());
+                        }
+                    }
+                }
+            }
+            let mut lines = Vec::new();
+            let mut imported = 0usize;
+            let mut skipped = 0usize;
+            for res in resources {
+                let key = solum_core::resource_idempotency_key(&res);
+                if seen_keys.contains(&key) {
+                    skipped += 1;
+                    continue;
+                }
+                lines.push(
+                    serde_json::to_string(&serde_json::json!({
+                        "key": key,
+                        "resource": res
+                    }))
+                    .map_err(|e| fail(e.to_string()))?,
+                );
+                imported += 1;
+            }
+            fs::write(
+                &out,
+                lines.join("\n") + if lines.is_empty() { "" } else { "\n" },
+            )
+            .map_err(|e| fail(format!("write {}: {e}", out.display())))?;
+            println!(
+                "imported_candidates={imported} skipped_seen={skipped} out={}",
+                out.display()
+            );
+            Ok(())
+        }
+        MigrateCmd::DualWriteStub {
+            payload,
+            dead_letter,
+            reason,
+        } => {
+            let body: serde_json::Value = serde_json::from_str(
+                &fs::read_to_string(&payload).map_err(|e| fail(e.to_string()))?,
+            )
+            .map_err(|e| fail(e.to_string()))?;
+            let row = solum_core::dead_letter_row(&reason, &body);
+            solum_core::append_dead_letter(&dead_letter, &row)
+                .map_err(|e| fail(format!("dead-letter: {e}")))?;
+            println!("dead_letter_appended={}", dead_letter.display());
+            Ok(())
         }
     }
 }

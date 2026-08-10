@@ -189,6 +189,24 @@ curl -sS "$BASE/v1/audit/verify" -H "X-Solum-Sidecar-Token: $TOKEN"
 # → {"status":"ok"}
 ```
 
+### Track B CDR / FHIR / subject bridge (H3, opt-in)
+
+Start with `--ehrbase-url` for openEHR routes. FHIR/subject-link stores work without EHRbase (`link_cdr: false`).
+
+| Method | Path | Capability | Notes |
+|--------|------|------------|-------|
+| `POST` | `/v1/cdr/template` | `solum:cdr:write` | Upload pinned OPT |
+| `POST` | `/v1/cdr/ehr` | `solum:cdr:write` | Create EHR |
+| `POST` | `/v1/cdr/ehr/{ehr_id}/composition` | `solum:cdr:write` | Canonical example commit |
+| `GET` | `/v1/cdr/ehr/{ehr_id}/composition/{uid}` | `solum:cdr:read` | |
+| `POST` | `/v1/cdr/aql` | `solum:cdr:read` | Allowlisted SELECT |
+| `POST` | `/v1/fhir/{type}` | `solum:cdr:write` | H3.1 allowlist |
+| `GET` | `/v1/fhir/{type}/{id}` | `solum:cdr:read` | |
+| `POST` | `/v1/cdr/subject-link` | `solum:cdr:write` | ADR 0003 |
+| `GET` | `/v1/cdr/subject-link/{id}` | `solum:cdr:read` | |
+
+Partner contract: [PARTNER-EHR-API.md](PARTNER-EHR-API.md). Ops: [H3-EHRBASE-SPIKE.md](../H3-EHRBASE-SPIKE.md).
+
 ---
 
 ## 6. Capability strings (GTM‑1)
@@ -199,6 +217,8 @@ curl -sS "$BASE/v1/audit/verify" -H "X-Solum-Sidecar-Token: $TOKEN"
 | `solum:consent:revoke` | Consent revoke |
 | `solum:crypto:encrypt` | Field encrypt |
 | `solum:crypto:decrypt` | Field decrypt |
+| `solum:cdr:write` | Track B CDR / FHIR / subject-link write |
+| `solum:cdr:read` | Track B CDR / FHIR / AQL / subject-link read |
 
 Encrypt does **not** imply decrypt. No wildcards. ([SECURITY-OVERVIEW.md](SECURITY-OVERVIEW.md) §5)
 
