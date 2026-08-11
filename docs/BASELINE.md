@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Date** | 2026-08-11 |
-| **Verified commit** | `ae1592bfd3297ffc30849ae4ff5e129de2fc0c22` |
+| **Verified commit** | `e17630af7aed577ed3d6a68448f2db114a3f8ceb` |
 | **Tag** | *(no new freeze tag in this refresh; prior: `stage1-baseline-sidecar-custody-2026-08-01`)* |
 | **Supersedes (doc honesty)** | Custody baseline `3742851` / tag `stage1-baseline-sidecar-custody-2026-08-01`; also corrects post-tag drift (H3 Track B, H2.4 KMS wiring, proof path) |
 
