@@ -60,6 +60,8 @@ Legacy `&str` `encrypt_field` / `decrypt_field` remain capability- and consent-u
 
 ## Related proofs
 
+Master map (every allowed claim → command): [CLAIMS-PROOF-TRAIL.md](CLAIMS-PROOF-TRAIL.md) · `./scripts/demo-claims-proof.sh`.
+
 | Proof | Doc / command |
 |-------|----------------|
 | Mode A smoke (temp, happy path) | [`examples/standalone/`](../examples/standalone/) · `verify.sh` §7 |

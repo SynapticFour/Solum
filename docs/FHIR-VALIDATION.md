@@ -49,3 +49,4 @@ CI / `verify.sh` do not require the Java validator.
 ## Next
 
 German profile landmap: [DE-FHIR-GAP.md](DE-FHIR-GAP.md).
+Full claim map: [CLAIMS-PROOF-TRAIL.md](CLAIMS-PROOF-TRAIL.md) (rows A9–A10).

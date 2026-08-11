@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Date** | 2026-08-11 |
-| **Verified commit** | `75949798cc1471102382cede4877461f326b936f` |
+| **Verified commit** | `ae1592bfd3297ffc30849ae4ff5e129de2fc0c22` |
 | **Tag** | *(no new freeze tag in this refresh; prior: `stage1-baseline-sidecar-custody-2026-08-01`)* |
 | **Supersedes (doc honesty)** | Custody baseline `3742851` / tag `stage1-baseline-sidecar-custody-2026-08-01`; also corrects post-tag drift (H3 Track B, H2.4 KMS wiring, proof path) |
 
@@ -42,9 +42,9 @@ Total lib unit tests (default features): recount on verify — `solum-core` lib 
 
 ## Verifizierter Zustand
 
-Local checks on 2026-08-11: consent-gate + proof path + FHIR Bundle harden (HL7 Validator Success). Full `./scripts/verify.sh` (incl. §8) should be re-run against the verified commit below after this batch lands.
+Local checks on 2026-08-11 against `ae1592b`: full `./scripts/verify.sh` (incl. §8) **passed**; HL7 IPS Validator campaign **Success** after Bundle harden. Claims map: [CLAIMS-PROOF-TRAIL.md](CLAIMS-PROOF-TRAIL.md) · operator one-shot `./scripts/demo-claims-proof.sh`.
 
-Prior freeze Kurzfassung (2026-08-05 / `3742851`) omitted here — see git history for that snapshot. Current HEAD adds consent.denied Deny B, subject/purpose on crypto, proof-path docs, and IPS export validator harden.
+Prior freeze Kurzfassung (2026-08-05 / `3742851`) omitted here — see git history for that snapshot.
 
 ## Bewusst akzeptierte Risiken
 
