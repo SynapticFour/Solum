@@ -25,7 +25,7 @@ Implemented (not a Synaptic Four EHR UI; not MDR clearance):
 
 - **H4 Kenya:** K2 eng done; counsel send + named site still open ([Showcase H4 checklist](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-PILOT-CHECKLIST.md))
 - **H5:** optional SaaS-*ready* docs / `SOLUM_TENANT_ID` stamp — not SaaS launch ([H5-KEY-CUSTODY-MANAGED.md](H5-KEY-CUSTODY-MANAGED.md))
-- Nigeria / South Africa profiles: planned after Kenya counsel or commercial reorder
+- Nigeria / South Africa profiles: DRAFT scaffolds under `config/profiles/planned/` (not auto-loaded); promote after Kenya counsel or commercial reorder
 - **Live HELIOS CLI/API signing bridge** — only after HELIOS release + custody story are clear
 
 ## Out of scope (default)

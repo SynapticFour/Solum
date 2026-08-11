@@ -29,11 +29,36 @@ const MII_VALIDATION_REF_EXTENSION_URL: &str =
 
 /// IPS Composition.type coding (LOINC).
 ///
-/// ANNAHME, bitte gegen aktuelle IPS-Spec prüfen: LOINC `60591-5`
-/// ("Patient summary Document") is the long-standing IPS document type code
-/// in HL7.FHIR.UV.IPS; confirm against the STU version you target.
+/// LOINC `60591-5` official display is **Patient Summary** (validator locale
+/// may reject legacy "Patient summary Document").
 const IPS_COMPOSITION_TYPE_LOINC: &str = "60591-5";
+const IPS_COMPOSITION_TYPE_DISPLAY: &str = "Patient Summary";
 
+/// Stable UUID namespace for Solum document Bundle fullUrls (UUID v5).
+/// Not a public OID assignment — deterministic so re-export is stable for a given logical id.
+const SOLUM_FHIR_UUID_NS: uuid::Uuid = uuid::Uuid::from_bytes([
+    0x73, 0x6f, 0x6c, 0x75, 0x6d, 0x2d, 0x66, 0x68, 0x69, 0x72, 0x2d, 0x6e, 0x73, 0x2d, 0x31, 0x00,
+]);
+
+/// `urn:uuid:<v5>` for Bundle.entry.fullUrl and cross-references.
+fn urn_uuid_for(name: &str) -> String {
+    format!(
+        "urn:uuid:{}",
+        uuid::Uuid::new_v5(&SOLUM_FHIR_UUID_NS, name.as_bytes())
+    )
+}
+
+fn generated_narrative(plain: &str) -> Value {
+    let escaped = plain
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;");
+    json!({
+        "status": "generated",
+        "div": format!("<div xmlns=\"http://www.w3.org/1999/xhtml\">{escaped}</div>")
+    })
+}
 /// IPS section LOINC codes (required core sections).
 ///
 /// ANNAHME, bitte gegen aktuelle IPS-Spec prüfen: classic IPS section codes
@@ -161,8 +186,8 @@ pub enum FhirError {
 /// Condition resources. Not IG-validated.
 pub fn to_fhir_bundle(summary: &PatientSummary) -> Result<Value, FhirError> {
     let composition_id = "composition-ips";
-    let patient_full_url = format!("urn:uuid:patient-{}", summary.patient.id);
-    let composition_full_url = format!("urn:uuid:{composition_id}");
+    let patient_full_url = urn_uuid_for(&format!("patient:{}", summary.patient.id));
+    let composition_full_url = urn_uuid_for(composition_id);
 
     let mut entries: Vec<Value> = Vec::new();
     let mut sections: Vec<Value> = Vec::new();
@@ -173,11 +198,22 @@ pub fn to_fhir_bundle(summary: &PatientSummary) -> Result<Value, FhirError> {
         "Allergies and Intolerances",
         &summary.allergies,
         |a| {
+            let full_url = urn_uuid_for(&format!("allergy:{}", a.id));
             (
-                format!("urn:uuid:allergy-{}", a.id),
+                full_url,
                 json!({
                     "resourceType": "AllergyIntolerance",
                     "id": a.id,
+                    "text": generated_narrative(&format!("Allergy: {}", a.substance_display)),
+                    // ait-1: clinicalStatus required when verificationStatus is absent /
+                    // not entered-in-error.
+                    "clinicalStatus": {
+                        "coding": [{
+                            "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }]
+                    },
                     "patient": { "reference": patient_full_url },
                     "code": {
                         "text": a.substance_display
@@ -195,11 +231,13 @@ pub fn to_fhir_bundle(summary: &PatientSummary) -> Result<Value, FhirError> {
         "Medication Summary",
         &summary.medications,
         |m| {
+            let full_url = urn_uuid_for(&format!("medication:{}", m.id));
             (
-                format!("urn:uuid:medication-{}", m.id),
+                full_url,
                 json!({
                     "resourceType": "MedicationStatement",
                     "id": m.id,
+                    "text": generated_narrative(&format!("Medication: {}", m.medication_display)),
                     "status": "unknown",
                     "medicationCodeableConcept": {
                         "text": m.medication_display
@@ -218,11 +256,13 @@ pub fn to_fhir_bundle(summary: &PatientSummary) -> Result<Value, FhirError> {
         "Problem List",
         &summary.problems,
         |p| {
+            let full_url = urn_uuid_for(&format!("problem:{}", p.id));
             (
-                format!("urn:uuid:problem-{}", p.id),
+                full_url,
                 json!({
                     "resourceType": "Condition",
                     "id": p.id,
+                    "text": generated_narrative(&format!("Condition: {}", p.condition_display)),
                     "subject": { "reference": patient_full_url },
                     "code": {
                         "text": p.condition_display
@@ -237,12 +277,13 @@ pub fn to_fhir_bundle(summary: &PatientSummary) -> Result<Value, FhirError> {
     let mut composition = json!({
         "resourceType": "Composition",
         "id": composition_id,
+        "text": generated_narrative(&summary.author_display),
         "status": "final",
         "type": {
             "coding": [{
                 "system": "http://loinc.org",
                 "code": IPS_COMPOSITION_TYPE_LOINC,
-                "display": "Patient summary Document"
+                "display": IPS_COMPOSITION_TYPE_DISPLAY
             }]
         },
         // FHIR R4 Composition.author is 1..* Reference(…). Display-only is valid
@@ -263,6 +304,7 @@ pub fn to_fhir_bundle(summary: &PatientSummary) -> Result<Value, FhirError> {
     let mut patient_resource = json!({
         "resourceType": "Patient",
         "id": summary.patient.id,
+        "text": generated_narrative(&format!("Patient {}", summary.patient.id)),
         "identifier": summary.patient.identifier.iter().map(|i| {
             let mut obj = json!({ "value": i.value });
             if let Some(sys) = &i.system {
@@ -296,8 +338,8 @@ pub fn to_fhir_bundle(summary: &PatientSummary) -> Result<Value, FhirError> {
     // FHIR R4 Bundle invariants for type=document (hl7.org/fhir/R4/bundle.html):
     //   bdl-9  — identifier.system and identifier.value SHALL be present
     //   bdl-10 — timestamp SHALL be present
-    // Synthetic stage-1 document id (not a persistent clinical OID assignment).
-    let document_id_value = format!("urn:uuid:solum-ips-{}-{}", summary.patient.id, summary.date);
+    let document_id_value =
+        urn_uuid_for(&format!("document:{}:{}", summary.patient.id, summary.date));
 
     Ok(json!({
         "resourceType": "Bundle",
@@ -471,6 +513,10 @@ mod tests {
             composition["type"]["coding"][0]["code"],
             IPS_COMPOSITION_TYPE_LOINC
         );
+        assert_eq!(
+            composition["type"]["coding"][0]["display"],
+            IPS_COMPOSITION_TYPE_DISPLAY
+        );
         let authors = composition["author"]
             .as_array()
             .expect("Composition.author must be present (FHIR R4 1..*)");
@@ -480,6 +526,31 @@ mod tests {
             "Solum Compliance Layer (stage-1, non-clinical)"
         );
 
+        for entry in entries {
+            let full = entry["fullUrl"].as_str().expect("fullUrl");
+            assert!(
+                full.starts_with("urn:uuid:"),
+                "fullUrl must be urn:uuid: {full}"
+            );
+            let uuid_part = full.strip_prefix("urn:uuid:").unwrap();
+            assert!(
+                uuid::Uuid::parse_str(uuid_part).is_ok(),
+                "fullUrl must contain a valid UUID: {full}"
+            );
+            assert!(
+                entry["resource"]["text"]["div"].as_str().is_some(),
+                "DomainResource should carry generated narrative"
+            );
+        }
+
+        let allergy = entries
+            .iter()
+            .find(|e| e["resource"]["resourceType"] == "AllergyIntolerance")
+            .expect("allergy entry");
+        assert!(
+            allergy["resource"]["clinicalStatus"]["coding"][0]["code"] == "active",
+            "ait-1: clinicalStatus required"
+        );
         assert!(
             bundle["identifier"]["system"].as_str().is_some(),
             "document Bundle.identifier.system required (bdl-9)"

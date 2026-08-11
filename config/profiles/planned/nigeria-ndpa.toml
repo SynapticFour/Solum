@@ -1,0 +1,100 @@
+# DRAFT scaffold — Nigeria NDPA 2023
+#
+# NOT auto-loaded (lives under config/profiles/planned/).
+# NOT counsel-reviewed. NOT a production SoR. Do not promote without counsel.
+#
+# Primary legal anchors (to confirm with counsel before promotion):
+#   Nigeria Data Protection Act 2023 (NDPA); Nigeria Data Protection Bureau (NDPB).
+# Sensitive / health data processing and cross-border transfer rules must be
+# confirmed — placeholders below mirror Kenya's fail-closed posture only.
+
+schema_version = 1
+
+[meta]
+profile = "nigeria-ndpa"
+jurisdiction = "NG"
+description = "DRAFT scaffold — Nigeria NDPA 2023 posture for clinical electronic health data (NOT counsel-reviewed)"
+references = [
+    "Nigeria Data Protection Act, 2023",
+    "Nigeria Data Protection Bureau (NDPB) — guidance to confirm with counsel",
+]
+
+[encryption]
+required_field_categories = [
+    "patient_identifier",
+    "patient_summary",
+    "e_prescription",
+    "e_dispensation",
+    "medical_images",
+    "medical_image_reports",
+    "laboratory_results",
+    "discharge_reports",
+    "clinical_notes",
+    "consent_record",
+]
+allowed_key_custody = ["customer_held"]
+
+[audit]
+mandatory_events = [
+    "access.granted",
+    "access.denied",
+    "data.read",
+    "data.export",
+    "consent.granted",
+    "consent.revoked",
+    "identity.authenticated",
+    "key.use",
+    "residency.transfer_attempt",
+]
+helios_export_prepared = true
+
+[retention]
+# PLACEHOLDER — confirm statutory / sector retention with counsel before promotion.
+default_retention_days = 3650
+audit_log_retention_days = 3650
+
+[retention.category_overrides_days]
+consent_record = 3650
+access_log = 3650
+
+[storage]
+# Conservative primary residency: Nigeria only until counsel confirms otherwise.
+allowed_regions = ["NG"]
+enforce_residency = true
+
+[consent]
+workflow = "gdpr_granular"
+required_purposes = [
+    "care_provision",
+    "emergency_access",
+    "care_coordination",
+]
+optional_purposes = [
+    "research",
+    "public_health",
+    "quality_improvement",
+    "health_insurance",
+    "billing_or_claims",
+]
+
+[transfer]
+# Fail-closed: empty destinations until TIA + counsel + operator approval.
+permitted_mechanisms = [
+    "safeguards_based",
+    "statutory_exception",
+]
+permitted_destinations = []
+requires_serving_copy = true
+
+[regulatory]
+annex_requirements = [
+    "PLACEHOLDER — NDPA lawful basis / sensitive data provisions (counsel to cite)",
+    "PLACEHOLDER — NDPA cross-border transfer conditions (counsel to cite)",
+    "PLACEHOLDER — sector health-data retention / localisation if any (counsel to cite)",
+]
+notes = [
+    "STATUS: DRAFT scaffold only. Not loaded by production profile dir. Not NDPB-certified.",
+    "Empty permitted_destinations intentionally fail-closed for cross-border transfers.",
+    "Retention days are placeholders — replace after counsel confirmation.",
+    "Promote to config/profiles/ only after counsel + engineering checklist in planned/README.md.",
+]

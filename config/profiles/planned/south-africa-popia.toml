@@ -1,0 +1,102 @@
+# DRAFT scaffold — South Africa POPIA
+#
+# NOT auto-loaded (lives under config/profiles/planned/).
+# NOT counsel-reviewed. NOT a production SoR. Do not promote without counsel.
+#
+# Primary legal anchors (to confirm with counsel before promotion):
+#   Protection of Personal Information Act 4 of 2013 (POPIA);
+#   Information Regulator (South Africa). Health / special personal information
+#   and cross-border transfer (s.72) must be confirmed — placeholders below
+#   mirror Kenya's fail-closed posture only.
+
+schema_version = 1
+
+[meta]
+profile = "south-africa-popia"
+jurisdiction = "ZA"
+description = "DRAFT scaffold — South Africa POPIA posture for clinical electronic health data (NOT counsel-reviewed)"
+references = [
+    "Protection of Personal Information Act 4 of 2013 (POPIA)",
+    "Information Regulator (South Africa) — guidance to confirm with counsel",
+]
+
+[encryption]
+required_field_categories = [
+    "patient_identifier",
+    "patient_summary",
+    "e_prescription",
+    "e_dispensation",
+    "medical_images",
+    "medical_image_reports",
+    "laboratory_results",
+    "discharge_reports",
+    "clinical_notes",
+    "consent_record",
+]
+allowed_key_custody = ["customer_held"]
+
+[audit]
+mandatory_events = [
+    "access.granted",
+    "access.denied",
+    "data.read",
+    "data.export",
+    "consent.granted",
+    "consent.revoked",
+    "identity.authenticated",
+    "key.use",
+    "residency.transfer_attempt",
+]
+helios_export_prepared = true
+
+[retention]
+# PLACEHOLDER — confirm statutory / sector retention with counsel before promotion.
+default_retention_days = 3650
+audit_log_retention_days = 3650
+
+[retention.category_overrides_days]
+consent_record = 3650
+access_log = 3650
+
+[storage]
+# Conservative primary residency: South Africa only until counsel confirms otherwise.
+allowed_regions = ["ZA"]
+enforce_residency = true
+
+[consent]
+workflow = "gdpr_granular"
+required_purposes = [
+    "care_provision",
+    "emergency_access",
+    "care_coordination",
+]
+optional_purposes = [
+    "research",
+    "public_health",
+    "quality_improvement",
+    "health_insurance",
+    "billing_or_claims",
+]
+
+[transfer]
+# Fail-closed: empty destinations until TIA + counsel + operator approval.
+# POPIA s.72 transfer conditions — counsel must confirm before populating.
+permitted_mechanisms = [
+    "safeguards_based",
+    "statutory_exception",
+]
+permitted_destinations = []
+requires_serving_copy = true
+
+[regulatory]
+annex_requirements = [
+    "PLACEHOLDER — POPIA conditions for lawful processing of special personal information (counsel to cite)",
+    "PLACEHOLDER — POPIA s.72 cross-border transfer (counsel to cite)",
+    "PLACEHOLDER — health-sector retention / localisation if any (counsel to cite)",
+]
+notes = [
+    "STATUS: DRAFT scaffold only. Not loaded by production profile dir. Not Information-Regulator certified.",
+    "Empty permitted_destinations intentionally fail-closed for cross-border transfers.",
+    "Retention days are placeholders — replace after counsel confirmation.",
+    "Promote to config/profiles/ only after counsel + engineering checklist in planned/README.md.",
+]

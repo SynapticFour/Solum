@@ -34,7 +34,7 @@ Total lib unit tests (default features): recount on verify — `solum-core` lib 
 ## Seit custody freeze / proof path (through 2026-08-11)
 
 - **Consent-gated crypto (Deny B closed):** `encrypt_field_as` / `decrypt_field_as` require active grant covering category; CLI `--subject`/`--purpose`; sidecar encrypt/decrypt JSON fields; audit `consent.denied`. Worked example enforces post-revoke decrypt refusal ([WORKED-EXAMPLE.md](WORKED-EXAMPLE.md), issue #1).
-- **Proof path:** compliance worked example + `verify.sh` §8; H3 evidence packaging; IPS structural PASS + HL7 Validator campaign documented (IG FAIL mapped to `ANNAHME`s — [FHIR-VALIDATION.md](FHIR-VALIDATION.md)); [DE-FHIR-GAP.md](DE-FHIR-GAP.md) + pilot-gated [DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md).
+- **Proof path:** compliance worked example + `verify.sh` §8; H3 evidence packaging; IPS structural PASS + HL7 Validator + `hl7.fhir.uv.ips#2.0.0` campaign **Success** (0 errors / 0 warnings after UUID/LOINC/ait-1/narrative harden — [FHIR-VALIDATION.md](FHIR-VALIDATION.md)); remaining IPS `ANNAHME`s still open; [DE-FHIR-GAP.md](DE-FHIR-GAP.md) + pilot-gated [DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md). No product `solum fhir` CLI — example binary / library only.
 - **Track B / H3 (post-custody-tag):** EHRbase façade, AQL, FHIR JSONL store, subject-link, dual-write webhook — see [H3-EHRBASE-SPIKE.md](H3-EHRBASE-SPIKE.md). Prior freeze text calling openEHR a `2-scaffold` is **stale**.
 - **H2.4 AWS KMS:** optional `--features aws-kms` CLI `wrap-seed` / `--wrapped-keypair` and sidecar `--wrapped-keys-dir` — library-only claim in older baseline rows is **stale**; honesty limits (in-memory seed, no EncryptionContext, mocked CI) remain.
 - **Sidecar↔CLI CustomerHeld parity** (custody tag `3742851`) remains in force.
@@ -42,9 +42,9 @@ Total lib unit tests (default features): recount on verify — `solum-core` lib 
 
 ## Verifizierter Zustand
 
-Local checks on 2026-08-11 (consent-gate + proof path): `cargo test -p solum-core`, `cargo test -p solum-sidecar --test http`, `./examples/standalone/run.sh`, `./examples/compliance-worked-example/run.sh`, structural `./scripts/validate-fhir-ips.sh`, and HL7 Validator campaign (documented FAIL). Full `./scripts/verify.sh` (incl. §8) should be re-run against the verified commit below after push.
+Local checks on 2026-08-11: consent-gate + proof path + FHIR Bundle harden (HL7 Validator Success). Full `./scripts/verify.sh` (incl. §8) should be re-run against the verified commit below after this batch lands.
 
-Prior freeze Kurzfassung (2026-08-05 / `3742851`) omitted here — see git history for that snapshot. Current HEAD adds consent.denied Deny B, subject/purpose on crypto, and proof-path docs.
+Prior freeze Kurzfassung (2026-08-05 / `3742851`) omitted here — see git history for that snapshot. Current HEAD adds consent.denied Deny B, subject/purpose on crypto, proof-path docs, and IPS export validator harden.
 
 ## Bewusst akzeptierte Risiken
 
@@ -85,7 +85,7 @@ Honesty after Vorprüfung:
 
 From `crates/fhir/src/patient_summary.rs` (`ANNAHME` markers). These are stage-1 structural choices, **not** claimed IPS IG conformance — fachlich durch FHIR/IPS-erfahrene Person zu prüfen, bevor production-ready:
 
-1. **Composition.type LOINC** `60591-5` (“Patient summary Document”) as IPS document type code.
+1. **Composition.type LOINC** `60591-5` with official display **Patient Summary** as IPS document type code.
 2. **Section LOINCs:** Allergies `48765-2`, Medications `10160-0`, Problems `11450-4`.
 3. **Empty required sections** use FHIR `emptyReason` (`nilknown`) rather than IPS-preferred “known absent” / “not known” clinical resources.
 4. **Medications** emit `MedicationStatement` only (no `MedicationRequest` path in this binding).
@@ -157,8 +157,9 @@ Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFI
 | Live HELIOS CLI/API signing integration | `docs/helios.md` — **deferred / not productized**; export envelope only |
 | Multi-writer durable audit backend | `crates/audit/src/store.rs` — single-writer assumption for stage 1; multi-writer called stage-2 scope |
 | Clinical interpretation / diagnosis / therapy support | Out of scope both stages — `docs/roadmap.md`, CONTRIBUTING MDCG boundary |
-| Kenya production-ready legal closure | Draft profile inside baseline; see “Bewusst akzeptierte Risiken” — not a closed jurisdiction package |
-| Wire Patient Summary encrypt/decrypt into `Deployment` / typed FHIR CLI surface | Stage-1 binding lives in `solum-fhir`; generic field encrypt/decrypt is on the CLI, typed Patient Summary path remains open |
+| Kenya production-ready legal closure | Provisional profile inside baseline; counsel still required — see “Bewusst akzeptierte Risiken” |
+| Nigeria / South Africa production profiles | DRAFT scaffolds under `config/profiles/planned/` only — not auto-loaded |
+| Wire Patient Summary encrypt/decrypt into `Deployment` / typed FHIR CLI surface | Stage-1 binding lives in `solum-fhir`; operator path is `examples/fhir-ips-export` + library (`docs/FHIR-VALIDATION.md`) — no product `solum fhir` CLI |
 | Migrationspfad / Deprecation für die Legacy-`&str`-Methoden (Library) | GTM-1 design: `*_as` enforced, `&str` legacy intentionally unchecked for library callers — see accepted-risk note; CLI already migrated |
 | Capability-Hierarchien oder Wildcards | GTM-1 exact-match only; no `solum:*` hierarchy |
 | Zeroize-on-Drop für Schlüsselmaterial | Best-effort `ZeroizeOnDrop` on held seeds (H2); not a TEE |

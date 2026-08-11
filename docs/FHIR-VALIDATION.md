@@ -1,8 +1,8 @@
 # FHIR validation — IPS-oriented Patient Summary export
 
 **Date:** 2026-08-11
-**Claims allowed:** “Solum’s stage-1 Bundle export passes Solum structural checks; when run through HL7 Validator + `hl7.fhir.uv.ips#2.0.0`, known gaps match documented `ANNAHME`s.”
-**Claims forbidden:** Full IPS IG certification, ISiK/TI readiness, clinical correctness.
+**Claims allowed:** “Solum’s stage-1 Bundle export passes Solum structural checks **and** HL7 Validator + `hl7.fhir.uv.ips#2.0.0` with 0 errors / 0 warnings (campaign below).”
+**Claims forbidden:** Full IPS IG certification beyond this package pin, ISiK/TI readiness, clinical correctness.
 
 ## Produce the Bundle
 
@@ -12,41 +12,39 @@ cargo run -q -p solum-example-fhir-ips-export -- \
 ./scripts/validate-fhir-ips.sh
 ```
 
-## Structural checks (always run) — **PASS** (2026-08-11)
+**Operator path:** there is **no** `solum fhir …` product CLI yet. Use the example binary above (or call `solum_fhir::to_fhir_bundle` from a library embed). See [examples/fhir-ips-export/README.md](../examples/fhir-ips-export/README.md).
 
-All Solum-owned checks in `examples/fhir-ips-export/out/structural-check.txt` passed (Bundle document, bdl-9/bdl-10, Composition LOINC `60591-5`, author, Patient / AllergyIntolerance / MedicationStatement / Condition).
+## Structural checks — **PASS**
 
-## HL7 Validator campaign (2026-08-11)
+All Solum-owned checks in `examples/fhir-ips-export/out/structural-check.txt` pass.
 
-| Item | Value |
-|------|--------|
-| JAR | HL7 FHIR Validation tool **6.10.1** (`.cache/validator_cli.jar`, gitignored) |
-| Command | `FHIR_VALIDATOR_JAR=.cache/validator_cli.jar ./scripts/validate-fhir-ips.sh` |
-| IG | `hl7.fhir.uv.ips#2.0.0` · FHIR R4.0.1 |
-| Locale | `de` (Germany) — affects display-name checks |
-| Result | **FAILURE**: 7 errors, 5 warnings (script soft-exits 0 unless `SOLUM_FHIR_VALIDATOR_REQUIRE=1`) |
+## HL7 Validator campaign
 
-### Errors → `ANNAHME` / follow-up
+| Item | 2026-08-11 (before Bundle harden) | 2026-08-11 (after UUID / LOINC / ait-1 / narrative) |
+|------|-----------------------------------|------------------------------------------------------|
+| JAR | 6.10.1 | 6.10.1 |
+| IG | `hl7.fhir.uv.ips#2.0.0` | same |
+| Result | **FAIL** — 7 errors, 5 warnings | **Success** — 0 errors, 0 warnings, 1 note (`Alles OK`) |
 
-| Validator finding | Maps to |
-|-------------------|---------|
-| `fullUrl` must be valid lowercase UUID (`composition-ips`, `patient-…`, …) | Stage-1 uses stable logical ids / non-UUID fullUrls — not claimed UUID URNs |
-| Wrong Display Name for LOINC `60591-5` (`Patient summary Document` vs locale `Patient Summary`) | Composition.type display string `ANNAHME`; locale-sensitive |
-| AllergyIntolerance rule `ait-1` failed | Minimal allergy row (display-only substance) — incomplete clinical resource |
-| (warnings) `dom-6` missing narrative | No `text` narratives emitted — accepted stage-1 omission |
+### What we fixed
 
-**Honest claim after this campaign:** structural Solum checks PASS; IPS IG validator does **not** pass — gaps are ticketed/known, not hidden.
+| Prior error | Fix |
+|-------------|-----|
+| Invalid `urn:uuid:…` fullUrls | Deterministic UUID v5 (`urn:uuid:<uuid>`) for all entry fullUrls + Bundle.identifier |
+| LOINC `60591-5` wrong display | Official display **Patient Summary** |
+| AllergyIntolerance `ait-1` | Emit `clinicalStatus=active` |
+| `dom-6` narrative warnings | Generated `text.div` on Composition / Patient / clinical resources |
 
-## Optional re-run
+Remaining `ANNAHME`s (terminology binding, MedicationRequest path, display-only author Reference, provisional MII URL) are **not** claimed resolved — they simply did not fail this IPS package run.
+
+## Re-run
 
 ```bash
 export FHIR_VALIDATOR_JAR="$PWD/.cache/validator_cli.jar"
-# Download once: curl -L -o .cache/validator_cli.jar \
-#   https://github.com/hapifhir/org.hl7.fhir.core/releases/latest/download/validator_cli.jar
 ./scripts/validate-fhir-ips.sh
 ```
 
-CI / `verify.sh` do **not** require the Java validator.
+CI / `verify.sh` do not require the Java validator.
 
 ## Next
 

@@ -10,15 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **H3 Demo Dockerfile** — `deploy/h3-ehrbase/Dockerfile.sidecar` drops local `.cargo/config.toml` Ferrum path-patch so `make up-h3` builds without a sibling mount.
+- **IPS Bundle HL7 Validator** — deterministic UUID v5 `fullUrl`s, LOINC display **Patient Summary**, AllergyIntolerance `clinicalStatus` (ait-1), generated narratives → Validator + `hl7.fhir.uv.ips#2.0.0` **Success** (0 errors / 0 warnings).
 
 ### Changed
 
 - **Roadmap / PRODUCT-DEFINITION** — Track B H3 engineering exit reflected; open gates pointed at Showcase [HORIZON-OPEN-GATES](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/HORIZON-OPEN-GATES.md).
+- **Kenya / HELIOS / FHIR honesty** — SECURITY-OVERVIEW Kenya status aligned to provisional; HELIOS remains export-envelope only; typed FHIR path documented as example/library only (no `solum fhir` CLI).
 
 ### Added
 
 - **Consent-gated crypto (Deny B)** — `encrypt_field_as` / `decrypt_field_as` require active consent covering the field category (`consent.denied`); CLI `--subject`/`--purpose`; sidecar JSON parity; worked example enforces post-revoke decrypt refusal ([WORKED-EXAMPLE.md](docs/WORKED-EXAMPLE.md)).
-- **Proof path** — Track A [WORKED-EXAMPLE.md](docs/WORKED-EXAMPLE.md) + [`examples/compliance-worked-example/`](examples/compliance-worked-example/); `verify.sh` §8; Track B [H3-WORKED-EVIDENCE.md](docs/H3-WORKED-EVIDENCE.md); IPS export + [FHIR-VALIDATION.md](docs/FHIR-VALIDATION.md) (structural PASS; HL7 IPS Validator 6.10.1 campaign FAIL mapped to `ANNAHME`s); DE dossier [DE-FHIR-GAP.md](docs/DE-FHIR-GAP.md); pilot-gated [DE-ADAPTER-SPIKE.md](docs/DE-ADAPTER-SPIKE.md).
+- **Proof path** — Track A [WORKED-EXAMPLE.md](docs/WORKED-EXAMPLE.md) + [`examples/compliance-worked-example/`](examples/compliance-worked-example/); `verify.sh` §8; Track B [H3-WORKED-EVIDENCE.md](docs/H3-WORKED-EVIDENCE.md); IPS export + [FHIR-VALIDATION.md](docs/FHIR-VALIDATION.md); DE dossier [DE-FHIR-GAP.md](docs/DE-FHIR-GAP.md); pilot-gated [DE-ADAPTER-SPIKE.md](docs/DE-ADAPTER-SPIKE.md).
+- **Planned profile scaffolds** — Nigeria NDPA + South Africa POPIA under `config/profiles/planned/` (not auto-loaded; not counsel-reviewed).
 - **BASELINE honesty refresh** — corrects stale openEHR-scaffold / KMS-unwired freeze text against HEAD ([BASELINE.md](docs/BASELINE.md)).
 - **H5 preparedness (optional)** — `SOLUM_TENANT_ID` audit stamp (metadata only); [H5-KEY-CUSTODY-MANAGED.md](docs/H5-KEY-CUSTODY-MANAGED.md) for managed single-tenant custody + TEE sketch.
 - **H4 Kenya K2** — KE `validate_transfer` fail-closed tests; sidecar `kenya-dpa` refuse ephemeral / wrong region + CustomerHeld+KE start; [H4-OFFLINE-SYNC-POLICY.md](docs/H4-OFFLINE-SYNC-POLICY.md); `solum check` Kenya docs in [profiles.md](docs/profiles.md).

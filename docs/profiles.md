@@ -21,8 +21,8 @@ Profiles live in [`config/profiles/`](../config/profiles/). Each file is a juris
 | `eu-ehds.toml` | Present — EU EHDS Annex II orientation (`customer_held` only) |
 | `kenya-dpa.toml` | Present (**PROVISIONAL-PRODUCTION-CANDIDATE** — non-counsel Vorprüfung applied; real counsel still required) — Kenya DPA 2019 + Digital Health Act 2023 (`customer_held` only) |
 | `dev-local.toml` | Developer demos only — allows `ephemeral_test`; never for paid evaluations |
-| `nigeria-ndpa.toml` | Planned |
-| `south-africa-popia.toml` | Planned |
+| `planned/nigeria-ndpa.toml` | **DRAFT scaffold** — not auto-loaded; not counsel-reviewed ([planned/README.md](../config/profiles/planned/README.md)) |
+| `planned/south-africa-popia.toml` | **DRAFT scaffold** — not auto-loaded; not counsel-reviewed |
 
 ### Kenya (provisional)
 

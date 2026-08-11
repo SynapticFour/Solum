@@ -15,6 +15,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 solum-crypto.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 solum-profiles.workspace = true

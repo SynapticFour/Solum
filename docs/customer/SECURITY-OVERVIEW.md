@@ -129,9 +129,9 @@ Policies are **data files** (TOML), not hard-coded country branches. At startup 
 | Profile | Status |
 |---------|--------|
 | EU EHDS–oriented profile (`eu-ehds`) | **Present** — production-track orientation for Stage 1 (Annex II–oriented controls). Still not a legal compliance certificate. |
-| Kenya DPA / Digital Health Act profile | **Present as DRAFT** — loadable but **not production-ready**; legal review outstanding (retention bases, audit retention figures, purpose catalogue, empty permitted transfer destinations, national Health Data Bank obligations outside Solum’s scope). **Do not use for a real deployment until those items are closed.** ([profiles.md](../profiles.md); [BASELINE.md](../BASELINE.md)) |
-| Nigeria NDPA–oriented | **Planned** |
-| South Africa POPIA–oriented | **Planned** |
+| Kenya DPA / Digital Health Act profile | **Present as PROVISIONAL-PRODUCTION-CANDIDATE** after a **non-counsel** Vorprüfung — loadable but **not** production SoR / **not** ODPC-certified. Real Kenya counsel still required. Empty `permitted_destinations` → every concrete cross-border destination check **fails closed** until TIA + approval fill the list. ([profiles.md](../profiles.md); [BASELINE.md](../BASELINE.md)) |
+| Nigeria NDPA–oriented | **DRAFT scaffold only** under `config/profiles/planned/` — not auto-loaded; not counsel-reviewed |
+| South Africa POPIA–oriented | **DRAFT scaffold only** under `config/profiles/planned/` — not auto-loaded; not counsel-reviewed |
 
 EU and African markets are equal core markets in product strategy; profile availability is staged as data. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §2)
 
@@ -151,9 +151,9 @@ The following are **accepted or open limitations** of the current baseline, rest
 
 5. **Best-effort zeroize-on-drop only** for key material in customer-held or AWS-KMS-backed providers (not a TEE / memory-dump proof). ([BASELINE.md](../BASELINE.md))
 
-6. **Kenya profile is a draft.** See §7 — not a closed, production-ready jurisdiction package. ([BASELINE.md](../BASELINE.md); [profiles.md](../profiles.md))
+6. **Kenya profile is provisional, not production-closed.** Non-counsel Vorprüfung applied; qualified counsel still required before live SoR. ([BASELINE.md](../BASELINE.md); [profiles.md](../profiles.md))
 
-7. **Kenya transfer destinations list is empty.** Even listed transfer *mechanisms* will fail every concrete destination check until destinations are filled under legal guidance. ([BASELINE.md](../BASELINE.md))
+7. **Kenya transfer destinations list is empty by design.** Listed transfer *mechanisms* are pathways only — `validate_transfer` rejects every concrete destination until counsel/TIA populate `permitted_destinations`. ([BASELINE.md](../BASELINE.md))
 
 8. **AWS KMS path caveats:** no EncryptionContext/AAD; optional feature (CLI/sidecar); mocked tests only in CI; not HSM. ([BASELINE.md](../BASELINE.md))
 

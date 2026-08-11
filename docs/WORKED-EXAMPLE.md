@@ -10,10 +10,10 @@
 | We prove | We do **not** claim |
 |----------|---------------------|
 | Reproducible CustomerHeld keygen → consent grant → Crypt4GH encrypt/decrypt → audit verify | EHDS / MDR / TI certification |
-| Fail-closed crypto when `--capability` is omitted (`authorization.denied`) | Live HELIOS signing (export envelope only) |
-| Fail-closed crypto when consent is revoked (`consent.denied`) | ISiK / gematik readiness (see [DE-FHIR-GAP.md](DE-FHIR-GAP.md)) |
-| Consent revoke updates status to `revoked` | That legacy library `&str` crypto paths check consent (CLI/`*_as` only) |
-| Hash-chained audit export is verifiable (`audit verify` → `ok`) | |
+| Fail-closed crypto when `--capability` is omitted (`authorization.denied`) | Live HELIOS signing (export envelope only — [helios.md](helios.md)) |
+| Consent-gated encrypt/decrypt after revoke (`consent.denied`) | Product `solum fhir` CLI (example binary / library only) |
+| Consent revoke updates status to `revoked` | ISiK / gematik readiness (see [DE-FHIR-GAP.md](DE-FHIR-GAP.md)) |
+| Hash-chained audit export is verifiable (`audit verify` → `ok`) | That legacy library `&str` crypto paths check consent (CLI/`*_as` only) |
 
 ## Run
 

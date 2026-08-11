@@ -35,8 +35,9 @@ Record results under `examples/fhir-ips-export/out/` (gitignored) and summarise 
 
 | Date | Probe | Result |
 |------|-------|--------|
-| 2026-08-11 | Structural IPS export (`validate-fhir-ips.sh`) | **PASS** (all structural rows) |
-| 2026-08-11 | HL7 Validator 6.10.1 + `hl7.fhir.uv.ips#2.0.0` | **FAIL** — 7 errors / 5 warnings (UUID fullUrl, LOINC display locale, ait-1, narratives) — see [FHIR-VALIDATION.md](FHIR-VALIDATION.md) |
+| 2026-08-11 | Structural IPS export (`validate-fhir-ips.sh`) | **PASS** |
+| 2026-08-11 | HL7 Validator 6.10.1 + IPS 2.0.0 (pre-harden) | **FAIL** — 7 errors / 5 warnings |
+| 2026-08-11 | HL7 Validator 6.10.1 + IPS 2.0.0 (UUID/LOINC/ait-1/narrative) | **Success** — 0 errors / 0 warnings |
 | 2026-08-11 | ISiK Basis Patient vs exported Patient | Gap — see table (`fail`) |
 | — | Live gematik RU | Not run (requires operator access) |
 

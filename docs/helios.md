@@ -19,6 +19,8 @@ What does **not** exist:
 
 Wiring a live HELIOS integration remains **roadmap / stage work**, not Stage‑1 delivery. See [roadmap.md](roadmap.md).
 
+**Portfolio boundary:** HELIOS is a sibling Synaptic Four project ([ECOSYSTEM.md](ECOSYSTEM.md)). Mentioning HELIOS in Solum docs means “export shape prepared for an external evidence tool,” not “Solum ships HELIOS” or “attestations are signed today.”
+
 ## Why Solum still mentions HELIOS
 
 HELIOS today is strongest around pipeline / reproducibility-style evidence. Solum needs a related evidence class for **clinical compliance**:
