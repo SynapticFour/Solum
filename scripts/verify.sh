@@ -94,5 +94,9 @@ else
   echo "SKIP: rustc 1.94.1 not installed (aws-kms feature requires it for AWS SDK)"
 fi
 
+echo "== 8. Compliance worked example (Deny paths + retained artifacts) =="
+./examples/compliance-worked-example/run.sh
+echo "ok: compliance worked example passed"
+
 echo
 echo "All baseline checks passed."

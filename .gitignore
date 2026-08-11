@@ -11,3 +11,8 @@
 .cargo/config.toml
 # CLI demo key sidecars (raw private key bytes — never commit)
 *.ephemeral-keypair.json
+# Compliance worked-example run outputs (keys + synthetic clinical placeholders)
+examples/compliance-worked-example/artifacts/run-*
+examples/compliance-worked-example/artifacts/latest
+# FHIR IPS export / validator working files
+examples/fhir-ips-export/out/

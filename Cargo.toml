@@ -12,6 +12,7 @@ members = [
     "crates/auth-verify",
     "crates/sidecar",
     "examples/ferrum-companion",
+    "examples/fhir-ips-export",
 ]
 
 [workspace.package]

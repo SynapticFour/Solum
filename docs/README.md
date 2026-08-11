@@ -26,6 +26,16 @@ Shared philosophy: customer-held keys, residency enforcement, auditable access �
 | [LICENSE](../LICENSE) | BUSL-1.1 ([notes](LICENSE-OPTIONS.md)) |
 | [LICENSE-COMPATIBILITY.md](../LICENSE-COMPATIBILITY.md) | Allowed dependency licenses |
 
+## Proof / evidence path
+
+| Doc | Topic |
+|-----|--------|
+| [WORKED-EXAMPLE.md](WORKED-EXAMPLE.md) | Track A compliance worked example (consent, crypto Deny, audit) |
+| [H3-WORKED-EVIDENCE.md](H3-WORKED-EVIDENCE.md) | Track B EHRbase smoke evidence packaging |
+| [FHIR-VALIDATION.md](FHIR-VALIDATION.md) | IPS-oriented Bundle export vs FHIR Validator |
+| [DE-FHIR-GAP.md](DE-FHIR-GAP.md) | German reference (ISiK / gematik) gap dossier — **not** a TI claim |
+| [DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md) | Optional DE adapter — **pilot-gated**, do not start without Go |
+
 ## Do not duplicate Ferrum docs
 
 GA4GH services (Beacon, DRS, htsget, WES, TES, TRS), Passports, and Crypt4GH envelope details are documented upstream:

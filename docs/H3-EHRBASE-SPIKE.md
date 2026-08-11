@@ -1,10 +1,11 @@
 # H3.0 — EHRbase compose spike + Solum façade
 
 **Status:** H3 Track B engineering exit available via Solum-Demo overlay + `make smoke-h3`
+**Evidence packaging:** [H3-WORKED-EVIDENCE.md](H3-WORKED-EVIDENCE.md) (retained Demo `artifacts/smoke-h3/`)
 **Not claimed:** MDR clearance, patient-summary OPT pin, Synaptic Four EHR UI, production topology
 **Pins:** Stage-1 Demo uses Solum tag (see Demo `PINNED_VERSIONS.txt`); H3 sidecar builds **local** `../Solum`, not that tag.
 
-Solum fronts **EHRbase** (Apache 2.0) as the Track B openEHR CDR. This document is the operator smoke path for **dev-local evaluation only**. Automate with Solum-Demo [`make smoke-h3`](https://github.com/SynapticFour/Solum-Demo/blob/main/Makefile) after `make up-h3`.
+Solum fronts **EHRbase** (Apache 2.0) as the Track B openEHR CDR. This document is the operator smoke path for **dev-local evaluation only**. Automate with Solum-Demo [`make smoke-h3`](https://github.com/SynapticFour/Solum-Demo/blob/main/Makefile) after `make up-h3`. Retained evidence: Demo `artifacts/smoke-h3/` — see [H3-WORKED-EVIDENCE.md](H3-WORKED-EVIDENCE.md).
 
 ## Pins
 
