@@ -1,24 +1,24 @@
-# Stage 1 baseline (sidecar CustomerHeld custody parity)
+# Stage 1 baseline (HEAD honesty — consent-gated crypto + proof path)
 
 | | |
 |---|---|
-| **Date** | 2026-08-05 |
-| **Verified commit** | `37428510af0524e32912676a2faf5a0128e4b300` |
-| **Tag** | `stage1-baseline-sidecar-custody-2026-08-01` |
-| **Supersedes** | `stage1-baseline-sidecar-2026-07-30` (`211bb4f`) |
+| **Date** | 2026-08-11 |
+| **Verified commit** | *(filled after commit — see git log)* |
+| **Tag** | *(no new freeze tag in this refresh; prior: `stage1-baseline-sidecar-custody-2026-08-01`)* |
+| **Supersedes (doc honesty)** | Custody baseline `3742851` / tag `stage1-baseline-sidecar-custody-2026-08-01`; also corrects post-tag drift (H3 Track B, H2.4 KMS wiring, proof path) |
 
-> **Post-baseline (do not confuse with this freeze):** Optional Track B / H3 openEHR CDR (EHRbase façade, AQL, subject-link, dual-write) landed after this tag. Stage-1 Demo still pins this tag; H3 Demo builds current `../Solum`. See [H3-EHRBASE-SPIKE.md](H3-EHRBASE-SPIKE.md), Showcase [HORIZON-OPEN-GATES](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/HORIZON-OPEN-GATES.md), Solum-Demo [PINNED_VERSIONS.txt](https://github.com/SynapticFour/Solum-Demo/blob/main/PINNED_VERSIONS.txt).
+> This refresh documents **current `main` honesty** after consent-gated crypto (Deny B closed), proof-path docs, and Track B / KMS landings that outpaced the 2026-08-05 freeze text. Prefer a future annotated tag if you need a bit-for-bit evaluation pin.
 
-This document freezes the Solum workspace state that passed local `./scripts/verify.sh` and green GitHub Actions on that commit. Descriptions below are taken from crate `lib.rs` module docs, profile TOML, `deny.toml`, `.gitleaks.toml`, and `docs/` — not from aspirational product copy.
+This document freezes descriptions of the Solum workspace that passed local verification on the verified commit. Descriptions are taken from crate docs, profile TOML, and `docs/` — not aspirational product copy.
 
-Push-triggered workflows on this commit: **CI** and **Secret Scan** (CodeQL is weekly-only after `c82bb0c`; the stub Quality Gate workflow was removed).
+Push-triggered workflows: **CI** and **Secret Scan** (CodeQL weekly-only).
 
 ## Workspace crates
 
 | Crate | Status | Tests | Description (from crate docs / CLI / examples) |
 |-------|--------|-------|------------------------------------------------|
-| `solum-core` | implementiert | lib: **17** (+1 feature-gated: **18** statt 17 mit `ferrum-storage-backend`); `tests/cli.rs`: **11**; `tests/ferrum_auth_smoke.rs`: **1**; `tests/solum_actor_auth.rs`: **2** | Product orchestration: wires jurisdiction profiles, crypto posture, audit, and clinical interchange adapters (FHIR first; openEHR staged); `Deployment` owns consent + Crypt4GH field encrypt/decrypt with matching audit events. Additive `*_as` methods accept [`SolumActor`](../crates/identity/src/lib.rs) and delegate to the unchanged `&str` APIs. `Deployment::*_as`-Methoden erzwingen Capability-Checks (`CAP_CONSENT_GRANT` / `CAP_CONSENT_REVOKE` / `CAP_CRYPTO_ENCRYPT` / `CAP_CRYPTO_DECRYPT`), fail-closed, Verweigerung schreibt `authorization.denied`-Audit-Event mit `AuditOutcome::Failure`; Legacy-`&str`-Methoden bleiben bewusst ungeprüft. Die CLI ruft ausschließlich die capability-geprüften `*_as`-Methoden auf (`--actor` + `--capability`, mehrfach wiederholbar). Fail-closed: `--capability` weglassen → leere Scopes → Verweigerung. Legacy-`&str`-APIs bleiben nur noch für Library-Integratoren erreichbar, nicht mehr über die CLI. Optional feature `ferrum-storage-backend`: `Deployment::with_storage` / `encrypt_field_and_store` / `read_and_decrypt_field` against Ferrum `LocalStorage` (async, kein `block_on` in der Library — Runtime bleibt beim Aufrufer); Default-Build bleibt ferrum-storage-frei. The `solum` CLI is a real tool: `consent grant` / `revoke` / `status`, `crypto keygen` / `encrypt` / `decrypt`, `audit export` / `verify` — integration-tested via `assert_cmd` (inkl. Deny-Test ohne `--capability`). **Phase C:** neuer Subcommand `crypto keygen` schreibt Operator-Keypair-JSON via `generate_operator_keypair()` und registriert Material für `CustomerHeldKeyProvider` (Unix **0600** via `chmod_owner_rw`, gleiches Muster wie die Ephemeral-Sidecar-Datei). `crypto encrypt` / `decrypt` verlangen standardmäßig `--keypair` (CustomerHeld); `--ephemeral` nur mit doppeltem Gate (`SOLUM_ALLOW_EPHEMERAL=1` **und** Profil mit `ephemeral_test`-Custody, z.B. `config/profiles/dev-local.toml`). EU-/Kenya-Profile lehnen `EphemeralTest`-Custody strukturell ab (Wiederverwendung von `validate_startup` aus Sprint 1). |
-| `solum-sidecar` | implementiert | lib+bin: **0** unit; `tests/http.rs`: **14** | HTTP-Sidecar für Nicht-Rust-HMIS/EHR-Integratoren: wrappt Deployments capability-geprüfte `*_as`-Methoden 1:1 über REST (axum). Zwei Zugriffsschichten: Shared-Secret-Header (`X-Solum-Sidecar-Token`) mit constant-time compare, dann GTM-1-Capability-Check (H2.2 optional org-IAM: Bearer JWT groups → CAP_*). Default-Bind `127.0.0.1`. **CustomerHeld-Schlüsselverwaltung ist jetzt der Default-Pfad** (`--keys-dir`, lädt `solum crypto keygen`-JSON-Dateien, fail-closed: unlesbare/ungültige Dateien und doppelte `key_ref`-Werte brechen den Start ab, kein stilles Überspringen). `--ephemeral` bleibt hinter demselben Doppel-Gate wie die CLI (`SOLUM_ALLOW_EPHEMERAL=1` + Profil mit `ephemeral_test`-Custody). `SidecarKeys`-Enum dispatcht zwischen beiden Modi über das bestehende `Crypt4ghKeyProvider`-Trait, kein neues Custody-Modell. Ephemeral `key_exists`-Check verhindert stillschweigendes Schlüssel-Überschreiben bei `key_ref`-Wiederverwendung innerhalb einer Laufzeit (CustomerHeld generiert nie automatisch). |
+| `solum-core` | implementiert | lib: **17** (+1 feature-gated: **18** statt 17 mit `ferrum-storage-backend`); `tests/cli.rs`: **11**; `tests/ferrum_auth_smoke.rs`: **1**; `tests/solum_actor_auth.rs`: **2** | Product orchestration: wires jurisdiction profiles, crypto posture, audit, and clinical interchange adapters (FHIR first; openEHR staged); `Deployment` owns consent + Crypt4GH field encrypt/decrypt with matching audit events. Additive `*_as` methods accept [`SolumActor`](../crates/identity/src/lib.rs) and delegate to the unchanged `&str` APIs. `Deployment::*_as`-Methoden erzwingen Capability-Checks (`CAP_CONSENT_GRANT` / `CAP_CONSENT_REVOKE` / `CAP_CRYPTO_ENCRYPT` / `CAP_CRYPTO_DECRYPT`), fail-closed (`authorization.denied`). **Crypto `*_as` additionally requires an active consent grant** for `(subject, purpose)` covering the field category (`consent.denied` on miss/revoke). Legacy-`&str`-Methoden bleiben bewusst ungeprüft (capability **and** consent). CLI/sidecar crypto require `--subject` / `--purpose` (or JSON equivalents). Die CLI ruft ausschließlich die capability-geprüften `*_as`-Methoden auf (`--actor` + `--capability`, mehrfach wiederholbar). Fail-closed: `--capability` weglassen → leere Scopes → Verweigerung. Legacy-`&str`-APIs bleiben nur noch für Library-Integratoren erreichbar, nicht mehr über die CLI. Optional feature `ferrum-storage-backend`: `Deployment::with_storage` / `encrypt_field_and_store` / `read_and_decrypt_field` against Ferrum `LocalStorage` (async, kein `block_on` in der Library — Runtime bleibt beim Aufrufer); Default-Build bleibt ferrum-storage-frei. The `solum` CLI is a real tool: `consent grant` / `revoke` / `status`, `crypto keygen` / `encrypt` / `decrypt`, `audit export` / `verify` — integration-tested via `assert_cmd` (inkl. Deny-Test ohne `--capability`). **Phase C:** neuer Subcommand `crypto keygen` schreibt Operator-Keypair-JSON via `generate_operator_keypair()` und registriert Material für `CustomerHeldKeyProvider` (Unix **0600** via `chmod_owner_rw`, gleiches Muster wie die Ephemeral-Sidecar-Datei). `crypto encrypt` / `decrypt` verlangen standardmäßig `--keypair` (CustomerHeld); `--ephemeral` nur mit doppeltem Gate (`SOLUM_ALLOW_EPHEMERAL=1` **und** Profil mit `ephemeral_test`-Custody, z.B. `config/profiles/dev-local.toml`). EU-/Kenya-Profile lehnen `EphemeralTest`-Custody strukturell ab (Wiederverwendung von `validate_startup` aus Sprint 1). |
+| `solum-sidecar` | implementiert | lib+bin: **0** unit; `tests/http.rs`: **27** | HTTP-Sidecar für Nicht-Rust-HMIS/EHR-Integratoren: wrappt Deployments capability-geprüfte `*_as`-Methoden 1:1 über REST (axum). Zwei Zugriffsschichten: Shared-Secret-Header (`X-Solum-Sidecar-Token`) mit constant-time compare, dann GTM-1-Capability-Check (H2.2 optional org-IAM: Bearer JWT groups → CAP_*). Default-Bind `127.0.0.1`. **CustomerHeld-Schlüsselverwaltung ist jetzt der Default-Pfad** (`--keys-dir`, lädt `solum crypto keygen`-JSON-Dateien, fail-closed: unlesbare/ungültige Dateien und doppelte `key_ref`-Werte brechen den Start ab, kein stilles Überspringen). `--ephemeral` bleibt hinter demselben Doppel-Gate wie die CLI (`SOLUM_ALLOW_EPHEMERAL=1` + Profil mit `ephemeral_test`-Custody). `SidecarKeys`-Enum dispatcht zwischen beiden Modi über das bestehende `Crypt4ghKeyProvider`-Trait, kein neues Custody-Modell. Ephemeral `key_exists`-Check verhindert stillschweigendes Schlüssel-Überschreiben bei `key_ref`-Wiederverwendung innerhalb einer Laufzeit (CustomerHeld generiert nie automatisch). |
 | `solum-identity` | implementiert | lib: **9** | Structured actor identity adapter (`SolumActor`/`ActorSource`: FerrumPassport/Standalone/LocalDev); persisted `actor: String` format unchanged, `SolumActor` maps onto it via `to_audit_string()`. `CAP_*` Konstanten, `AuthorizationError`, `require_capability()` (fail-closed, exact-match gegen `SolumActor.scopes`). |
 | `solum-auth-verify` | implementiert | lib: **8** | Standalone JWT/JWKS-Verifikation (jsonwebtoken RS256/ES256), unabhängig von privaten ferrum-core-Decode-Pfaden (keine öffentliche verify()-API in ferrum-core vorgefunden — dokumentierter Sprint-5-Rechercheergebnis); `VerifyConfig::for_ferrum_passport()` / `for_standalone_oidc()`; optionales Feature `http` für `JwksVerifier::from_url` (default aus, Offline-Pfad `from_jwks_json` zieht kein reqwest); `VerifiedClaims::into_solum_actor()` nutzt `solum-identity::ActorSource` ohne Duplikat-Enum. |
 | `solum-profiles` | implementiert | lib: 12 | Jurisdiction profile loader and startup conformance checks; TOML under `config/profiles/` (inkl. `dev-local.toml` für gated ephemeral demos); mismatches refuse to start; additive `TransferPolicy` + `validate_transfer` for cross-border / secondary-use requests (restrictive-by-default). |
@@ -26,76 +26,25 @@ Push-triggered workflows on this commit: **CI** and **Secret Scan** (CodeQL is w
 | `solum-audit` | implementiert | lib: 6 | Audit event recording and HELIOS-oriented evidence export hooks; in-memory `AuditLog` plus durable hash-chained `FileAuditStore`. Live HELIOS signing is **deferred** (see [helios.md](helios.md)); export envelopes remain. |
 | `solum-consent` | implementiert | lib: 7 | Consent and access-rights engine: grant/revoke per `(subject, purpose)` with full history for EEHRxF-style individual rights. |
 | `solum-fhir` | implementiert | lib: **8** | IPS-oriented Patient Summary: FHIR R4 Bundle export inkl. bdl-9/bdl-10-Invarianten, Composition.author, Crypt4GH encrypt/decrypt über `solum-crypto` (`STAGE = "1-patient-summary"`); optionales `mii_validation_ref`-Passthrough-Feld (Composition.extension, Solum-internes ANNAHME-Provisorium für die Extension-URL). |
-| `solum-openehr` | Scaffold | lib: 1 | openEHR adapter surface (stage 2 scaffold); intentionally minimal while stage 1 focuses on FHIR (`STAGE = "2-scaffold"`). |
+| `solum-openehr` | implementiert (Track B opt-in) | lib + ignored live smoke | EHRbase REST client (`STAGE = "3.1-fhir-aql"`): EHR/OPT/composition/AQL allowlist. Sidecar `--ehrbase-url` + `/v1/cdr/*`. **Not** a semantic FHIR↔openEHR mapper — presence/smoke compositions + façade. Hub-class only. |
 | `solum-example-ferrum-companion` | Referenz (kein Produktcode) | binary smoke (via `verify.sh` §7 / §7b) | Mode-B-Referenz: bidirektionale Crypt4GH-Formatkompatibilität mit Ferrum + AuthClaims-Konstruktions-Smoke; optional `--features storage-backend` beweist LocalStorage Round-Trip über `Deployment` async APIs. Kein Produktcode. |
 
-Total lib unit tests in this baseline run (default features): **72** (crypto **9**; sidecar contributes **0** lib units). Plus `solum-core` integration tests: **11** CLI (`assert_cmd`) + **1** AuthClaims smoke + **2** SolumActor auth; plus `solum-sidecar` `tests/http.rs`: **11**. Combined automated count referenced above: **97** (plus empty doc-test suites). With `--features ferrum-storage-backend`, `solum-core` lib is **18** (+1 LocalStorage round-trip). With `--features aws-kms`, `solum-crypto` adds **+2** mocked KMS integration tests (`tests/aws_kms.rs`). Reference deployments in `verify.sh` §7 / §7b are additional living checks (not counted in the lib unit total).
+Total lib unit tests (default features): recount on verify — `solum-core` lib includes consent-gate coverage; sidecar **0** lib units / **27** HTTP tests. Plus CLI **11** + AuthClaims **1** + SolumActor **2**. Feature-gated: `ferrum-storage-backend` (+1), `aws-kms` (+2 mocked). `verify.sh` §7/§7b/§8 are additional living checks.
 
-## Seit `stage1-baseline-sidecar-2026-07-30` hinzugekommen
+## Seit custody freeze / proof path (through 2026-08-11)
 
-- **Sidecar↔CLI-Parität bei Schlüsselverwaltung** (`3742851`): beide Oberflächen nutzen jetzt CustomerHeld als Default (`--keys-dir` / CLI `--keypair`, `solum crypto keygen`-JSON-Layout), Ephemeral nur hinter identischem Doppel-Gate (`SOLUM_ALLOW_EPHEMERAL=1` + Profil mit `ephemeral_test`). Fail-closed Directory-Loading im Sidecar (keine stillen Skips; doppelte `key_ref` abgewiesen). Kundendoku [`docs/customer/SIDECAR-INTEGRATION.md`](customer/SIDECAR-INTEGRATION.md) aktualisiert.
-- **Zwei Clippy-Lehren dokumentiert:** `result_large_err` — `Response`-Rückgabetyp in `Result` muss geboxt werden (`axum` `Response` ist >128 Bytes); `await_holding_lock` — `std::sync`-Mutex-Guards müssen vor jedem `.await` gedroppt werden (betraf nur einen Test-Helper in `tests/http.rs`, kein Produktionscode).
-- **AWS-KMS bleibt der einzige noch offene Custody-Pfad** für beide Oberflächen (CLI und Sidecar) — sauber dokumentiert, nicht implizit vergessen.
+- **Consent-gated crypto (Deny B closed):** `encrypt_field_as` / `decrypt_field_as` require active grant covering category; CLI `--subject`/`--purpose`; sidecar encrypt/decrypt JSON fields; audit `consent.denied`. Worked example enforces post-revoke decrypt refusal ([WORKED-EXAMPLE.md](WORKED-EXAMPLE.md), issue #1).
+- **Proof path:** compliance worked example + `verify.sh` §8; H3 evidence packaging; IPS structural PASS + HL7 Validator campaign documented (IG FAIL mapped to `ANNAHME`s — [FHIR-VALIDATION.md](FHIR-VALIDATION.md)); [DE-FHIR-GAP.md](DE-FHIR-GAP.md) + pilot-gated [DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md).
+- **Track B / H3 (post-custody-tag):** EHRbase façade, AQL, FHIR JSONL store, subject-link, dual-write webhook — see [H3-EHRBASE-SPIKE.md](H3-EHRBASE-SPIKE.md). Prior freeze text calling openEHR a `2-scaffold` is **stale**.
+- **H2.4 AWS KMS:** optional `--features aws-kms` CLI `wrap-seed` / `--wrapped-keypair` and sidecar `--wrapped-keys-dir` — library-only claim in older baseline rows is **stale**; honesty limits (in-memory seed, no EncryptionContext, mocked CI) remain.
+- **Sidecar↔CLI CustomerHeld parity** (custody tag `3742851`) remains in force.
+
 
 ## Verifizierter Zustand
 
-All `./scripts/verify.sh` sections (including §7 and §7b) passed on 2026-08-05 against commit `37428510af0524e32912676a2faf5a0128e4b300` (exit 0). Section 5 emitted a long series of `cargo deny` `warning[duplicate]` trees (not failures) that are omitted below. §7 Mode A (`examples/standalone/run.sh`) uses CustomerHeld `--keypair` after `crypto keygen` (ephemeral gated off the pilot path).
+Local checks on 2026-08-11 (consent-gate + proof path): `cargo test -p solum-core`, `cargo test -p solum-sidecar --test http`, `./examples/standalone/run.sh`, `./examples/compliance-worked-example/run.sh`, structural `./scripts/validate-fhir-ips.sh`, and HL7 Validator campaign (documented FAIL). Full `./scripts/verify.sh` (incl. §8) should be re-run against the verified commit below after push.
 
-```
-== 0. Sanity: ferrum-core pin consistency ==
-ok: both pin 27a6a8e9a719fd1a171da28b20462a777f95cf65
-== 1. Toolchain ==
-1.91.1-aarch64-apple-darwin (overridden by rust-toolchain.toml)
-== 2. fmt ==
-== 3. clippy (deny warnings) ==
-== 4. test ==
-solum-audit: 6 passed
-solum-auth-verify: 6 passed
-solum-consent: 7 passed
-solum-core lib: 17 passed
-solum-core tests/cli.rs: 11 passed (CustomerHeld round-trip + ephemeral gate tests)
-solum-core tests/ferrum_auth_smoke.rs: 1 passed
-solum-core tests/solum_actor_auth.rs: 2 passed
-solum-crypto: 9 passed
-solum-fhir: 8 passed
-solum-identity: 6 passed
-solum-openehr: 1 passed
-solum-profiles: 12 passed
-solum-sidecar tests/http.rs: 14 passed (CustomerHeld round-trip + unknown key_ref + startup gates + ephemeral suite)
-== 5. cargo-deny (licenses + sources + bans + advisories) ==
-licenses ok
-warning[unmatched-source]: allow-git Ferrum unmatched under local .cargo path-patch (CI uses git pin)
-sources ok
-(… bans duplicate-version warnings omitted …)
-bans ok
-advisories ok
-== 6. CLI smoke test ==
-ok: profile 'eu-ehds' (jurisdiction EU) matches runtime configuration
-ok: non-EU storage region correctly refused
-== 7. Reference deployments ==
-ok: default workspace tree has no ferrum-storage
-ok: standalone reference deployment (Mode A) passed
-ok: AuthClaims Jwt fixture constructible (sub/issuer/scope)
-ok: Crypt4GH interop (Ferrum-path ↔ Solum encrypt_field) for patient_summary
-ok: ferrum-companion reference deployment (Mode B) passed
-ok: both reference deployments passed
-== 7b. Ferrum-storage backend (feature-gated) ==
-solum-core --features ferrum-storage-backend --lib: 18 passed
-ok: LocalStorage encrypt_field_and_store ↔ read_and_decrypt_field for patient_summary
-ok: ferrum-companion reference deployment (Mode B) passed
-ok: ferrum-storage-backend feature path passed
-
-All baseline checks passed.
-```
-
-### Green CI runs (same commit)
-
-| Workflow | Run ID | URL |
-|----------|--------|-----|
-| CI | 30974908280 | https://github.com/SynapticFour/Solum/actions/runs/30974908280 |
-| Secret Scan | 30974908273 | https://github.com/SynapticFour/Solum/actions/runs/30974908273 |
-
-CodeQL no longer runs on every push (weekly cron only — see `.github/workflows/codeql.yml`). The former stub Quality Gate workflow is removed.
+Prior freeze Kurzfassung (2026-08-05 / `3742851`) omitted here — see git history for that snapshot. Current HEAD adds consent.denied Deny B, subject/purpose on crypto, and proof-path docs.
 
 ## Bewusst akzeptierte Risiken
 

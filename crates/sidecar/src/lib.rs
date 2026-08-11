@@ -897,6 +897,10 @@ struct ConsentStatusResponse {
 #[derive(Debug, Deserialize)]
 pub struct EncryptRequest {
     pub category: String,
+    /// Data subject — must have an active consent grant covering `category`.
+    pub subject: String,
+    /// Consent purpose paired with `subject`.
+    pub purpose: String,
     pub key_ref: String,
     pub actor: String,
     #[serde(default)]
@@ -913,6 +917,10 @@ struct EncryptResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct DecryptRequest {
+    /// Data subject — must have an active consent grant covering the field category.
+    pub subject: String,
+    /// Consent purpose paired with `subject`.
+    pub purpose: String,
     pub key_ref: String,
     pub actor: String,
     #[serde(default)]
@@ -1058,7 +1066,14 @@ async fn crypto_encrypt(
         }
     };
     let (headers, warning) = crypto_response_meta(&state.keys);
-    match deployment.encrypt_field_as(&body.category, &plaintext, &key_ref, &actor) {
+    match deployment.encrypt_field_as(
+        &body.category,
+        &plaintext,
+        &key_ref,
+        &actor,
+        &body.subject,
+        &body.purpose,
+    ) {
         Ok(field) => (
             StatusCode::OK,
             headers,
@@ -1093,7 +1108,7 @@ async fn crypto_decrypt(
         }
     };
     let (headers, warning) = crypto_response_meta(&state.keys);
-    match deployment.decrypt_field_as(&body.field, &key_ref, &actor) {
+    match deployment.decrypt_field_as(&body.field, &key_ref, &actor, &body.subject, &body.purpose) {
         Ok(plaintext) => (
             StatusCode::OK,
             headers,

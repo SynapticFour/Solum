@@ -172,13 +172,16 @@ curl -sS -X POST "$BASE/v1/crypto/encrypt" \
   -H "X-Solum-Sidecar-Token: $TOKEN" \
   -d "{
     \"category\": \"patient_summary\",
+    \"subject\": \"patient/42\",
+    \"purpose\": \"care_provision\",
     \"key_ref\": \"customer/hmis-1\",
     \"actor\": \"practitioner/7\",
     \"capability\": [\"solum:crypto:encrypt\"],
     \"plaintext_base64\": \"$PLAIN_B64\"
   }"
 # Response JSON includes "field" + CustomerHeld "warning".
-# Pass the returned "field" object back into decrypt (same key_ref).
+# Pass the returned "field" object back into decrypt (same key_ref + subject/purpose).
+# Encrypt/decrypt require an active consent grant covering the category.
 ```
 
 ### Audit export / verify

@@ -9,6 +9,8 @@
 !.env.example
 # Local Ferrum path override (see .cargo/config.toml.example)
 .cargo/config.toml
+# Local FHIR validator cache (HL7 validator_cli.jar — not vendored)
+.cache/
 # CLI demo key sidecars (raw private key bytes — never commit)
 *.ephemeral-keypair.json
 # Compliance worked-example run outputs (keys + synthetic clinical placeholders)

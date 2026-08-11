@@ -35,15 +35,16 @@ Record results under `examples/fhir-ips-export/out/` (gitignored) and summarise 
 
 | Date | Probe | Result |
 |------|-------|--------|
-| 2026-08-11 | Structural IPS export (`validate-fhir-ips.sh` without JAR) | Structural checks defined; DE/ISiK profile validation **not** claimed pass |
+| 2026-08-11 | Structural IPS export (`validate-fhir-ips.sh`) | **PASS** (all structural rows) |
+| 2026-08-11 | HL7 Validator 6.10.1 + `hl7.fhir.uv.ips#2.0.0` | **FAIL** — 7 errors / 5 warnings (UUID fullUrl, LOINC display locale, ait-1, narratives) — see [FHIR-VALIDATION.md](FHIR-VALIDATION.md) |
 | 2026-08-11 | ISiK Basis Patient vs exported Patient | Gap — see table (`fail`) |
-| — | Live gematik RU | Not run in this proof-path PR (requires operator access) |
+| — | Live gematik RU | Not run (requires operator access) |
 
 ## Gap → follow-up work (prioritised)
 
 | Priority | Gap | Suggested follow-up |
 |----------|-----|---------------------|
-| P0 | Crypto ignores active consent after revoke | Product decision + gate on `is_granted` (see [WORKED-EXAMPLE.md](WORKED-EXAMPLE.md)) |
+| P0 | ~~Crypto ignores active consent after revoke~~ **Done 2026-08-11** — `*_as` crypto requires grant covering category; see [WORKED-EXAMPLE.md](WORKED-EXAMPLE.md) | Issue [#1](https://github.com/SynapticFour/Solum/issues/1) |
 | P1 | No ISiK Patient profile mapping | Pilot-gated mapper (see [DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md)) |
 | P1 | IPS emptyReason / terminology unbound | Align sections when DE pilot names target IG version |
 | P2 | Composition metadata for DE document exchange | Add profile-specific Composition when pilot chooses document type |

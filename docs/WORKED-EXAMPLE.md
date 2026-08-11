@@ -10,9 +10,10 @@
 | We prove | We do **not** claim |
 |----------|---------------------|
 | Reproducible CustomerHeld keygen → consent grant → Crypt4GH encrypt/decrypt → audit verify | EHDS / MDR / TI certification |
-| Fail-closed crypto when `--capability` is omitted (`authorization.denied` in the audit chain) | Live HELIOS signing (export envelope only) |
-| Consent revoke updates status to `revoked` | That encrypt/decrypt re-check active consent (see Known gaps) |
-| Hash-chained audit export is verifiable (`audit verify` → `ok`) | ISiK / gematik readiness (see [DE-FHIR-GAP.md](DE-FHIR-GAP.md)) |
+| Fail-closed crypto when `--capability` is omitted (`authorization.denied`) | Live HELIOS signing (export envelope only) |
+| Fail-closed crypto when consent is revoked (`consent.denied`) | ISiK / gematik readiness (see [DE-FHIR-GAP.md](DE-FHIR-GAP.md)) |
+| Consent revoke updates status to `revoked` | That legacy library `&str` crypto paths check consent (CLI/`*_as` only) |
+| Hash-chained audit export is verifiable (`audit verify` → `ok`) | |
 
 ## Run
 
@@ -21,7 +22,7 @@
 ```
 
 Artifacts (gitignored): `examples/compliance-worked-example/artifacts/run-<UTC>/`
-Pointer: `artifacts/latest` → last run (`MANIFEST.txt`, `audit.jsonl`, `helios-export.json`, `event-types.txt`, `deny-b-result.txt`).
+Pointer: `artifacts/latest` → last run.
 
 `verify.sh` §8 invokes the same script.
 
@@ -30,39 +31,32 @@ Pointer: `artifacts/latest` → last run (`MANIFEST.txt`, `audit.jsonl`, `helios
 1. `solum check --profile` (EU)
 2. `crypto keygen` → CustomerHeld file
 3. `consent grant` (+ `solum:consent:grant`) → status `granted`
-4. `crypto encrypt` (`patient_summary`)
+4. `crypto encrypt` (`patient_summary`, `--subject` / `--purpose`)
 5. `crypto decrypt` → byte-identical round-trip
 6. **Deny A:** encrypt **without** `--capability` → non-zero exit + `authorization.denied`
 7. `consent revoke` → status `revoked`
-8. **Deny B:** decrypt after revoke → see Known gaps
+8. **Deny B:** decrypt after revoke → non-zero exit + `consent.denied`
 9. `audit export` + `audit verify`
 
 ## Expected audit event types
 
-Observed on a green local run (2026-08-11):
+| Event type | Notes |
+|------------|-------|
+| `consent.granted` | After step 3 |
+| `data.encrypt` | Successful encrypt |
+| `data.decrypt` | Happy-path decrypt only (post-revoke decrypt does not succeed) |
+| `authorization.denied` | Deny A |
+| `consent.revoked` | After step 7 |
+| `consent.denied` | Deny B |
 
-| Event type | Count | Notes |
-|------------|-------|-------|
-| `consent.granted` | 1 | After step 3 |
-| `data.encrypt` | 1 | Successful encrypt |
-| `data.decrypt` | 2 | Happy-path decrypt + post-revoke decrypt (while Deny B is a gap) |
-| `authorization.denied` | 1 | Deny A |
-| `consent.revoked` | 1 | After step 7 |
+## Consent gate (Deny B)
 
-Exact counts may grow if Deny B becomes enforced (post-revoke decrypt would then be Failure or absent).
+`encrypt_field_as` / `decrypt_field_as` require:
 
-## Known gaps
+1. GTM-1 capability (`solum:crypto:encrypt` / `decrypt`)
+2. Active consent for `(subject, purpose)` covering the field category (empty grant scope = purpose-level; otherwise category must be listed)
 
-### Crypto does not require active consent (Deny B)
-
-`Deployment::encrypt_field` / `decrypt_field` enforce **GTM-1 capabilities** on `*_as` paths but do **not** call `consent.is_granted`. After revoke, decrypt with a valid capability still succeeds. The worked example records this in `deny-b-result.txt` as `gap` rather than failing the script.
-
-**Why documented, not silently “fixed” in this proof path:** gating crypto on consent is a product design change (purpose binding, category scope, care vs secondary use). Track it as a follow-up issue; do not claim revoke blocks decryption until that lands.
-
-### Related
-
-- Legacy library `&str` crypto/consent APIs remain capability-unchecked (CLI uses `*_as` only).
-- Live HELIOS signing deferred — see [helios.md](helios.md).
+Legacy `&str` `encrypt_field` / `decrypt_field` remain capability- and consent-unchecked (library-only; CLI uses `*_as`).
 
 ## Related proofs
 

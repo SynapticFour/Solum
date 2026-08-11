@@ -8,28 +8,20 @@ This file is versioned. Per-run numbers live under `artifacts/run-*/event-types.
 |-------|----------------|
 | Profile | `solum check --profile config/profiles/eu-ehds.toml` exit 0 |
 | Consent after grant | `granted` |
-| Encrypt/decrypt | Byte-identical plaintext round-trip |
+| Encrypt/decrypt | Byte-identical plaintext round-trip (`--subject` / `--purpose` required) |
 | Deny A (no `--capability`) | Non-zero exit; no ciphertext file; ≥1 `authorization.denied` |
 | Consent after revoke | `revoked` |
+| Deny B (decrypt after revoke) | Non-zero exit; `deny-b-result.txt` = `denied`; ≥1 `consent.denied` |
 | Audit verify | stdout `ok` |
 
-## Deny B (decrypt after revoke)
-
-| Result file | Meaning |
-|-------------|---------|
-| `deny-b-result.txt` = `denied` | Crypto path refuses when consent is revoked (enforced) |
-| `deny-b-result.txt` starts with `gap` | **Documented gap:** GTM-1 capability checks apply; active consent is **not** re-checked on encrypt/decrypt |
-
-As of the Proof Path introduction, Deny B is expected to report **gap** until a deliberate product change gates crypto on `consent.is_granted`.
-
-## Typical event types (order may vary)
+## Typical event types
 
 - `consent.granted`
 - `data.encrypt` (Success)
-- `data.decrypt` (Success)
+- `data.decrypt` (Success) — happy path only
 - `authorization.denied` (Deny A)
 - `consent.revoked`
-- Possibly a further `data.decrypt` (Success) if Deny B is still a gap
+- `consent.denied` (Deny B)
 
 ## Claims
 

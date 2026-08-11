@@ -221,6 +221,23 @@ impl ConsentStore {
         )
     }
 
+    /// Current decision record for `(subject_id, purpose)`, if any.
+    pub fn current_record(&self, subject_id: &str, purpose: &str) -> Option<&ConsentRecord> {
+        self.current
+            .get(&(subject_id.to_string(), purpose.to_string()))
+    }
+
+    /// Active grant covers `category` when status is Granted and either the
+    /// grant's `scope` is empty (purpose-level consent) or contains `category`.
+    pub fn is_granted_for_category(&self, subject_id: &str, purpose: &str, category: &str) -> bool {
+        match self.current_record(subject_id, purpose) {
+            Some(r) if r.status == ConsentStatus::Granted => {
+                r.scope.is_empty() || r.scope.iter().any(|s| s == category)
+            }
+            _ => false,
+        }
+    }
+
     /// Full decision history for one subject, in recorded order — backs the
     /// EEHRxF "access, who accessed, onward sharing" transparency right.
     pub fn history_for_subject(

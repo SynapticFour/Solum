@@ -125,6 +125,28 @@ fn client() -> reqwest::Client {
     reqwest::Client::new()
 }
 
+async fn grant_care_provision_http(addr: &str, token: &str) {
+    let res = client()
+        .post(format!("http://{addr}/v1/consent/grant"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "subject": "patient/42",
+            "purpose": "care_provision",
+            "actor": "practitioner/7",
+            "capability": ["solum:consent:grant"],
+            "scope": ["patient_summary"]
+        }))
+        .send()
+        .await
+        .unwrap();
+    let status = res.status();
+    let body = res.text().await.unwrap_or_default();
+    assert!(
+        status == 200 || status == 201,
+        "grant failed: status={status} body={body}"
+    );
+}
+
 #[tokio::test]
 async fn grant_with_capability_and_secret_created() {
     let token = "test-secret-grant-ok";
@@ -240,12 +262,15 @@ async fn grant_missing_capability_is_forbidden_no_side_effect() {
 async fn encrypt_decrypt_round_trip_over_http() {
     let token = "test-secret-crypto";
     let (addr, _dir) = spawn_ephemeral_sidecar(token).await;
+    grant_care_provision_http(&addr.to_string(), token).await;
     let plain = b"patient-summary-demo";
     let enc = client()
         .post(format!("http://{addr}/v1/crypto/encrypt"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
             "category": "patient_summary",
+            "subject": "patient/42",
+            "purpose": "care_provision",
             "key_ref": "ephemeral/sidecar-1",
             "actor": "practitioner/7",
             "capability": ["solum:crypto:encrypt"],
@@ -268,6 +293,8 @@ async fn encrypt_decrypt_round_trip_over_http() {
         .post(format!("http://{addr}/v1/crypto/decrypt"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
+            "subject": "patient/42",
+            "purpose": "care_provision",
             "key_ref": "ephemeral/sidecar-1",
             "actor": "practitioner/7",
             "capability": ["solum:crypto:decrypt"],
@@ -290,6 +317,7 @@ async fn encrypt_decrypt_round_trip_over_http() {
 async fn encrypt_same_key_ref_twice_both_ciphertexts_decrypt() {
     let token = "test-secret-key-reuse";
     let (addr, _dir) = spawn_ephemeral_sidecar(token).await;
+    grant_care_provision_http(&addr.to_string(), token).await;
     let key_ref = "ephemeral/reuse-1";
     let plain_a = b"first-plaintext-block";
     let plain_b = b"second-plaintext-block";
@@ -299,6 +327,8 @@ async fn encrypt_same_key_ref_twice_both_ciphertexts_decrypt() {
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
             "category": "patient_summary",
+            "subject": "patient/42",
+            "purpose": "care_provision",
             "key_ref": key_ref,
             "actor": "practitioner/7",
             "capability": ["solum:crypto:encrypt"],
@@ -317,6 +347,8 @@ async fn encrypt_same_key_ref_twice_both_ciphertexts_decrypt() {
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
             "category": "patient_summary",
+            "subject": "patient/42",
+            "purpose": "care_provision",
             "key_ref": key_ref,
             "actor": "practitioner/7",
             "capability": ["solum:crypto:encrypt"],
@@ -334,6 +366,8 @@ async fn encrypt_same_key_ref_twice_both_ciphertexts_decrypt() {
         .post(format!("http://{addr}/v1/crypto/decrypt"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
+            "subject": "patient/42",
+            "purpose": "care_provision",
             "key_ref": key_ref,
             "actor": "practitioner/7",
             "capability": ["solum:crypto:decrypt"],
@@ -356,6 +390,8 @@ async fn encrypt_same_key_ref_twice_both_ciphertexts_decrypt() {
         .post(format!("http://{addr}/v1/crypto/decrypt"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
+            "subject": "patient/42",
+            "purpose": "care_provision",
             "key_ref": key_ref,
             "actor": "practitioner/7",
             "capability": ["solum:crypto:decrypt"],
@@ -379,6 +415,7 @@ async fn encrypt_same_key_ref_twice_both_ciphertexts_decrypt() {
 async fn audit_verify_ok_after_operations() {
     let token = "test-secret-audit";
     let (addr, _dir) = spawn_ephemeral_sidecar(token).await;
+    grant_care_provision_http(&addr.to_string(), token).await;
 
     let grant = client()
         .post(format!("http://{addr}/v1/consent/grant"))
@@ -401,6 +438,8 @@ async fn audit_verify_ok_after_operations() {
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
             "category": "patient_summary",
+            "subject": "patient/42",
+            "purpose": "care_provision",
             "key_ref": "ephemeral/audit-1",
             "actor": "practitioner/7",
             "capability": ["solum:crypto:encrypt"],
@@ -437,6 +476,7 @@ async fn customer_held_encrypt_decrypt_round_trip() {
     let token = "test-secret-ch-roundtrip";
     let key_ref = "customer/sidecar-1";
     let (addr, _dir) = spawn_customer_held_sidecar(token, key_ref).await;
+    grant_care_provision_http(&addr.to_string(), token).await;
     let plain = b"customer-held-plaintext";
 
     let enc = client()
@@ -444,6 +484,8 @@ async fn customer_held_encrypt_decrypt_round_trip() {
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
             "category": "patient_summary",
+            "subject": "patient/42",
+            "purpose": "care_provision",
             "key_ref": key_ref,
             "actor": "practitioner/7",
             "capability": ["solum:crypto:encrypt"],
@@ -466,6 +508,8 @@ async fn customer_held_encrypt_decrypt_round_trip() {
         .post(format!("http://{addr}/v1/crypto/decrypt"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
+            "subject": "patient/42",
+            "purpose": "care_provision",
             "key_ref": key_ref,
             "actor": "practitioner/7",
             "capability": ["solum:crypto:decrypt"],
@@ -487,12 +531,15 @@ async fn customer_held_encrypt_decrypt_round_trip() {
 async fn customer_held_unknown_key_ref_does_not_auto_generate() {
     let token = "test-secret-ch-unknown";
     let (addr, _dir) = spawn_customer_held_sidecar(token, "customer/known-1").await;
+    grant_care_provision_http(&addr.to_string(), token).await;
 
     let enc = client()
         .post(format!("http://{addr}/v1/crypto/encrypt"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
             "category": "patient_summary",
+            "subject": "patient/42",
+            "purpose": "care_provision",
             "key_ref": "customer/never-registered",
             "actor": "practitioner/7",
             "capability": ["solum:crypto:encrypt"],

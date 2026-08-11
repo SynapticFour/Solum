@@ -60,13 +60,15 @@ cargo run -q -p solum-core -- crypto keygen \
 echo "-- crypto encrypt (DB blob → Crypt4GH EncryptedField JSON) =="
 cargo run -q -p solum-core -- crypto encrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
-  --category patient_summary --key-ref "$KEY_REF" --keypair "$KEYPAIR" \
+  --category patient_summary --subject patient/42 --purpose care_provision \
+  --key-ref "$KEY_REF" --keypair "$KEYPAIR" \
   --actor practitioner/7 --capability solum:crypto:encrypt \
   --in "$PLAIN_IN" --out "$FIELD_OUT" 2>/dev/null
 
 echo "-- crypto decrypt (round-trip back into EHR staging file) =="
 cargo run -q -p solum-core -- crypto decrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
+  --subject patient/42 --purpose care_provision \
   --key-ref "$KEY_REF" --keypair "$KEYPAIR" \
   --actor practitioner/7 --capability solum:crypto:decrypt \
   --in "$FIELD_OUT" --out "$PLAIN_OUT" 2>/dev/null

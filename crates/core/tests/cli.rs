@@ -35,6 +35,36 @@ fn write_keypair(dir: &Path, key_ref: &str) -> PathBuf {
     out
 }
 
+fn grant_care_provision(dir: &std::path::Path) {
+    grant_care_provision_on(dir, eu_profile());
+}
+
+fn grant_care_provision_on(dir: &std::path::Path, profile: PathBuf) {
+    solum()
+        .args([
+            "consent",
+            "grant",
+            "--profile",
+            profile.to_str().unwrap(),
+            "--audit",
+            dir.join("audit.jsonl").to_str().unwrap(),
+            "--consent-store",
+            dir.join("consent.jsonl").to_str().unwrap(),
+            "--subject",
+            "patient/42",
+            "--purpose",
+            "care_provision",
+            "--actor",
+            "practitioner/7",
+            "--capability",
+            "solum:consent:grant",
+            "--scope",
+            "patient_summary",
+        ])
+        .assert()
+        .success();
+}
+
 fn grant(dir: &Path, subject: &str, purpose: &str) {
     solum()
         .args([
@@ -168,6 +198,7 @@ fn crypto_encrypt_decrypt_customer_held_round_trip() {
     let enc_out = dir.path().join("field.json");
     let plain_out = dir.path().join("plain-out.txt");
     fs::write(&plain_in, b"patient-summary-demo").unwrap();
+    grant_care_provision(dir.path());
 
     let enc = solum()
         .args([
@@ -181,6 +212,10 @@ fn crypto_encrypt_decrypt_customer_held_round_trip() {
             dir.path().join("consent.jsonl").to_str().unwrap(),
             "--category",
             "patient_summary",
+            "--subject",
+            "patient/42",
+            "--purpose",
+            "care_provision",
             "--key-ref",
             key_ref,
             "--keypair",
@@ -216,6 +251,10 @@ fn crypto_encrypt_decrypt_customer_held_round_trip() {
             dir.path().join("audit.jsonl").to_str().unwrap(),
             "--consent-store",
             dir.path().join("consent.jsonl").to_str().unwrap(),
+            "--subject",
+            "patient/42",
+            "--purpose",
+            "care_provision",
             "--key-ref",
             key_ref,
             "--keypair",
@@ -256,6 +295,10 @@ fn crypto_ephemeral_refused_on_eu_profile_even_with_env() {
             dir.path().join("consent.jsonl").to_str().unwrap(),
             "--category",
             "patient_summary",
+            "--subject",
+            "patient/42",
+            "--purpose",
+            "care_provision",
             "--key-ref",
             "ephemeral/cli-1",
             "--actor",
@@ -300,6 +343,10 @@ fn crypto_ephemeral_requires_allow_env() {
             dir.path().join("consent.jsonl").to_str().unwrap(),
             "--category",
             "patient_summary",
+            "--subject",
+            "patient/42",
+            "--purpose",
+            "care_provision",
             "--key-ref",
             "ephemeral/cli-1",
             "--actor",
@@ -330,6 +377,8 @@ fn crypto_ephemeral_sidecar_is_mode_0600_on_dev_profile() {
     let enc_out = dir.path().join("field.json");
     fs::write(&plain_in, b"x").unwrap();
 
+    grant_care_provision_on(dir.path(), dev_profile());
+
     solum()
         .env("SOLUM_ALLOW_EPHEMERAL", "1")
         .args([
@@ -344,6 +393,10 @@ fn crypto_ephemeral_sidecar_is_mode_0600_on_dev_profile() {
             dir.path().join("consent.jsonl").to_str().unwrap(),
             "--category",
             "patient_summary",
+            "--subject",
+            "patient/42",
+            "--purpose",
+            "care_provision",
             "--key-ref",
             "ephemeral/cli-1",
             "--actor",
@@ -392,6 +445,10 @@ fn audit_verify_ok_after_consent_and_crypto() {
             dir.path().join("consent.jsonl").to_str().unwrap(),
             "--category",
             "patient_summary",
+            "--subject",
+            "patient/42",
+            "--purpose",
+            "care_provision",
             "--key-ref",
             key_ref,
             "--keypair",
@@ -442,6 +499,10 @@ fn crypto_encrypt_rejects_unknown_category_without_panic() {
             dir.path().join("consent.jsonl").to_str().unwrap(),
             "--category",
             "marketing_segment",
+            "--subject",
+            "patient/42",
+            "--purpose",
+            "care_provision",
             "--key-ref",
             key_ref,
             "--keypair",

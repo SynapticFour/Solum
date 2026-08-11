@@ -1,7 +1,7 @@
 # FHIR validation — IPS-oriented Patient Summary export
 
 **Date:** 2026-08-11
-**Claims allowed:** “Solum’s stage-1 Bundle export passes Solum structural checks (bdl-9/bdl-10, Composition/Patient/sections) and can be fed to the HL7 Validator with the IPS package.”
+**Claims allowed:** “Solum’s stage-1 Bundle export passes Solum structural checks; when run through HL7 Validator + `hl7.fhir.uv.ips#2.0.0`, known gaps match documented `ANNAHME`s.”
 **Claims forbidden:** Full IPS IG certification, ISiK/TI readiness, clinical correctness.
 
 ## Produce the Bundle
@@ -9,61 +9,45 @@
 ```bash
 cargo run -q -p solum-example-fhir-ips-export -- \
   examples/fhir-ips-export/out/patient-summary-bundle.json
-```
-
-Or:
-
-```bash
 ./scripts/validate-fhir-ips.sh
 ```
 
-## Structural checks (always run)
+## Structural checks (always run) — **PASS** (2026-08-11)
 
-`scripts/validate-fhir-ips.sh` writes `examples/fhir-ips-export/out/structural-check.txt`.
+All Solum-owned checks in `examples/fhir-ips-export/out/structural-check.txt` passed (Bundle document, bdl-9/bdl-10, Composition LOINC `60591-5`, author, Patient / AllergyIntolerance / MedicationStatement / Condition).
 
-Expected **PASS** rows:
+## HL7 Validator campaign (2026-08-11)
 
-| Check | Maps to |
-|-------|---------|
-| `resourceType=Bundle`, `type=document` | Document Bundle |
-| bdl-9 identifier system/value | FHIR R4 document Bundle invariants |
-| bdl-10 timestamp | FHIR R4 document Bundle invariants |
-| Composition first + LOINC `60591-5` | IPS document type (`ANNAHME` in `patient_summary.rs`) |
-| Composition.author present | R4 1..\* |
-| Patient / AllergyIntolerance / MedicationStatement / Condition | Stage-1 section entries |
+| Item | Value |
+|------|--------|
+| JAR | HL7 FHIR Validation tool **6.10.1** (`.cache/validator_cli.jar`, gitignored) |
+| Command | `FHIR_VALIDATOR_JAR=.cache/validator_cli.jar ./scripts/validate-fhir-ips.sh` |
+| IG | `hl7.fhir.uv.ips#2.0.0` · FHIR R4.0.1 |
+| Locale | `de` (Germany) — affects display-name checks |
+| Result | **FAILURE**: 7 errors, 5 warnings (script soft-exits 0 unless `SOLUM_FHIR_VALIDATOR_REQUIRE=1`) |
 
-## Optional HL7 Validator (IPS package)
+### Errors → `ANNAHME` / follow-up
 
-1. Download [HL7 FHIR Validator](https://github.com/hapifhir/org.hl7.fhir.core/releases) `validator_cli.jar`.
-2. Run:
+| Validator finding | Maps to |
+|-------------------|---------|
+| `fullUrl` must be valid lowercase UUID (`composition-ips`, `patient-…`, …) | Stage-1 uses stable logical ids / non-UUID fullUrls — not claimed UUID URNs |
+| Wrong Display Name for LOINC `60591-5` (`Patient summary Document` vs locale `Patient Summary`) | Composition.type display string `ANNAHME`; locale-sensitive |
+| AllergyIntolerance rule `ait-1` failed | Minimal allergy row (display-only substance) — incomplete clinical resource |
+| (warnings) `dom-6` missing narrative | No `text` narratives emitted — accepted stage-1 omission |
+
+**Honest claim after this campaign:** structural Solum checks PASS; IPS IG validator does **not** pass — gaps are ticketed/known, not hidden.
+
+## Optional re-run
 
 ```bash
-export FHIR_VALIDATOR_JAR=/path/to/validator_cli.jar
-# optional pin; default hl7.fhir.uv.ips#2.0.0
-export FHIR_IPS_IG=hl7.fhir.uv.ips#2.0.0
+export FHIR_VALIDATOR_JAR="$PWD/.cache/validator_cli.jar"
+# Download once: curl -L -o .cache/validator_cli.jar \
+#   https://github.com/hapifhir/org.hl7.fhir.core/releases/latest/download/validator_cli.jar
 ./scripts/validate-fhir-ips.sh
 ```
 
-Log: `examples/fhir-ips-export/out/validator-log.txt`.
-Set `SOLUM_FHIR_VALIDATOR_REQUIRE=1` to fail when the JAR is missing or the validator exits non-zero.
-
-CI / `verify.sh` do **not** require the Java validator (network + JDK). Structural export is available anytime via the script.
-
-## Known `ANNAHME` → likely validator friction
-
-From [`crates/fhir/src/patient_summary.rs`](../crates/fhir/src/patient_summary.rs):
-
-| Assumption | Likely IPS IG impact |
-|------------|----------------------|
-| Composition.type LOINC `60591-5` | Confirm against targeted IPS STU |
-| Section emptyReason `nilknown` | IPS prefers “known absent” clinical resources |
-| MedicationStatement only | No MedicationRequest path |
-| Display-only clinical codes | No SNOMED/IPS value-set binding |
-| Author as display-only Reference | Missing Organization entry / `reference` URL |
-| Provisional MII extension URL | Not a jointly agreed StructureDefinition |
-
-Map concrete validator errors into this table when you run with `FHIR_VALIDATOR_JAR`.
+CI / `verify.sh` do **not** require the Java validator.
 
 ## Next
 
-German profile landmap and reference probes: [DE-FHIR-GAP.md](DE-FHIR-GAP.md).
+German profile landmap: [DE-FHIR-GAP.md](DE-FHIR-GAP.md).

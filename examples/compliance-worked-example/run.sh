@@ -5,7 +5,7 @@
 #   - CustomerHeld keygen + consent grant → encrypt/decrypt round-trip
 #   - Deny A: crypto without --capability fails closed + authorization.denied
 #   - Consent revoke updates status
-#   - Deny B: decrypt-after-revoke behaviour (documented gap if still allowed)
+#   - Deny B: decrypt after revoke fails closed + consent.denied
 #   - Hash-chained audit export + verify
 #
 # Artifacts are kept under artifacts/run-<utc>/ (gitignored).
@@ -85,12 +85,14 @@ echo "ok: status=$STATUS"
 echo "-- 4/5. encrypt + decrypt round-trip =="
 "${SOLUM[@]}" crypto encrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
-  --category patient_summary --key-ref "$KEY_REF" --keypair "$KEYPAIR" \
+  --category patient_summary --subject "$SUBJECT" --purpose "$PURPOSE" \
+  --key-ref "$KEY_REF" --keypair "$KEYPAIR" \
   --actor "$ACTOR" --capability solum:crypto:encrypt \
   --in "$PLAIN_IN" --out "$FIELD_OUT" 2>/dev/null
 
 "${SOLUM[@]}" crypto decrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
+  --subject "$SUBJECT" --purpose "$PURPOSE" \
   --key-ref "$KEY_REF" --keypair "$KEYPAIR" \
   --actor "$ACTOR" --capability solum:crypto:decrypt \
   --in "$FIELD_OUT" --out "$PLAIN_OUT" 2>/dev/null
@@ -101,7 +103,8 @@ echo "-- 6. Deny A: encrypt without --capability (fail-closed) =="
 set +e
 "${SOLUM[@]}" crypto encrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
-  --category patient_summary --key-ref "$KEY_REF" --keypair "$KEYPAIR" \
+  --category patient_summary --subject "$SUBJECT" --purpose "$PURPOSE" \
+  --key-ref "$KEY_REF" --keypair "$KEYPAIR" \
   --actor "$ACTOR" \
   --in "$PLAIN_IN" --out "$RUN_DIR/should-not-exist.crypt4gh.json" \
   >"$RUN_DIR/deny-a-stdout.txt" 2>"$DENY_A_ERR"
@@ -151,27 +154,38 @@ STATUS="$("${SOLUM[@]}" consent status \
 test "$STATUS" = "revoked" || { echo "FAIL: expected revoked, got: $STATUS"; exit 1; }
 echo "ok: status=$STATUS"
 
-echo "-- 8. Deny B: decrypt after revoke =="
+echo "-- 8. Deny B: decrypt after revoke (must refuse) =="
 set +e
 "${SOLUM[@]}" crypto decrypt \
   --profile "$PROFILE" --audit "$AUDIT" --consent-store "$CONSENT" \
+  --subject "$SUBJECT" --purpose "$PURPOSE" \
   --key-ref "$KEY_REF" --keypair "$KEYPAIR" \
   --actor "$ACTOR" --capability solum:crypto:decrypt \
   --in "$FIELD_OUT" --out "$PLAIN_AFTER_REVOKE" 2>"$RUN_DIR/deny-b-stderr.txt"
 DENY_B_RC=$?
 set -e
-if [[ "$DENY_B_RC" -ne 0 ]]; then
-  echo "denied" >"$DENY_B_NOTE"
-  echo "ok: Deny B — decrypt refused after revoke (enforced)"
-else
-  {
-    echo "gap"
-    echo "decrypt_after_revoke=allowed"
-    echo "note: encrypt/decrypt check GTM-1 capabilities but do not require active consent.is_granted"
-    echo "see docs/WORKED-EXAMPLE.md §Known gaps"
-  } >"$DENY_B_NOTE"
-  echo "GAP (documented): decrypt after revoke still succeeded — consent not gated on crypto path"
-fi
+test "$DENY_B_RC" -ne 0 || { echo "FAIL: Deny B should refuse decrypt after revoke"; exit 1; }
+test ! -f "$PLAIN_AFTER_REVOKE" || { echo "FAIL: Deny B wrote plaintext"; exit 1; }
+grep -E -q 'consent denied|active_consent_required' "$RUN_DIR/deny-b-stderr.txt" \
+  || { echo "FAIL: Deny B stderr missing consent denial"; cat "$RUN_DIR/deny-b-stderr.txt"; exit 1; }
+python3 - "$AUDIT" <<'PY' || { echo "FAIL: no consent.denied in audit"; exit 1; }
+import json, sys
+path = sys.argv[1]
+found = False
+with open(path) as f:
+    for line in f:
+        line = line.strip()
+        if not line:
+            continue
+        ev = json.loads(line)
+        et = ev.get("event_type") or (ev.get("event") or {}).get("event_type")
+        if et == "consent.denied":
+            found = True
+            break
+sys.exit(0 if found else 1)
+PY
+echo "denied" >"$DENY_B_NOTE"
+echo "ok: Deny B — decrypt refused after revoke + consent.denied audited"
 
 echo "-- 9. audit export + verify =="
 "${SOLUM[@]}" audit export --audit "$AUDIT" --out "$HELIOS_OUT"

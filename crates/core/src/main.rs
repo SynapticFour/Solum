@@ -167,6 +167,12 @@ enum CryptoCmd {
         consent_store: PathBuf,
         #[arg(long)]
         category: String,
+        /// Data subject whose consent must be active for this category.
+        #[arg(long)]
+        subject: String,
+        /// Consent purpose (must be granted and cover `--category`).
+        #[arg(long)]
+        purpose: String,
         #[arg(long)]
         key_ref: String,
         #[arg(long)]
@@ -197,6 +203,12 @@ enum CryptoCmd {
         audit: PathBuf,
         #[arg(long)]
         consent_store: PathBuf,
+        /// Data subject whose consent must be active for the field category.
+        #[arg(long)]
+        subject: String,
+        /// Consent purpose (must be granted and cover the field category).
+        #[arg(long)]
+        purpose: String,
         #[arg(long)]
         key_ref: String,
         #[arg(long)]
@@ -542,6 +554,8 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
             audit,
             consent_store,
             category,
+            subject,
+            purpose,
             key_ref,
             actor,
             capability,
@@ -573,7 +587,7 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
                 )?;
                 let actor = cli_actor(actor, capability);
                 let field = deployment
-                    .encrypt_field_as(&category, &plaintext, &key_ref, &actor)
+                    .encrypt_field_as(&category, &plaintext, &key_ref, &actor, &subject, &purpose)
                     .map_err(fail)?;
 
                 write_json(&out, &field)?;
@@ -594,6 +608,8 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
                     audit,
                     consent_store,
                     category,
+                    subject,
+                    purpose,
                     key_ref,
                     actor,
                     capability,
@@ -620,7 +636,7 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
                 )?;
                 let actor = cli_actor(actor, capability);
                 let field = deployment
-                    .encrypt_field_as(&category, &plaintext, &key_ref, &actor)
+                    .encrypt_field_as(&category, &plaintext, &key_ref, &actor, &subject, &purpose)
                     .map_err(fail)?;
                 write_json(&out, &field)?;
                 Ok(())
@@ -630,6 +646,8 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
             profile,
             audit,
             consent_store,
+            subject,
+            purpose,
             key_ref,
             actor,
             capability,
@@ -667,7 +685,7 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
                 )?;
                 let actor = cli_actor(actor, capability);
                 let plaintext = deployment
-                    .decrypt_field_as(&field, &key_ref, &actor)
+                    .decrypt_field_as(&field, &key_ref, &actor, &subject, &purpose)
                     .map_err(fail)?;
                 fs::write(&out, plaintext)
                     .map_err(|e| fail(format!("failed to write --out {}: {e}", out.display())))?;
@@ -677,6 +695,8 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
                     profile,
                     audit,
                     consent_store,
+                    subject,
+                    purpose,
                     key_ref,
                     actor,
                     capability,
@@ -700,7 +720,7 @@ fn cmd_crypto(command: CryptoCmd) -> Result<(), ExitCode> {
                 )?;
                 let actor = cli_actor(actor, capability);
                 let plaintext = deployment
-                    .decrypt_field_as(&field, &key_ref, &actor)
+                    .decrypt_field_as(&field, &key_ref, &actor, &subject, &purpose)
                     .map_err(fail)?;
                 fs::write(&out, plaintext)
                     .map_err(|e| fail(format!("failed to write --out {}: {e}", out.display())))?;
@@ -772,6 +792,8 @@ fn cmd_crypto_encrypt_wrapped(
     audit: PathBuf,
     consent_store: PathBuf,
     category: String,
+    subject: String,
+    purpose: String,
     key_ref: String,
     actor: String,
     capability: Vec<String>,
@@ -819,7 +841,7 @@ fn cmd_crypto_encrypt_wrapped(
         )?;
         let actor = cli_actor(actor, capability);
         let field = deployment
-            .encrypt_field_as(&category, &plaintext, &key_ref, &actor)
+            .encrypt_field_as(&category, &plaintext, &key_ref, &actor, &subject, &purpose)
             .map_err(fail)?;
         write_json(&out, &field)?;
         Ok(())
@@ -831,6 +853,8 @@ fn cmd_crypto_encrypt_wrapped(
             audit,
             consent_store,
             category,
+            subject,
+            purpose,
             key_ref,
             actor,
             capability,
@@ -847,6 +871,8 @@ fn cmd_crypto_decrypt_wrapped(
     profile: PathBuf,
     audit: PathBuf,
     consent_store: PathBuf,
+    subject: String,
+    purpose: String,
     key_ref: String,
     actor: String,
     capability: Vec<String>,
@@ -893,7 +919,7 @@ fn cmd_crypto_decrypt_wrapped(
         )?;
         let actor = cli_actor(actor, capability);
         let plaintext = deployment
-            .decrypt_field_as(&field, &key_ref, &actor)
+            .decrypt_field_as(&field, &key_ref, &actor, &subject, &purpose)
             .map_err(fail)?;
         fs::write(&out, plaintext)
             .map_err(|e| fail(format!("failed to write --out {}: {e}", out.display())))?;
@@ -905,6 +931,8 @@ fn cmd_crypto_decrypt_wrapped(
             profile,
             audit,
             consent_store,
+            subject,
+            purpose,
             key_ref,
             actor,
             capability,

@@ -272,6 +272,63 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
         Ok(())
     }
 
+    /// Fail-closed consent gate for crypto `*_as` methods: require an active
+    /// grant for `(subject_id, purpose)` that covers `category` (empty grant
+    /// scope = purpose-level; otherwise `category` must appear in scope).
+    /// On miss, write one `consent.denied` audit event.
+    fn require_consent_for_category(
+        &mut self,
+        actor: &SolumActor,
+        subject_id: &str,
+        purpose: &str,
+        category: &str,
+        attempted_operation: &str,
+    ) -> Result<(), SolumError> {
+        if self
+            .consent
+            .is_granted_for_category(subject_id, purpose, category)
+        {
+            return Ok(());
+        }
+        let reason = if !self.consent.is_granted(subject_id, purpose) {
+            "active_consent_required"
+        } else {
+            "category_not_in_consent_scope"
+        };
+        let mut details = serde_json::Map::new();
+        details.insert(
+            "subject_id".into(),
+            serde_json::Value::String(subject_id.to_string()),
+        );
+        details.insert(
+            "purpose".into(),
+            serde_json::Value::String(purpose.to_string()),
+        );
+        details.insert(
+            "category".into(),
+            serde_json::Value::String(category.to_string()),
+        );
+        details.insert(
+            "attempted_operation".into(),
+            serde_json::Value::String(attempted_operation.to_string()),
+        );
+        details.insert(
+            "reason".into(),
+            serde_json::Value::String(reason.to_string()),
+        );
+        self.append_audit_event(solum_audit::AuditEvent {
+            event_type: "consent.denied".into(),
+            timestamp: Utc::now(),
+            actor: actor.to_audit_string(),
+            data_category: Some(category.to_string()),
+            outcome: solum_audit::AuditOutcome::Failure,
+            details,
+        })?;
+        Err(SolumError::Message(format!(
+            "consent denied for {subject_id}/{purpose} category {category}: {reason}"
+        )))
+    }
+
     /// Grant consent for `(subject_id, purpose)` — rejecting purposes the
     /// active profile doesn't recognise — and emit the matching
     /// `consent.granted` audit event in the same call.
@@ -410,15 +467,24 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
     }
 
     /// [`encrypt_field`] with a structured [`SolumActor`]. Requires
-    /// [`solum_identity::CAP_CRYPTO_ENCRYPT`] in `actor.scopes`.
+    /// [`solum_identity::CAP_CRYPTO_ENCRYPT`] in `actor.scopes` **and** an
+    /// active consent grant for `(subject_id, purpose)` covering `category`.
+    /// Unknown categories fail before the consent check (same posture as the
+    /// legacy path's pre-audit rejection).
     pub fn encrypt_field_as(
         &mut self,
         category: &str,
         plaintext: &[u8],
         key_ref: &KeyRef,
         actor: &SolumActor,
+        subject_id: &str,
+        purpose: &str,
     ) -> Result<EncryptedField, SolumError> {
         self.authorize_or_deny(actor, solum_identity::CAP_CRYPTO_ENCRYPT, "encrypt_field")?;
+        let gate = FieldCategoryGate::new(&self.profile.encryption.required_field_categories);
+        solum_crypto::validate_field_category(&gate, category)
+            .map_err(|e| SolumError::Message(e.to_string()))?;
+        self.require_consent_for_category(actor, subject_id, purpose, category, "encrypt_field")?;
         let actor_s = actor.to_audit_string();
         self.encrypt_field(category, plaintext, key_ref, &actor_s)
     }
@@ -466,14 +532,25 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
     }
 
     /// [`decrypt_field`] with a structured [`SolumActor`]. Requires
-    /// [`solum_identity::CAP_CRYPTO_DECRYPT`] in `actor.scopes`.
+    /// [`solum_identity::CAP_CRYPTO_DECRYPT`] in `actor.scopes` **and** an
+    /// active consent grant for `(subject_id, purpose)` covering the field's
+    /// category.
     pub fn decrypt_field_as(
         &mut self,
         field: &EncryptedField,
         key_ref: &KeyRef,
         actor: &SolumActor,
+        subject_id: &str,
+        purpose: &str,
     ) -> Result<Vec<u8>, SolumError> {
         self.authorize_or_deny(actor, solum_identity::CAP_CRYPTO_DECRYPT, "decrypt_field")?;
+        self.require_consent_for_category(
+            actor,
+            subject_id,
+            purpose,
+            &field.category,
+            "decrypt_field",
+        )?;
         let actor_s = actor.to_audit_string();
         self.decrypt_field(field, key_ref, &actor_s)
     }
@@ -561,6 +638,10 @@ mod tests {
     use super::*;
     use solum_crypto::{EphemeralTestKeyProvider, KeyRef};
     use std::path::PathBuf;
+    use std::sync::Mutex;
+
+    /// Serialise tests that mutate `SOLUM_TENANT_ID` (process-global env).
+    static TENANT_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn eu_profile_path() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/profiles/eu-ehds.toml")
@@ -600,6 +681,7 @@ mod tests {
 
     #[test]
     fn grant_consent_stamps_solum_tenant_id_when_set() {
+        let _guard = TENANT_ENV_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
         let (mut deployment, _) = open_deployment(&dir);
         std::env::set_var("SOLUM_TENANT_ID", "tenant-acme-managed-1");
@@ -759,6 +841,8 @@ mod tests {
 
     #[test]
     fn grant_consent_as_ferrum_and_standalone_same_audit_shape() {
+        let _guard = TENANT_ENV_LOCK.lock().unwrap();
+        std::env::remove_var("SOLUM_TENANT_ID");
         let dir = tempfile::tempdir().unwrap();
         let (mut deployment, _) = open_deployment(&dir);
 
@@ -968,10 +1052,19 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (mut deployment, key_ref) = open_deployment(&dir);
         let plain = b"patient-summary-authz";
+        let subject = "patient/42";
+        let purpose = "care_provision";
 
         let no_encrypt = SolumActor::standalone("practitioner/7", vec!["patient/*.read".into()]);
         let err = deployment
-            .encrypt_field_as("patient_summary", plain, &key_ref, &no_encrypt)
+            .encrypt_field_as(
+                "patient_summary",
+                plain,
+                &key_ref,
+                &no_encrypt,
+                subject,
+                purpose,
+            )
             .expect_err("missing encrypt capability");
         assert!(matches!(err, SolumError::Authorization(_)));
         assert_authorization_denied(
@@ -984,46 +1077,74 @@ mod tests {
 
         let encrypt_actor =
             SolumActor::standalone("practitioner/7", vec![identity::CAP_CRYPTO_ENCRYPT.into()]);
-        let enc = deployment
-            .encrypt_field_as("patient_summary", plain, &key_ref, &encrypt_actor)
-            .expect("matching encrypt capability");
+        let err = deployment
+            .encrypt_field_as(
+                "patient_summary",
+                plain,
+                &key_ref,
+                &encrypt_actor,
+                subject,
+                purpose,
+            )
+            .expect_err("encrypt without consent must deny");
+        assert!(matches!(err, SolumError::Message(_)));
+        assert_eq!(
+            deployment
+                .audit_events()
+                .unwrap()
+                .last()
+                .unwrap()
+                .event
+                .event_type,
+            "consent.denied"
+        );
 
-        let events = deployment.audit_events().unwrap();
-        assert_eq!(events.len(), 2); // denied + data.encrypt
-        assert_eq!(events[1].event.event_type, "data.encrypt");
-        assert!(deployment.verify_audit_chain().is_ok());
+        deployment
+            .grant_consent(subject, purpose, vec!["patient_summary".into()], "setup")
+            .unwrap();
+
+        let enc = deployment
+            .encrypt_field_as(
+                "patient_summary",
+                plain,
+                &key_ref,
+                &encrypt_actor,
+                subject,
+                purpose,
+            )
+            .expect("matching encrypt capability + consent");
 
         let no_decrypt =
             SolumActor::standalone("practitioner/7", vec![identity::CAP_CRYPTO_ENCRYPT.into()]);
         let err = deployment
-            .decrypt_field_as(&enc, &key_ref, &no_decrypt)
+            .decrypt_field_as(&enc, &key_ref, &no_decrypt, subject, purpose)
             .expect_err("encrypt capability must not imply decrypt");
         assert!(matches!(err, SolumError::Authorization(_)));
-
-        let events = deployment.audit_events().unwrap();
-        assert_eq!(events.len(), 3);
-        assert_eq!(events[2].event.event_type, "authorization.denied");
-        assert_eq!(
-            events[2]
-                .event
-                .details
-                .get("capability")
-                .and_then(|v| v.as_str()),
-            Some(identity::CAP_CRYPTO_DECRYPT)
-        );
-        assert!(deployment.verify_audit_chain().is_ok());
 
         let decrypt_actor =
             SolumActor::standalone("practitioner/7", vec![identity::CAP_CRYPTO_DECRYPT.into()]);
         let out = deployment
-            .decrypt_field_as(&enc, &key_ref, &decrypt_actor)
-            .expect("matching decrypt capability");
+            .decrypt_field_as(&enc, &key_ref, &decrypt_actor, subject, purpose)
+            .expect("matching decrypt capability + consent");
         assert_eq!(out, plain);
 
-        let events = deployment.audit_events().unwrap();
-        assert_eq!(events.len(), 4);
-        assert_eq!(events[3].event.event_type, "data.decrypt");
-        assert_eq!(events[3].event.outcome, solum_audit::AuditOutcome::Success);
+        deployment
+            .revoke_consent(subject, purpose, "setup")
+            .unwrap();
+        let err = deployment
+            .decrypt_field_as(&enc, &key_ref, &decrypt_actor, subject, purpose)
+            .expect_err("decrypt after revoke must deny");
+        assert!(matches!(err, SolumError::Message(_)));
+        assert_eq!(
+            deployment
+                .audit_events()
+                .unwrap()
+                .last()
+                .unwrap()
+                .event
+                .event_type,
+            "consent.denied"
+        );
         assert!(deployment.verify_audit_chain().is_ok());
     }
 
@@ -1034,7 +1155,14 @@ mod tests {
         let actor = SolumActor::standalone("practitioner/7", vec![]);
 
         let err = deployment
-            .encrypt_field_as("patient_summary", b"x", &key_ref, &actor)
+            .encrypt_field_as(
+                "patient_summary",
+                b"x",
+                &key_ref,
+                &actor,
+                "patient/42",
+                "care_provision",
+            )
             .expect_err("empty scopes must deny encrypt");
         assert!(matches!(err, SolumError::Authorization(_)));
         assert_authorization_denied(
@@ -1058,7 +1186,7 @@ mod tests {
         let actor = SolumActor::standalone("practitioner/7", vec![]);
 
         let err = deployment
-            .decrypt_field_as(&enc, &key_ref, &actor)
+            .decrypt_field_as(&enc, &key_ref, &actor, "patient/42", "care_provision")
             .expect_err("empty scopes must deny decrypt");
         assert!(matches!(err, SolumError::Authorization(_)));
         let events = deployment.audit_events().unwrap();
