@@ -1,57 +1,56 @@
-# Priorities (post IPS Validator Success — 2026-08-11)
+# Priorities (living — after P0–P3 engineering pass 2026-08-11)
 
-Living engineering order after the proof-path harden landed on `main`
-(`ae1592b` and docs follow-ups). Claims we already make must stay backed by
-[CLAIMS-PROOF-TRAIL.md](CLAIMS-PROOF-TRAIL.md). Do **not** start ISiK/TI
-adapter work without an explicit pilot Go ([DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md)).
+Claims we make must stay backed by [CLAIMS-PROOF-TRAIL.md](CLAIMS-PROOF-TRAIL.md).
+Do **not** start ISiK/TI adapter work without an explicit pilot Go
+([DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md)).
 
-## P0 — keep the trail honest
+## Closed in this pass
 
-| Item | Why | Proof / exit |
-|------|-----|--------------|
-| Re-run `./scripts/verify.sh` after material `main` merges; pin **Verified commit** in [BASELINE.md](BASELINE.md) | Sales/eval freeze drift | `All baseline checks passed` + SHA update |
-| Keep [CLAIMS-PROOF-TRAIL.md](CLAIMS-PROOF-TRAIL.md) in sync when adding claims | Prevent orphan marketing lines | Every new allowed claim gets a row + command |
-| CI green on `main` after push | Same bar as verify | GitHub Actions CI + Secret Scan |
+| Was | Exit |
+|-----|------|
+| P0 BASELINE pin + claims trail + demo script | [CLAIMS-PROOF-TRAIL.md](CLAIMS-PROOF-TRAIL.md) · `./scripts/demo-claims-proof.sh` |
+| P1 Legacy `&str` crypto/consent | `#[deprecated]` on `grant/revoke/encrypt/decrypt_field` (`&str`) |
+| P1 Passport `SolumActor` tests | `crates/core/tests/solum_actor_auth.rs` |
+| P1 KMS EncryptionContext | `seed_encryption_context` on wrap/unwrap; legacy empty context still loads |
+| P1 Patient Summary via Deployment | `encrypt_patient_summary_as` / `decrypt_patient_summary_as` + audit |
+| P1 Thin FHIR CLI | `solum fhir export-ips` |
+| P2 Gate honesty (no unsafe promote) | Documented below; Nigeria/SA stay in `planned/` |
+| P3 Author Reference ANNAHME | Organization entry + `author.reference` |
+| P3 Migration Prefer/Cut-over dry rehearsal | `./scripts/migration-rehearsal-dry-run.sh` |
 
-## P1 — close remaining Stage‑1 flanks (product trust)
+## Still open (external / pilot / stage-2)
 
-| Item | Why | Notes |
-|------|-----|-------|
-| Legacy `&str` encrypt/decrypt: deprecate or document hard for integrators | Capability + consent bypass still exists on library path | CLI/`*_as` already gated; migration plan + warnings |
-| Passport `SolumActor` mapping tests | Jwt path tested; Passport untested ([BASELINE.md](BASELINE.md)) | Add fixtures mirroring JWT coverage |
-| KMS `EncryptionContext` / AAD binding | Optional AWS path honesty gap | Feature-gated; not blocking on-prem default |
-| Wire Patient Summary encrypt/decrypt through `Deployment` + FileAuditStore | FHIR crypto today is crate-local; audit story incomplete for typed path | Still **no** product `solum fhir` CLI required — library/example OK |
-| Optional: thin `solum fhir export-ips` CLI wrapping the example | Operators ask for one binary | Only if demos keep needing the example crate |
+### P2 — blocked on people / portfolio (not code this week)
 
-## P2 — geography / counsel / evidence portfolio
+| Item | Blocker | Next action |
+|------|---------|-------------|
+| Kenya **real counsel** + named site (H4 K1/K3) | External counsel + site | Operator send pack; keep `permitted_destinations = []` |
+| Promote Nigeria / SA TOMLs into `config/profiles/` | Counsel | Follow `planned/README.md` checklist only after Go |
+| Live HELIOS signing bridge | HELIOS release + custody | Keep export-envelope only ([helios.md](helios.md)) |
+| H5 managed custody / TEE launch | Commercial SaaS decision | Docs only until Go ([H5-KEY-CUSTODY-MANAGED.md](H5-KEY-CUSTODY-MANAGED.md)) |
 
-| Item | Why | Notes |
-|------|-----|-------|
-| Kenya **real counsel** send + named site (H4 K1/K3) | Profile is provisional after non-counsel Vorprüfung only | Empty `permitted_destinations` stays until TIA |
-| Promote Nigeria / SA from `config/profiles/planned/` only after counsel | Scaffolds exist; must not become accidental production profiles | Checklist in `planned/README.md` |
-| Live HELIOS signing bridge | Export envelope only today | Blocked on HELIOS release + custody story ([helios.md](helios.md)) |
-| H5 managed custody / TEE — only if commercial SaaS path opens | Docs exist; not a launch | [H5-KEY-CUSTODY-MANAGED.md](H5-KEY-CUSTODY-MANAGED.md) |
+### P3 — remaining interchange depth
 
-## P3 — interchange depth (pilot-shaped)
+| Item | Status | Notes |
+|------|--------|-------|
+| IPS terminology binding (SNOMED etc.) | Open | Still ANNAHME — needs named IG + clinical codes |
+| MedicationRequest path (vs MedicationStatement-only) | Open | IPS allows either; Statement-only remains stage-1 choice |
+| Provisional MII extension URL | Open | Passthrough only |
+| Live Prefer / Cut-over on partner store | Open | Dry rehearsal exists; live import needs Demo `smoke-h3` + site |
+| DE / ISiK adapter | **Gated** | Pilot Go required |
+| EEHRxF categories beyond Patient Summary | Stage 2 | labs / discharge / imaging / Rx |
 
-| Item | Why | Notes |
-|------|-----|-------|
-| IPS remaining `ANNAHME`s (terminology, MedicationRequest, author Reference, MII URL) | Validator Success ≠ clinical IG completeness | Drive from a named IPS/IG version |
-| Migration Prefer / Cut-over rehearsal on a real partner store | Track B dual-write stub exists | [MIGRATION-CUTOVER-CHECKLIST.md](MIGRATION-CUTOVER-CHECKLIST.md) |
-| DE / ISiK adapter spike | Only with paying or committed pilot Go | [DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md) — **gated** |
-| EEHRxF priority categories beyond Patient Summary | Roadmap stage 2 | labs / discharge / imaging / Rx |
+### P0 ongoing hygiene
 
-## Explicitly skipped now
+| Item | Cadence |
+|------|---------|
+| `./scripts/verify.sh` after material merges; pin [BASELINE.md](BASELINE.md) Verified commit | Every material merge |
+| Keep CLAIMS map in sync when adding claims | With the claim |
+| CI green on `main` | After each push |
+
+## Explicitly still skipped
 
 - Full ISiK / gematik / TI connector without pilot Go
-- Turning planned Nigeria/SA TOMLs into loadable production profiles without counsel
+- Loading planned Nigeria/SA as production profiles without counsel
 - Claiming live HELIOS attestation from Solum
 - Claiming IPS “certified” beyond the pinned HL7 package campaign
-
-## Done recently (do not re-open)
-
-- Deny B consent-gated `*_as` crypto + worked example
-- Proof path docs + `verify.sh` §8
-- IPS Bundle UUID / LOINC / ait-1 / narratives → Validator Success
-- Kenya / HELIOS / “no `solum fhir` CLI” honesty alignment
-- Nigeria/SA **planned/** scaffolds (not auto-loaded)

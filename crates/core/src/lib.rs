@@ -33,7 +33,7 @@ pub use solum_identity as identity;
 pub use solum_openehr as openehr;
 pub use solum_profiles as profiles;
 
-pub use solum_identity::{ActorSource, AuthorizationError, SolumActor};
+pub use solum_identity::{ActorFromClaimsError, ActorSource, AuthorizationError, SolumActor};
 
 #[derive(Debug, Error)]
 pub enum SolumError {
@@ -173,7 +173,12 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
     ///
     /// Async only at the storage boundary — no `block_on` inside this crate.
     /// Requires feature `ferrum-storage-backend` and a prior [`Self::with_storage`].
+    ///
+    /// Uses the legacy `&str` crypto path (no capability/consent). Prefer
+    /// encrypting via [`Self::encrypt_field_as`] then storing separately until a
+    /// gated storage helper ships.
     #[cfg(feature = "ferrum-storage-backend")]
+    #[allow(deprecated)]
     pub async fn encrypt_field_and_store(
         &mut self,
         category: &str,
@@ -207,7 +212,10 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
     ///
     /// Takes `&mut self` because [`Self::decrypt_field`] co-writes the audit event
     /// (same as the non-storage path). Requires feature `ferrum-storage-backend`.
+    ///
+    /// Uses the legacy `&str` crypto path — see [`Self::encrypt_field_and_store`].
     #[cfg(feature = "ferrum-storage-backend")]
+    #[allow(deprecated)]
     pub async fn read_and_decrypt_field(
         &mut self,
         storage_key: &str,
@@ -337,6 +345,10 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
     /// authorization should use [`Self::grant_consent_as`]. This asymmetry is
     /// intentional: `*_as` methods carry a [`SolumActor`] with scopes to check
     /// against; plain `&str` actors carry no such information.
+    #[deprecated(
+        since = "0.1.0",
+        note = "use grant_consent_as with SolumActor scopes (capability-checked)"
+    )]
     pub fn grant_consent(
         &mut self,
         subject_id: &str,
@@ -373,7 +385,10 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
     ) -> Result<solum_consent::ConsentRecord, SolumError> {
         self.authorize_or_deny(actor, solum_identity::CAP_CONSENT_GRANT, "grant_consent")?;
         let actor_s = actor.to_audit_string();
-        self.grant_consent(subject_id, purpose, scope, &actor_s)
+        #[allow(deprecated)]
+        {
+            self.grant_consent(subject_id, purpose, scope, &actor_s)
+        }
     }
 
     /// Revoke consent for `(subject_id, purpose)` (the EEHRxF revocation
@@ -383,6 +398,10 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
     /// authorization should use [`Self::revoke_consent_as`]. This asymmetry is
     /// intentional: `*_as` methods carry a [`SolumActor`] with scopes to check
     /// against; plain `&str` actors carry no such information.
+    #[deprecated(
+        since = "0.1.0",
+        note = "use revoke_consent_as with SolumActor scopes (capability-checked)"
+    )]
     pub fn revoke_consent(
         &mut self,
         subject_id: &str,
@@ -414,7 +433,10 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
     ) -> Result<solum_consent::ConsentRecord, SolumError> {
         self.authorize_or_deny(actor, solum_identity::CAP_CONSENT_REVOKE, "revoke_consent")?;
         let actor_s = actor.to_audit_string();
-        self.revoke_consent(subject_id, purpose, &actor_s)
+        #[allow(deprecated)]
+        {
+            self.revoke_consent(subject_id, purpose, &actor_s)
+        }
     }
 
     /// Encrypt one clinical field category with Crypt4GH and emit a
@@ -423,10 +445,14 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
     /// Crypto failures still write `data.encrypt` with
     /// [`AuditOutcome::Failure`].
     ///
-    /// Legacy path — no capability check. Callers that need enforced
-    /// authorization should use [`Self::encrypt_field_as`]. This asymmetry is
-    /// intentional: `*_as` methods carry a [`SolumActor`] with scopes to check
-    /// against; plain `&str` actors carry no such information.
+    /// Legacy path — no capability **or** consent check. Callers that need
+    /// enforced authorization should use [`Self::encrypt_field_as`]. This
+    /// asymmetry is intentional: `*_as` methods carry a [`SolumActor`] with
+    /// scopes to check against; plain `&str` actors carry no such information.
+    #[deprecated(
+        since = "0.1.0",
+        note = "use encrypt_field_as (capability + consent gated); &str path bypasses both"
+    )]
     pub fn encrypt_field(
         &mut self,
         category: &str,
@@ -486,7 +512,10 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
             .map_err(|e| SolumError::Message(e.to_string()))?;
         self.require_consent_for_category(actor, subject_id, purpose, category, "encrypt_field")?;
         let actor_s = actor.to_audit_string();
-        self.encrypt_field(category, plaintext, key_ref, &actor_s)
+        #[allow(deprecated)]
+        {
+            self.encrypt_field(category, plaintext, key_ref, &actor_s)
+        }
     }
 
     /// Decrypt a Crypt4GH field and emit a `data.decrypt` audit event.
@@ -494,10 +523,14 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
     /// event with [`AuditOutcome::Failure`] — a failed access must appear
     /// in the trail, not only successes.
     ///
-    /// Legacy path — no capability check. Callers that need enforced
-    /// authorization should use [`Self::decrypt_field_as`]. This asymmetry is
-    /// intentional: `*_as` methods carry a [`SolumActor`] with scopes to check
-    /// against; plain `&str` actors carry no such information.
+    /// Legacy path — no capability **or** consent check. Callers that need
+    /// enforced authorization should use [`Self::decrypt_field_as`]. This
+    /// asymmetry is intentional: `*_as` methods carry a [`SolumActor`] with
+    /// scopes to check against; plain `&str` actors carry no such information.
+    #[deprecated(
+        since = "0.1.0",
+        note = "use decrypt_field_as (capability + consent gated); &str path bypasses both"
+    )]
     pub fn decrypt_field(
         &mut self,
         field: &EncryptedField,
@@ -552,7 +585,50 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
             "decrypt_field",
         )?;
         let actor_s = actor.to_audit_string();
-        self.decrypt_field(field, key_ref, &actor_s)
+        #[allow(deprecated)]
+        {
+            self.decrypt_field(field, key_ref, &actor_s)
+        }
+    }
+
+    /// Encrypt a typed [`solum_fhir::PatientSummary`] via
+    /// [`Self::encrypt_field_as`] (capability + consent + `data.encrypt` audit
+    /// on the Deployment [`FileAuditStore`]). Prefer this over
+    /// [`solum_fhir::encrypt_patient_summary`], which is crate-local and does
+    /// not write durable audit.
+    pub fn encrypt_patient_summary_as(
+        &mut self,
+        summary: &solum_fhir::PatientSummary,
+        key_ref: &KeyRef,
+        actor: &SolumActor,
+        subject_id: &str,
+        purpose: &str,
+    ) -> Result<EncryptedField, SolumError> {
+        let plaintext = serde_json::to_vec(summary)
+            .map_err(|e| SolumError::Message(format!("serialize PatientSummary: {e}")))?;
+        self.encrypt_field_as(
+            solum_fhir::PATIENT_SUMMARY_CATEGORY,
+            &plaintext,
+            key_ref,
+            actor,
+            subject_id,
+            purpose,
+        )
+    }
+
+    /// Decrypt a typed [`solum_fhir::PatientSummary`] via
+    /// [`Self::decrypt_field_as`] (capability + consent + `data.decrypt` audit).
+    pub fn decrypt_patient_summary_as(
+        &mut self,
+        field: &EncryptedField,
+        key_ref: &KeyRef,
+        actor: &SolumActor,
+        subject_id: &str,
+        purpose: &str,
+    ) -> Result<solum_fhir::PatientSummary, SolumError> {
+        let plaintext = self.decrypt_field_as(field, key_ref, actor, subject_id, purpose)?;
+        serde_json::from_slice(&plaintext)
+            .map_err(|e| SolumError::Message(format!("deserialize PatientSummary: {e}")))
     }
 
     /// Fail-closed gate for Track B CDR writes (`solum:cdr:write`).
@@ -634,6 +710,7 @@ pub fn query_consent_status(
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use solum_crypto::{EphemeralTestKeyProvider, KeyRef};
@@ -1200,6 +1277,55 @@ mod tests {
                 .and_then(|v| v.as_str()),
             Some("decrypt_field")
         );
+        assert!(deployment.verify_audit_chain().is_ok());
+    }
+
+    #[test]
+    fn encrypt_patient_summary_as_writes_audit_and_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut deployment, key_ref) = open_deployment(&dir);
+        let subject = "patient/42";
+        let purpose = "care_provision";
+        let actor = SolumActor::standalone(
+            "practitioner/7",
+            vec![
+                identity::CAP_CONSENT_GRANT.into(),
+                identity::CAP_CRYPTO_ENCRYPT.into(),
+                identity::CAP_CRYPTO_DECRYPT.into(),
+            ],
+        );
+        deployment
+            .grant_consent_as(subject, purpose, vec!["patient_summary".into()], &actor)
+            .unwrap();
+
+        let summary = solum_fhir::PatientSummary {
+            date: "2026-08-11T12:00:00Z".into(),
+            author_display: "Nordlicht Praxis".into(),
+            patient: solum_fhir::PatientInfo {
+                id: "p-42".into(),
+                identifier: vec![],
+                name: vec![],
+                birth_date: None,
+            },
+            allergies: vec![],
+            medications: vec![],
+            problems: vec![],
+            mii_validation_ref: None,
+        };
+
+        let enc = deployment
+            .encrypt_patient_summary_as(&summary, &key_ref, &actor, subject, purpose)
+            .expect("encrypt_patient_summary_as");
+        assert_eq!(enc.category, solum_fhir::PATIENT_SUMMARY_CATEGORY);
+
+        let out = deployment
+            .decrypt_patient_summary_as(&enc, &key_ref, &actor, subject, purpose)
+            .expect("decrypt_patient_summary_as");
+        assert_eq!(out, summary);
+
+        let events = deployment.audit_events().unwrap();
+        assert!(events.iter().any(|r| r.event.event_type == "data.encrypt"));
+        assert!(events.iter().any(|r| r.event.event_type == "data.decrypt"));
         assert!(deployment.verify_audit_chain().is_ok());
     }
 

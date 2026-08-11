@@ -83,13 +83,9 @@ const EMPTY_REASON_NILKNOWN: &str = "nilknown";
 pub struct PatientSummary {
     /// Composition.date (FHIR dateTime). Required for a document Bundle.
     pub date: String,
-    /// FHIR Composition.author reference (mandatory in base FHIR R4, 1..*).
-    /// Minimal slice: display text only, no full Reference datatype.
-    ///
-    /// ANNAHME, bitte gegen aktuelle FHIR-Spec prüfen: a Reference with only
-    /// `display` (no `reference` URL) satisfies the Reference datatype and
-    /// Composition.author cardinality; if a target profile forbids display-only
-    /// authors, switch to an Organization entry + fullUrl reference.
+    /// FHIR Composition.author — display label for an Organization entry in the
+    /// document Bundle. Stage‑1 emits Organization + `reference` fullUrl (not
+    /// display-only).
     pub author_display: String,
     pub patient: PatientInfo,
     /// IPS Allergies and Intolerances section entries (may be empty).
@@ -274,6 +270,7 @@ pub fn to_fhir_bundle(summary: &PatientSummary) -> Result<Value, FhirError> {
     sections.push(problem_section);
     entries.extend(problem_entries);
 
+    let author_full_url = urn_uuid_for(&format!("author:{}", summary.patient.id));
     let mut composition = json!({
         "resourceType": "Composition",
         "id": composition_id,
@@ -286,9 +283,10 @@ pub fn to_fhir_bundle(summary: &PatientSummary) -> Result<Value, FhirError> {
                 "display": IPS_COMPOSITION_TYPE_DISPLAY
             }]
         },
-        // FHIR R4 Composition.author is 1..* Reference(…). Display-only is valid
-        // Reference structure; see PatientSummary::author_display note.
-        "author": [{ "display": summary.author_display }],
+        "author": [{
+            "reference": author_full_url,
+            "display": summary.author_display
+        }],
         "subject": { "reference": patient_full_url },
         "date": summary.date,
         "title": "International Patient Summary (Solum minimal)",
@@ -323,6 +321,13 @@ pub fn to_fhir_bundle(summary: &PatientSummary) -> Result<Value, FhirError> {
         patient_resource["birthDate"] = json!(bd);
     }
 
+    let author_resource = json!({
+        "resourceType": "Organization",
+        "id": format!("org-{}", summary.patient.id),
+        "text": generated_narrative(&summary.author_display),
+        "name": summary.author_display
+    });
+
     let mut bundle_entries = vec![
         json!({
             "fullUrl": composition_full_url,
@@ -331,6 +336,10 @@ pub fn to_fhir_bundle(summary: &PatientSummary) -> Result<Value, FhirError> {
         json!({
             "fullUrl": patient_full_url,
             "resource": patient_resource
+        }),
+        json!({
+            "fullUrl": author_full_url,
+            "resource": author_resource
         }),
     ];
     bundle_entries.extend(entries);
@@ -420,10 +429,9 @@ where
 /// the same typed structure. Callers that need Bundle shape use
 /// [`to_fhir_bundle`] before or after decryption.
 ///
-/// Persistent audit for Patient Summary encryption is not handled here — that
-/// waits on a future `Deployment` integration (see `docs/BASELINE.md`
-/// “Explizit außerhalb dieser Baseline” / `docs/INTEGRATION-ROADMAP.md`), not
-/// a `solum-fhir`-owned audit write path.
+/// Prefer [`solum_core::Deployment::encrypt_patient_summary_as`] for durable
+/// `data.encrypt` audit. These crate-local helpers remain for unit tests and
+/// callers that already own audit elsewhere.
 pub fn encrypt_patient_summary(
     gate: &FieldCategoryGate<'_>,
     summary: &PatientSummary,
@@ -525,6 +533,18 @@ mod tests {
             authors[0]["display"],
             "Solum Compliance Layer (stage-1, non-clinical)"
         );
+        let author_ref = authors[0]["reference"]
+            .as_str()
+            .expect("Composition.author.reference");
+        assert!(
+            author_ref.starts_with("urn:uuid:"),
+            "author must reference Organization fullUrl: {author_ref}"
+        );
+        let org = entries
+            .iter()
+            .find(|e| e["resource"]["resourceType"] == "Organization")
+            .expect("Organization author entry");
+        assert_eq!(org["fullUrl"], author_ref);
 
         for entry in entries {
             let full = entry["fullUrl"].as_str().expect("fullUrl");
@@ -592,8 +612,8 @@ mod tests {
         let entries = bundle["entry"].as_array().unwrap();
         assert_eq!(
             entries.len(),
-            2,
-            "only Composition + Patient when lists empty"
+            3,
+            "Composition + Patient + Organization author when lists empty"
         );
 
         let sections = entries[0]["resource"]["section"].as_array().unwrap();

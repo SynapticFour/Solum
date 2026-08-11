@@ -7,12 +7,15 @@
 ## Produce the Bundle
 
 ```bash
+cargo run -q -p solum-core -- fhir export-ips --out \
+  examples/fhir-ips-export/out/patient-summary-bundle.json
+# equivalent example binary:
 cargo run -q -p solum-example-fhir-ips-export -- \
   examples/fhir-ips-export/out/patient-summary-bundle.json
 ./scripts/validate-fhir-ips.sh
 ```
 
-**Operator path:** there is **no** `solum fhir …` product CLI yet. Use the example binary above (or call `solum_fhir::to_fhir_bundle` from a library embed). See [examples/fhir-ips-export/README.md](../examples/fhir-ips-export/README.md).
+**Operator path:** `solum fhir export-ips` (thin CLI) or the example binary / `solum_fhir::to_fhir_bundle`. Encrypt/decrypt of the typed summary with durable audit: `Deployment::encrypt_patient_summary_as` / `decrypt_patient_summary_as`.
 
 ## Structural checks — **PASS**
 
@@ -35,7 +38,7 @@ All Solum-owned checks in `examples/fhir-ips-export/out/structural-check.txt` pa
 | AllergyIntolerance `ait-1` | Emit `clinicalStatus=active` |
 | `dom-6` narrative warnings | Generated `text.div` on Composition / Patient / clinical resources |
 
-Remaining `ANNAHME`s (terminology binding, MedicationRequest path, display-only author Reference, provisional MII URL) are **not** claimed resolved — they simply did not fail this IPS package run.
+Remaining `ANNAHME`s (terminology binding, MedicationStatement-only vs MedicationRequest, provisional MII URL) are **not** claimed resolved — they simply did not fail this IPS package run. Display-only author was closed (Organization + `reference`).
 
 ## Re-run
 

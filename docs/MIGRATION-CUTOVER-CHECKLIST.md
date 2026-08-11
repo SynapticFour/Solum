@@ -22,6 +22,8 @@ Operator checklist for strangler stages in [MIGRATION-STRANGLER.md](MIGRATION-ST
 - [ ] Round-trip verify N patients; rollback = disable dual-write + stop imports
 - [ ] Clinical modelling honesty reviewed ([H3-CLINICAL-MODELLING.md](H3-CLINICAL-MODELLING.md)) — co-create, not full FHIR↔OPT map
 
+**Offline tooling rehearsal (no Docker / no partner):** `./scripts/migration-rehearsal-dry-run.sh` exercises `fhir export-ips` + `migrate fhir-import` + `dual-write-stub` and prints the live-site checklist items still required.
+
 ## Stage 3 — Prefer (H3+)
 
 - [ ] Partner UI / reports read Solum FHIR or AQL first for covered domains

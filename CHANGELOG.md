@@ -11,11 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **H3 Demo Dockerfile** — `deploy/h3-ehrbase/Dockerfile.sidecar` drops local `.cargo/config.toml` Ferrum path-patch so `make up-h3` builds without a sibling mount.
 - **IPS Bundle HL7 Validator** — deterministic UUID v5 `fullUrl`s, LOINC display **Patient Summary**, AllergyIntolerance `clinicalStatus` (ait-1), generated narratives → Validator + `hl7.fhir.uv.ips#2.0.0` **Success** (0 errors / 0 warnings).
+- **Composition.author** — Organization Bundle entry + `reference` (closes display-only author ANNAHME).
 
 ### Changed
 
 - **Roadmap / PRODUCT-DEFINITION** — Track B H3 engineering exit reflected; open gates pointed at Showcase [HORIZON-OPEN-GATES](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/HORIZON-OPEN-GATES.md).
-- **Kenya / HELIOS / FHIR honesty** — SECURITY-OVERVIEW Kenya status aligned to provisional; HELIOS remains export-envelope only; typed FHIR path documented as example/library only (no `solum fhir` CLI).
+- **Kenya / HELIOS / FHIR honesty** — SECURITY-OVERVIEW Kenya status aligned to provisional; HELIOS remains export-envelope only.
+- **Legacy `&str` Deployment APIs** — `grant_consent` / `revoke_consent` / `encrypt_field` / `decrypt_field` marked `#[deprecated]` in favour of `*_as`.
 
 ### Added
 
@@ -23,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Proof path** — Track A [WORKED-EXAMPLE.md](docs/WORKED-EXAMPLE.md) + [`examples/compliance-worked-example/`](examples/compliance-worked-example/); `verify.sh` §8; Track B [H3-WORKED-EVIDENCE.md](docs/H3-WORKED-EVIDENCE.md); IPS export + [FHIR-VALIDATION.md](docs/FHIR-VALIDATION.md); DE dossier [DE-FHIR-GAP.md](docs/DE-FHIR-GAP.md); pilot-gated [DE-ADAPTER-SPIKE.md](docs/DE-ADAPTER-SPIKE.md).
 - **Planned profile scaffolds** — Nigeria NDPA + South Africa POPIA under `config/profiles/planned/` (not auto-loaded; not counsel-reviewed).
 - **Claims proof trail** — [CLAIMS-PROOF-TRAIL.md](docs/CLAIMS-PROOF-TRAIL.md) maps every allowed Stage‑1 claim to a demo/command; `./scripts/demo-claims-proof.sh` runs Track A + FHIR structural + Kenya fail-closed checks; [PRIORITIES.md](docs/PRIORITIES.md) living priority list.
+- **KMS EncryptionContext** — new `wrap-seed` / unwrap paths bind `solum:purpose` + `solum:key_ref`; legacy empty-context files still load.
+- **`solum fhir export-ips`** — thin CLI Bundle export; `Deployment::encrypt_patient_summary_as` / `decrypt_patient_summary_as` for audited typed crypto.
+- **Passport SolumActor tests** — Jwt + Passport fixtures in `solum_actor_auth`.
+- **Migration dry rehearsal** — `./scripts/migration-rehearsal-dry-run.sh`.
 - **BASELINE honesty refresh** — corrects stale openEHR-scaffold / KMS-unwired freeze text against HEAD ([BASELINE.md](docs/BASELINE.md)).
 - **H5 preparedness (optional)** — `SOLUM_TENANT_ID` audit stamp (metadata only); [H5-KEY-CUSTODY-MANAGED.md](docs/H5-KEY-CUSTODY-MANAGED.md) for managed single-tenant custody + TEE sketch.
 - **H4 Kenya K2** — KE `validate_transfer` fail-closed tests; sidecar `kenya-dpa` refuse ephemeral / wrong region + CustomerHeld+KE start; [H4-OFFLINE-SYNC-POLICY.md](docs/H4-OFFLINE-SYNC-POLICY.md); `solum check` Kenya docs in [profiles.md](docs/profiles.md).

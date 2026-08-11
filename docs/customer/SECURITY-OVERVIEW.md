@@ -79,7 +79,7 @@ AWS KMS is an **optional**, feature-gated custody path (default off). It is **no
 
 - Provisioning: library API **and** optional CLI/sidecar behind `--features aws-kms` (`wrap-seed`, `--wrapped-keypair`, `--wrapped-keys-dir`; rustc ≥ 1.94.1 for that feature). ([BASELINE.md](../BASELINE.md))
 - Unwrapped seed material is held in ordinary process memory with **best-effort `ZeroizeOnDrop`** (not a TEE). ([BASELINE.md](../BASELINE.md))
-- No KMS EncryptionContext / AAD binding is wired yet. ([BASELINE.md](../BASELINE.md))
+- New KMS wraps bind EncryptionContext (`solum:purpose`, `solum:key_ref`); legacy files without context still unwrap. ([BASELINE.md](../BASELINE.md))
 - CI covers mocked KMS behaviour, not live AWS accounts. ([BASELINE.md](../BASELINE.md))
 - **Other clouds:** Azure Key Vault, Alibaba KMS, Hetzner-native secrets, and custom HSMs are **not** first-class Solum providers yet — use CustomerHeld files (or export material into CustomerHeld registration) until those adapters exist. ([CRYPTO.md](../CRYPTO.md))
 
@@ -147,7 +147,7 @@ The following are **accepted or open limitations** of the current baseline, rest
 
 3. **No capability wildcards / hierarchies.** Exact string match only — e.g. no `solum:*` superuser scope. ([BASELINE.md](../BASELINE.md))
 
-4. **IPS / FHIR Patient Summary structural assumptions are unchecked by a FHIR/IPS specialist.** Stage‑1 choices (document/section codes, empty-section encoding, MedicationStatement-only, no IPS terminology binding, display-only author) are **not** claimed IPS IG conformance. Subject-matter review is required before treating this as production interchange. ([BASELINE.md](../BASELINE.md))
+4. **IPS / FHIR Patient Summary structural assumptions are unchecked by a FHIR/IPS specialist.** Stage‑1 choices (document/section codes, empty-section encoding, MedicationStatement-only, no IPS terminology binding) are **not** claimed IPS IG conformance. Author now references an Organization entry. Subject-matter review is required before treating this as production interchange. ([BASELINE.md](../BASELINE.md))
 
 5. **Best-effort zeroize-on-drop only** for key material in customer-held or AWS-KMS-backed providers (not a TEE / memory-dump proof). ([BASELINE.md](../BASELINE.md))
 
@@ -155,7 +155,7 @@ The following are **accepted or open limitations** of the current baseline, rest
 
 7. **Kenya transfer destinations list is empty by design.** Listed transfer *mechanisms* are pathways only — `validate_transfer` rejects every concrete destination until counsel/TIA populate `permitted_destinations`. ([BASELINE.md](../BASELINE.md))
 
-8. **AWS KMS path caveats:** no EncryptionContext/AAD; optional feature (CLI/sidecar); mocked tests only in CI; not HSM. ([BASELINE.md](../BASELINE.md))
+8. **AWS KMS path caveats:** EncryptionContext on new wraps; optional feature (CLI/sidecar); mocked tests only in CI; not HSM; seed unwrapped into process memory. ([BASELINE.md](../BASELINE.md))
 
 9. **Optional object-storage backend** (Ferrum LocalStorage path) pulls a transitive cloud SDK even when only local storage is used; that feature stays default-off. CI coverage for the feature path is limited relative to the default build. ([BASELINE.md](../BASELINE.md))
 

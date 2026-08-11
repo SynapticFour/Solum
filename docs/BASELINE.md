@@ -36,7 +36,9 @@ Total lib unit tests (default features): recount on verify — `solum-core` lib 
 - **Consent-gated crypto (Deny B closed):** `encrypt_field_as` / `decrypt_field_as` require active grant covering category; CLI `--subject`/`--purpose`; sidecar encrypt/decrypt JSON fields; audit `consent.denied`. Worked example enforces post-revoke decrypt refusal ([WORKED-EXAMPLE.md](WORKED-EXAMPLE.md), issue #1).
 - **Proof path:** compliance worked example + `verify.sh` §8; H3 evidence packaging; IPS structural PASS + HL7 Validator + `hl7.fhir.uv.ips#2.0.0` campaign **Success** (0 errors / 0 warnings after UUID/LOINC/ait-1/narrative harden — [FHIR-VALIDATION.md](FHIR-VALIDATION.md)); remaining IPS `ANNAHME`s still open; [DE-FHIR-GAP.md](DE-FHIR-GAP.md) + pilot-gated [DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md). No product `solum fhir` CLI — example binary / library only.
 - **Track B / H3 (post-custody-tag):** EHRbase façade, AQL, FHIR JSONL store, subject-link, dual-write webhook — see [H3-EHRBASE-SPIKE.md](H3-EHRBASE-SPIKE.md). Prior freeze text calling openEHR a `2-scaffold` is **stale**.
-- **H2.4 AWS KMS:** optional `--features aws-kms` CLI `wrap-seed` / `--wrapped-keypair` and sidecar `--wrapped-keys-dir` — library-only claim in older baseline rows is **stale**; honesty limits (in-memory seed, no EncryptionContext, mocked CI) remain.
+- **H2.4 AWS KMS:** optional `--features aws-kms` CLI `wrap-seed` / `--wrapped-keypair` and sidecar `--wrapped-keys-dir`. New wraps bind KMS **EncryptionContext** (`solum:purpose` + `solum:key_ref`); legacy empty-context files still unwrap. Honesty limits: in-memory seed after unwrap, mocked CI (no live AWS).
+- **Legacy `&str` Deployment crypto/consent:** `#[deprecated]` — use `*_as` (capability + consent for crypto).
+- **Typed Patient Summary on Deployment:** `encrypt_patient_summary_as` / `decrypt_patient_summary_as` write durable audit; CLI `solum fhir export-ips` for Bundle export.
 - **Sidecar↔CLI CustomerHeld parity** (custody tag `3742851`) remains in force.
 
 
@@ -90,7 +92,7 @@ From `crates/fhir/src/patient_summary.rs` (`ANNAHME` markers). These are stage-1
 3. **Empty required sections** use FHIR `emptyReason` (`nilknown`) rather than IPS-preferred “known absent” / “not known” clinical resources.
 4. **Medications** emit `MedicationStatement` only (no `MedicationRequest` path in this binding).
 5. **No terminology binding** to IPS value sets (e.g. SNOMED) — clinical codes are display/text only.
-6. **`author_display`** maps to Composition.author as a display-only `Reference` (no `reference` URL / Organization entry).
+6. **`author_display`** maps to Composition.author referencing an Organization Bundle entry (fullUrl + display).
 
 ### CLI crypto — CustomerHeld `--keypair` vs gated ephemeral
 
@@ -111,9 +113,9 @@ Feature `aws-kms` on `solum-core` / `solum-sidecar` (and `solum-crypto`):
 
 Live HELIOS CLI/API signing is **deferred / not productized** for Stage‑1 evaluations — see [docs/helios.md](helios.md). Hash-chained audit store and HELIOS-oriented export envelopes remain; do not claim live signing or turnkey HELIOS bridge.
 
-### `SolumActor` TryFrom — Jwt tested, Passport mapping untested
+### `SolumActor` TryFrom — Jwt + Passport tested
 
-`SolumActor` `TryFrom<&AuthClaims>` covers only the `Jwt` variant in tests; the `Passport` variant is handled in the mapping code but not yet tested — open for Sprint 5 (Live-Auth-Verifikation).
+`SolumActor` `TryFrom<&AuthClaims>` covers `Jwt` and `Passport` variants in `crates/core/tests/solum_actor_auth.rs` (visas are not mapped into scopes — only `claims.scope`).
 
 ### `ferrum-storage-backend` — transitive AWS S3 SDK / CI coverage gap
 
@@ -123,9 +125,9 @@ Live HELIOS CLI/API signing is **deferred / not productized** for Stage‑1 eval
 
 `solum-auth-verify` ist eine eigenständige Implementierung, kann von Ferrums tatsächlichem privaten Verifikationsverhalten abdriften, da kein öffentlicher Vergleichspunkt existiert. Kein Live-Broker-Test in CI (nur Offline-JWKS-Fixtures, analog zu Ferrums eigenem `jwks_decode.rs`-Testmuster).
 
-### `AwsKmsKeyProvider` — plaintext seed in memory / no EncryptionContext / no live AWS in CI
+### `AwsKmsKeyProvider` — plaintext seed in memory / mocked CI
 
-`AwsKmsKeyProvider` hält den entschlüsselten Seed in Prozessspeicher mit **best-effort `ZeroizeOnDrop`** (wie `CustomerHeldKeyProvider`). Keine KMS-EncryptionContext-Bindung (AAD) für zusätzliche Integritäts-/Policy-Bindung. Keine Live-AWS-Tests in CI (nur aws-smithy-mocks).
+`AwsKmsKeyProvider` hält den entschlüsselten Seed in Prozessspeicher mit **best-effort `ZeroizeOnDrop`** (wie `CustomerHeldKeyProvider`). New wraps send KMS **EncryptionContext** (`solum:purpose=crypt4gh-seed`, `solum:key_ref=…`); legacy on-disk JSON without context still decrypts without context. Keine Live-AWS-Tests in CI (nur aws-smithy-mocks).
 
 ### Legacy LIBRARY actor paths skip authorization / keine Capability-Wildcards
 
@@ -151,7 +153,7 @@ Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFI
 | S3/OpenDAL-Backends (nur LocalStorage in Sprint 4 verdrahtet) | Sprint-4 scope; Ferrum `ObjectStorage` trait is broader |
 | CLI-Wiring für Storage (bewusst nicht Teil von Sprint 4) | Sprint-4 constraint; storage remains library/`Deployment` feature path |
 | CI-Abdeckung für `ferrum-storage-backend`-Feature-Pfad | Local/`verify.sh` §7b only — see “Bewusst akzeptierte Risiken” |
-| Patient Summary encrypt/decrypt über `Deployment` (mit `FileAuditStore`, nicht `AuditLog`) — explizit noch offen, siehe Sprint-3-Designentscheidung | Sprint-3 design note; `docs/architecture.md` FHIR/MII-Grenze |
+| Patient Summary encrypt/decrypt über `Deployment` (mit `FileAuditStore`) | **Done** — `encrypt_patient_summary_as` / `decrypt_patient_summary_as` |
 | FHIR / IHE EEHRxF priority-category depth beyond minimal Patient Summary (labs, discharge, imaging, prescriptions) | `docs/roadmap.md` stage 2 |
 | SaaS operating model | `docs/roadmap.md` stage 2; `docs/architecture.md` / PRODUCT-DEFINITION — on-premise first |
 | Live HELIOS CLI/API signing integration | `docs/helios.md` — **deferred / not productized**; export envelope only |
@@ -159,12 +161,11 @@ Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFI
 | Clinical interpretation / diagnosis / therapy support | Out of scope both stages — `docs/roadmap.md`, CONTRIBUTING MDCG boundary |
 | Kenya production-ready legal closure | Provisional profile inside baseline; counsel still required — see “Bewusst akzeptierte Risiken” |
 | Nigeria / South Africa production profiles | DRAFT scaffolds under `config/profiles/planned/` only — not auto-loaded |
-| Wire Patient Summary encrypt/decrypt into `Deployment` / typed FHIR CLI surface | Stage-1 binding lives in `solum-fhir`; operator path is `examples/fhir-ips-export` + library (`docs/FHIR-VALIDATION.md`) — no product `solum fhir` CLI |
-| Migrationspfad / Deprecation für die Legacy-`&str`-Methoden (Library) | GTM-1 design: `*_as` enforced, `&str` legacy intentionally unchecked for library callers — see accepted-risk note; CLI already migrated |
+| Wire Patient Summary encrypt/decrypt into `Deployment` / typed FHIR CLI surface | **Done** — `encrypt_patient_summary_as` / `decrypt_patient_summary_as`; `solum fhir export-ips` |
+| Migrationspfad / Deprecation für die Legacy-`&str`-Methoden (Library) | **`#[deprecated]` landed**; removal still open — CLI already on `*_as` |
 | Capability-Hierarchien oder Wildcards | GTM-1 exact-match only; no `solum:*` hierarchy |
 | Zeroize-on-Drop für Schlüsselmaterial | Best-effort `ZeroizeOnDrop` on held seeds (H2); not a TEE |
-| KMS-Provisioning-CLI (`wrap_seed` ist nur Bibliotheks-API) | GTM-3 library surface only; no CLI wrapper |
-| KMS EncryptionContext/AAD-Bindung | See accepted-risk note; not wired |
+| KMS EncryptionContext/AAD-Bindung | **Done** for new wraps (`seed_encryption_context`); legacy empty-context files supported |
 
 Note: `docs/roadmap.md` stage-1 bullet still says “actual field-level encryption still open”; that sentence remains **stale** — Crypt4GH field encrypt/decrypt is inside this baseline (and prior ones). CLI authorization, binary release workflow, CustomerHeld CLI path, and sidecar CustomerHeld/`--keys-dir` parity are **inside** this baseline; first production SemVer tag and AWS-KMS CLI/sidecar wiring remain outside.
 

@@ -10,7 +10,7 @@ use solum_crypto::aws_kms::aws_sdk_kms::operation::encrypt::EncryptOutput;
 use solum_crypto::aws_kms::aws_sdk_kms::primitives::Blob;
 use solum_crypto::aws_kms::aws_sdk_kms::Client;
 use solum_crypto::aws_kms::aws_smithy_mocks::{mock, mock_client, RuleMode};
-use solum_crypto::aws_kms::AwsKmsKeyProvider;
+use solum_crypto::aws_kms::{seed_encryption_context, AwsKmsKeyProvider};
 use solum_crypto::{
     decrypt_field, encrypt_field, Crypt4ghKeyProvider, CryptoError, CustomerHeldKeyProvider,
     EphemeralTestKeyProvider, FieldCategoryGate, KeyRef,
@@ -18,6 +18,16 @@ use solum_crypto::{
 
 fn categories() -> Vec<String> {
     vec!["patient_summary".into()]
+}
+
+fn context_matches(
+    req_ctx: Option<&std::collections::HashMap<String, String>>,
+    expected: &std::collections::HashMap<String, String>,
+) -> bool {
+    match req_ctx {
+        Some(got) => got == expected,
+        None => expected.is_empty(),
+    }
 }
 
 #[tokio::test]
@@ -28,6 +38,7 @@ async fn wrap_then_from_wrapped_matches_customer_held_round_trip() {
         .expect("ephemeral keygen");
     let seed = privkey[..32].to_vec();
     let key_ref = KeyRef::new("kms/slot-1");
+    let ctx = seed_encryption_context(&key_ref.id);
     let kms_key_id = "arn:aws:kms:eu-central-1:111122223333:key/test";
     let wrapped_marker = b"mock-kms-ciphertext-for-crypt4gh-seed".to_vec();
 
@@ -35,9 +46,11 @@ async fn wrap_then_from_wrapped_matches_customer_held_round_trip() {
         .match_requests({
             let seed = seed.clone();
             let kms_key_id = kms_key_id.to_string();
+            let ctx = ctx.clone();
             move |req| {
                 req.key_id() == Some(kms_key_id.as_str())
                     && req.plaintext().map(|b| b.as_ref()) == Some(seed.as_slice())
+                    && context_matches(req.encryption_context(), &ctx)
             }
         })
         .then_output({
@@ -54,7 +67,11 @@ async fn wrap_then_from_wrapped_matches_customer_held_round_trip() {
     let decrypt_rule = mock!(Client::decrypt)
         .match_requests({
             let wrapped = wrapped_marker.clone();
-            move |req| req.ciphertext_blob().map(|b| b.as_ref()) == Some(wrapped.as_slice())
+            let ctx = ctx.clone();
+            move |req| {
+                req.ciphertext_blob().map(|b| b.as_ref()) == Some(wrapped.as_slice())
+                    && context_matches(req.encryption_context(), &ctx)
+            }
         })
         .then_output({
             let seed = seed.clone();
@@ -73,15 +90,16 @@ async fn wrap_then_from_wrapped_matches_customer_held_round_trip() {
         [&encrypt_rule, &decrypt_rule]
     );
 
-    let wrapped = AwsKmsKeyProvider::wrap_seed(&client, kms_key_id, &seed)
+    let wrapped = AwsKmsKeyProvider::wrap_seed(&client, kms_key_id, &seed, &ctx)
         .await
         .expect("wrap_seed");
     assert_eq!(wrapped, wrapped_marker);
     assert_eq!(encrypt_rule.num_calls(), 1);
 
-    let kms_provider = AwsKmsKeyProvider::from_wrapped_seed(&client, key_ref.clone(), &wrapped)
-        .await
-        .expect("from_wrapped_seed");
+    let kms_provider =
+        AwsKmsKeyProvider::from_wrapped_seed(&client, key_ref.clone(), &wrapped, &ctx)
+            .await
+            .expect("from_wrapped_seed");
     assert_eq!(decrypt_rule.num_calls(), 1);
 
     let mut customer = CustomerHeldKeyProvider::new();
@@ -115,7 +133,8 @@ async fn wrap_seed_rejects_short_seed() {
             .build()
     });
     let client = mock_client!(aws_sdk_kms, [&encrypt_rule]);
-    let err = AwsKmsKeyProvider::wrap_seed(&client, "alias/test", &[1u8; 16])
+    let ctx = seed_encryption_context("alias/test");
+    let err = AwsKmsKeyProvider::wrap_seed(&client, "alias/test", &[1u8; 16], &ctx)
         .await
         .expect_err("short seed");
     assert!(matches!(err, CryptoError::Provider(_)));
@@ -133,12 +152,17 @@ async fn load_aws_kms_from_dir_unwraps_wrapped_seed_file() {
         .expect("ephemeral keygen");
     let seed = privkey[..32].to_vec();
     let key_ref = "kms/dir-1";
+    let ctx = seed_encryption_context(key_ref);
     let wrapped_marker = b"mock-dir-wrapped-seed-blob".to_vec();
 
     let decrypt_rule = mock!(Client::decrypt)
         .match_requests({
             let wrapped = wrapped_marker.clone();
-            move |req| req.ciphertext_blob().map(|b| b.as_ref()) == Some(wrapped.as_slice())
+            let ctx = ctx.clone();
+            move |req| {
+                req.ciphertext_blob().map(|b| b.as_ref()) == Some(wrapped.as_slice())
+                    && context_matches(req.encryption_context(), &ctx)
+            }
         })
         .then_output({
             let seed = seed.clone();
@@ -157,6 +181,7 @@ async fn load_aws_kms_from_dir_unwraps_wrapped_seed_file() {
         key_ref: key_ref.into(),
         kms_key_id: "alias/test".into(),
         wrapped_seed: wrapped_marker,
+        encryption_context: ctx,
     }
     .write(&path)
     .expect("write wrapped");
@@ -169,4 +194,62 @@ async fn load_aws_kms_from_dir_unwraps_wrapped_seed_file() {
         .recipient_pubkey(&KeyRef::new(key_ref))
         .expect("pubkey");
     assert!(!pub_out.is_empty());
+}
+
+#[tokio::test]
+async fn legacy_wrapped_seed_without_context_still_unwraps() {
+    use solum_crypto::aws_kms::{load_aws_kms_from_dir, WrappedSeedFile};
+    use tempfile::tempdir;
+
+    let mut ephemeral = EphemeralTestKeyProvider::new();
+    let (_pubkey, privkey) = ephemeral
+        .generate_test_keypair(KeyRef::new("eph-gen"))
+        .expect("ephemeral keygen");
+    let seed = privkey[..32].to_vec();
+    let key_ref = "kms/legacy-1";
+    let wrapped_marker = b"mock-legacy-wrapped-seed".to_vec();
+
+    let decrypt_rule = mock!(Client::decrypt)
+        .match_requests({
+            let wrapped = wrapped_marker.clone();
+            move |req| {
+                req.ciphertext_blob().map(|b| b.as_ref()) == Some(wrapped.as_slice())
+                    && req.encryption_context().is_none()
+            }
+        })
+        .then_output({
+            let seed = seed.clone();
+            move || {
+                DecryptOutput::builder()
+                    .plaintext(Blob::new(seed.clone()))
+                    .key_id("alias/legacy")
+                    .build()
+            }
+        });
+    let client = mock_client!(aws_sdk_kms, [&decrypt_rule]);
+
+    let dir = tempdir().unwrap();
+    // Omit encryption_context in JSON (serde default = empty → no context on Decrypt).
+    let path = dir.path().join("legacy.json");
+    std::fs::write(
+        &path,
+        serde_json::json!({
+            "key_ref": key_ref,
+            "kms_key_id": "alias/legacy",
+            "wrapped_seed": wrapped_marker,
+        })
+        .to_string(),
+    )
+    .unwrap();
+    // Ensure load path works via WrappedSeedFile::load
+    let _ = WrappedSeedFile::load(&path).expect("legacy load");
+
+    let provider = load_aws_kms_from_dir(&client, dir.path())
+        .await
+        .expect("load legacy dir");
+    assert_eq!(decrypt_rule.num_calls(), 1);
+    assert!(!provider
+        .recipient_pubkey(&KeyRef::new(key_ref))
+        .unwrap()
+        .is_empty());
 }

@@ -16,5 +16,6 @@
 # Compliance worked-example run outputs (keys + synthetic clinical placeholders)
 examples/compliance-worked-example/artifacts/run-*
 examples/compliance-worked-example/artifacts/latest
+examples/compliance-worked-example/artifacts/migration-rehearsal/
 # FHIR IPS export / validator working files
 examples/fhir-ips-export/out/

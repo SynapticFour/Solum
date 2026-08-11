@@ -73,6 +73,11 @@ enum Commands {
         #[command(subcommand)]
         command: MigrateCmd,
     },
+    /// FHIR / IPS helpers (stage-1 structural export — not ISiK/TI).
+    Fhir {
+        #[command(subcommand)]
+        command: FhirCmd,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -275,6 +280,17 @@ enum MigrateCmd {
     },
 }
 
+#[derive(Debug, Subcommand)]
+enum FhirCmd {
+    /// Write a synthetic IPS-oriented document Bundle (same shape as the example binary).
+    /// Not clinical correctness; not ISiK/TI. See docs/FHIR-VALIDATION.md.
+    ExportIps {
+        /// Output path for Bundle JSON.
+        #[arg(long, default_value = "patient-summary-bundle.json")]
+        out: PathBuf,
+    },
+}
+
 /// Operator / CustomerHeld key material on disk (JSON).
 ///
 /// Same layout as the legacy demo ephemeral sidecar so existing fixtures remain
@@ -302,6 +318,7 @@ fn run(cli: Cli) -> Result<(), ExitCode> {
         Commands::Crypto { command } => cmd_crypto(command),
         Commands::Audit { command } => cmd_audit(command),
         Commands::Migrate { command } => cmd_migrate(command),
+        Commands::Fhir { command } => cmd_fhir(command),
     }
 }
 
@@ -764,13 +781,16 @@ fn cmd_crypto_wrap_seed(
         let wrapped = rt
             .block_on(async {
                 let client = solum_core::crypto::aws_kms::client_from_env()?;
-                AwsKmsKeyProvider::wrap_seed(&client, &kms_key_id, seed).await
+                let ctx = solum_core::crypto::aws_kms::seed_encryption_context(&key_ref);
+                AwsKmsKeyProvider::wrap_seed(&client, &kms_key_id, seed, &ctx).await
             })
-            .map_err(|e| fail(e))?;
+            .map_err(fail)?;
+        let ctx = solum_core::crypto::aws_kms::seed_encryption_context(&key_ref);
         let doc = WrappedSeedFile {
             key_ref,
             kms_key_id,
             wrapped_seed: wrapped,
+            encryption_context: ctx,
         };
         doc.write(&out).map_err(fail)?;
         eprintln!(
@@ -824,8 +844,9 @@ fn cmd_crypto_encrypt_wrapped(
                 let client = solum_core::crypto::aws_kms::client_from_env()?;
                 AwsKmsKeyProvider::from_wrapped_seed(
                     &client,
-                    KeyRef::new(file.key_ref),
+                    KeyRef::new(file.key_ref.clone()),
                     &file.wrapped_seed,
+                    &file.encryption_context,
                 )
                 .await
             })
@@ -902,8 +923,9 @@ fn cmd_crypto_decrypt_wrapped(
                 let client = solum_core::crypto::aws_kms::client_from_env()?;
                 AwsKmsKeyProvider::from_wrapped_seed(
                     &client,
-                    KeyRef::new(file.key_ref),
+                    KeyRef::new(file.key_ref.clone()),
                     &file.wrapped_seed,
+                    &file.encryption_context,
                 )
                 .await
             })
@@ -1036,6 +1058,59 @@ fn cmd_migrate(command: MigrateCmd) -> Result<(), ExitCode> {
             solum_core::append_dead_letter(&dead_letter, &row)
                 .map_err(|e| fail(format!("dead-letter: {e}")))?;
             println!("dead_letter_appended={}", dead_letter.display());
+            Ok(())
+        }
+    }
+}
+
+fn cmd_fhir(cmd: FhirCmd) -> Result<(), ExitCode> {
+    match cmd {
+        FhirCmd::ExportIps { out } => {
+            use solum_core::fhir::{
+                to_fhir_bundle, AllergyEntry, HumanName, Identifier, MedicationEntry, PatientInfo,
+                PatientSummary, ProblemEntry,
+            };
+            let summary = PatientSummary {
+                date: "2026-08-11T09:00:00Z".into(),
+                author_display: "Solum Compliance Layer (stage-1, non-clinical)".into(),
+                patient: PatientInfo {
+                    id: "we-nordlicht-1".into(),
+                    identifier: vec![Identifier {
+                        system: Some("urn:oid:2.16.840.1.113883.2.4.6.3".into()),
+                        value: "999999001".into(),
+                    }],
+                    name: vec![HumanName {
+                        family: Some("Muster".into()),
+                        given: vec!["Erika".into()],
+                    }],
+                    birth_date: Some("1975-03-15".into()),
+                },
+                allergies: vec![AllergyEntry {
+                    id: "alg-1".into(),
+                    substance_display: "Penicillin".into(),
+                }],
+                medications: vec![MedicationEntry {
+                    id: "med-1".into(),
+                    medication_display: "Lisinopril 10mg".into(),
+                }],
+                problems: vec![ProblemEntry {
+                    id: "prb-1".into(),
+                    condition_display: "Hypertension".into(),
+                }],
+                mii_validation_ref: None,
+            };
+            if let Some(parent) = out.parent() {
+                if !parent.as_os_str().is_empty() {
+                    fs::create_dir_all(parent)
+                        .map_err(|e| fail(format!("mkdir {}: {e}", parent.display())))?;
+                }
+            }
+            let bundle = to_fhir_bundle(&summary).map_err(|e| fail(e.to_string()))?;
+            write_json(&out, &bundle)?;
+            eprintln!(
+                "wrote IPS-oriented Bundle to {} (structural/demo only — not ISiK/TI)",
+                out.display()
+            );
             Ok(())
         }
     }

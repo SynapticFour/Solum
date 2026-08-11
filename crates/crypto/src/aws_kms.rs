@@ -41,6 +41,10 @@ use std::path::Path;
 ///
 /// Produced by `solum crypto wrap-seed` (feature `aws-kms`). Private seed is
 /// never stored plaintext; unwrap happens once into process memory.
+///
+/// `encryption_context` is sent on KMS Encrypt and must match on Decrypt.
+/// Empty map = legacy files written before context binding (Decrypt without
+/// context). New wraps always populate [`seed_encryption_context`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WrappedSeedFile {
     pub key_ref: String,
@@ -48,6 +52,22 @@ pub struct WrappedSeedFile {
     /// Decrypt uses the ciphertext blob, not this field, for AWS API calls).
     pub kms_key_id: String,
     pub wrapped_seed: Vec<u8>,
+    /// KMS EncryptionContext key/value pairs. Default empty for backward-compat
+    /// JSON that omitted this field.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub encryption_context: HashMap<String, String>,
+}
+
+/// Default EncryptionContext for Crypt4GH seed wrap/unwrap.
+///
+/// Binds the ciphertext to Solum's seed purpose and the logical `key_ref` so a
+/// blob cannot be decrypted under a mismatched operational identity without
+/// KMS rejecting the context.
+pub fn seed_encryption_context(key_ref: &str) -> HashMap<String, String> {
+    let mut ctx = HashMap::new();
+    ctx.insert("solum:purpose".into(), "crypt4gh-seed".into());
+    ctx.insert("solum:key_ref".into(), key_ref.to_string());
+    ctx
 }
 
 impl WrappedSeedFile {
@@ -127,6 +147,7 @@ pub async fn load_aws_kms_from_dir(
                 kms_client,
                 KeyRef::new(file.key_ref.clone()),
                 &file.wrapped_seed,
+                &file.encryption_context,
             )
             .await?;
         seen_refs.push(file.key_ref);
@@ -195,16 +216,24 @@ impl AwsKmsKeyProvider {
 
     /// Encrypt a 32-byte Crypt4GH private-key seed under a symmetric KMS key
     /// for durable storage (provisioning helper — not the encrypt/decrypt hot path).
+    ///
+    /// `encryption_context` is bound into the ciphertext (AWS KMS AAD). Pass
+    /// [`seed_encryption_context`] for new wraps; decrypt must use the same map.
     pub async fn wrap_seed(
         kms_client: &KmsClient,
         kms_key_id: &str,
         plaintext_seed: &[u8],
+        encryption_context: &HashMap<String, String>,
     ) -> Result<Vec<u8>, CryptoError> {
         let seed = normalize_seed(plaintext_seed)?;
-        let out = kms_client
+        let mut req = kms_client
             .encrypt()
             .key_id(kms_key_id)
-            .plaintext(Blob::new(seed))
+            .plaintext(Blob::new(seed));
+        if !encryption_context.is_empty() {
+            req = req.set_encryption_context(Some(encryption_context.clone()));
+        }
+        let out = req
             .send()
             .await
             .map_err(|e| CryptoError::Provider(format!("KMS Encrypt failed: {e}")))?;
@@ -216,14 +245,18 @@ impl AwsKmsKeyProvider {
 
     /// Decrypt a KMS-wrapped Crypt4GH seed and retain it for subsequent sync
     /// [`Crypt4ghKeyProvider`] calls. Public key is derived from the seed.
+    ///
+    /// `encryption_context` must match the map used at wrap time (empty only
+    /// for legacy blobs that were wrapped without context).
     pub async fn from_wrapped_seed(
         kms_client: &KmsClient,
         key_ref: KeyRef,
         wrapped_seed: &[u8],
+        encryption_context: &HashMap<String, String>,
     ) -> Result<Self, CryptoError> {
         let mut provider = Self::new();
         provider
-            .register_wrapped_seed(kms_client, key_ref, wrapped_seed)
+            .register_wrapped_seed(kms_client, key_ref, wrapped_seed, encryption_context)
             .await?;
         Ok(provider)
     }
@@ -235,15 +268,20 @@ impl AwsKmsKeyProvider {
         kms_client: &KmsClient,
         key_ref: KeyRef,
         wrapped_seed: &[u8],
+        encryption_context: &HashMap<String, String>,
     ) -> Result<(), CryptoError> {
         if wrapped_seed.is_empty() {
             return Err(CryptoError::Provider(
                 "wrapped Crypt4GH seed must be non-empty".into(),
             ));
         }
-        let out = kms_client
+        let mut req = kms_client
             .decrypt()
-            .ciphertext_blob(Blob::new(wrapped_seed.to_vec()))
+            .ciphertext_blob(Blob::new(wrapped_seed.to_vec()));
+        if !encryption_context.is_empty() {
+            req = req.set_encryption_context(Some(encryption_context.clone()));
+        }
+        let out = req
             .send()
             .await
             .map_err(|e| CryptoError::Provider(format!("KMS Decrypt failed: {e}")))?;

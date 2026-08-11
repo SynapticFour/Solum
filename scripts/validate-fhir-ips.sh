@@ -43,8 +43,10 @@ ok("Composition first", comp.get("resourceType") == "Composition")
 ok("Composition.type LOINC 60591-5",
    ((comp.get("type") or {}).get("coding") or [{}])[0].get("code") == "60591-5")
 ok("Composition.author present", bool(comp.get("author")))
+ok("Composition.author.reference", bool((comp.get("author") or [{}])[0].get("reference")))
 types = [((e.get("resource") or {}).get("resourceType")) for e in entries]
 ok("Patient entry", "Patient" in types)
+ok("Organization author entry", "Organization" in types)
 ok("AllergyIntolerance entry", "AllergyIntolerance" in types)
 ok("MedicationStatement entry", "MedicationStatement" in types)
 ok("Condition entry", "Condition" in types)
