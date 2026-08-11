@@ -20,6 +20,7 @@ make smoke-h3
 | File | Content |
 |------|---------|
 | `result.txt` | `PASS h3` / `SKIP: …` / `FAIL: …` |
+| `MANIFEST.txt` | Short proof-path pointer (Track B evidence) |
 | `template.json` | Template upload response |
 | `ehr.json` | Created EHR id |
 | `composition.json` | Example composition commit |

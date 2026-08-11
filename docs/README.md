@@ -30,10 +30,10 @@ Shared philosophy: customer-held keys, residency enforcement, auditable access �
 
 | Doc | Topic |
 |-----|--------|
-| [CLAIMS-PROOF-TRAIL.md](CLAIMS-PROOF-TRAIL.md) | **Master map:** allowed claim → demo/command → forbidden twin · `./scripts/demo-claims-proof.sh` |
+| [CLAIMS-PROOF-TRAIL.md](CLAIMS-PROOF-TRAIL.md) | **Master map:** allowed claim → demo/command → forbidden twin · `./scripts/demo-claims-proof.sh` · Solum-Demo mirror: `make smoke-*` |
 | [PRIORITIES.md](PRIORITIES.md) | Living engineering priority list (post Validator Success) |
 | [WORKED-EXAMPLE.md](WORKED-EXAMPLE.md) | Track A compliance worked example (consent, crypto Deny, audit) |
-| [H3-WORKED-EVIDENCE.md](H3-WORKED-EVIDENCE.md) | Track B EHRbase smoke evidence packaging |
+| [H3-WORKED-EVIDENCE.md](H3-WORKED-EVIDENCE.md) | Track B EHRbase smoke evidence packaging (Solum-Demo `make smoke-h3`) |
 | [FHIR-VALIDATION.md](FHIR-VALIDATION.md) | IPS-oriented Bundle export vs FHIR Validator |
 | [DE-FHIR-GAP.md](DE-FHIR-GAP.md) | German reference (ISiK / gematik) gap dossier — **not** a TI claim |
 | [DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md) | Optional DE adapter — **pilot-gated**, do not start without Go |

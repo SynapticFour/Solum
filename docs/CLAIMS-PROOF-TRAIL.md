@@ -34,7 +34,7 @@ One-shot operator pass (Track A + structural FHIR + Kenya checks; optional HL7 J
 | A14 | Typed Patient Summary encrypt/decrypt with durable audit | Unit `encrypt_patient_summary_as_writes_audit_and_round_trips` · library `Deployment::*_patient_summary_as` | Audit `data.encrypt` / `data.decrypt` | Clinical correctness of summary contents |
 | A15 | Migration Prefer/Cut-over **tooling** dry rehearsal | `./scripts/migration-rehearsal-dry-run.sh` | Inventory + dead-letter artifacts | Live partner Prefer/Cut-over without site |
 | A11 | DE FHIR / ISiK gap dossier exists (competence + honesty) | [DE-FHIR-GAP.md](DE-FHIR-GAP.md) (document proof, not runtime) | Dossier tables + campaign log | “TI-konform” / gematik-zertifiziert |
-| A12 | Track B: Solum façade + EHRbase smoke retains evidence when stack is up | [H3-WORKED-EVIDENCE.md](H3-WORKED-EVIDENCE.md) · sibling Solum-Demo `make up-h3 && make smoke-h3` | Demo `artifacts/smoke-h3/` | MDR clearance; Synaptic Four EHR UI; production Keycloak |
+| A12 | Track B: Solum façade + EHRbase smoke retains evidence when stack is up | [H3-WORKED-EVIDENCE.md](H3-WORKED-EVIDENCE.md) · sibling Solum-Demo `make up-h3 && make smoke-h3` | Demo `artifacts/smoke-h3/` (+ `MANIFEST.txt`) | MDR clearance; Synaptic Four EHR UI; production Keycloak |
 | A13 | Nigeria / SA profiles are **draft scaffolds only** | Files under `config/profiles/planned/` + [planned/README.md](../config/profiles/planned/README.md); **not** loaded by `load_profiles_dir("config/profiles")` | Directory presence; no auto-load | Production NDPA/POPIA package |
 
 ---
@@ -60,6 +60,11 @@ cargo test -p solum-profiles kenya_validate_transfer_fail_closed_empty_destinati
 ```
 
 Track B (Docker): see [H3-WORKED-EVIDENCE.md](H3-WORKED-EVIDENCE.md).
+
+**Solum-Demo mirror** (interactive + HTTP smokes aligned to this matrix): sibling checkout
+`../Solum-Demo` — `make up-sibling`, `make smoke-stage1`, `make smoke-consent` (Deny B),
+`make smoke-fhir-ips`, `make smoke-profile`, `make smoke-migration`, `make smoke-h3`.
+Coverage map: [Solum-Demo docs/COVERAGE.md](https://github.com/SynapticFour/Solum-Demo/blob/main/docs/COVERAGE.md).
 
 ---
 
