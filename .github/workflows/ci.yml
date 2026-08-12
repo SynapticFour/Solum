@@ -43,3 +43,17 @@ jobs:
             echo "::error::expected non-zero exit for contradictory storage region"
             exit 1
           fi
+
+  supply-chain:
+    if: github.actor != 'dependabot[bot]'
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.91.1
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+      - name: cargo deny check
+        run: cargo deny check

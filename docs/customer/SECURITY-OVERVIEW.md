@@ -7,6 +7,8 @@
 
 This document is **not** legal advice, **not** a certification claim, and **not** a substitute for qualified regulatory-affairs or data-protection review before go-to-market or public classification statements. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md))
 
+**Also read:** [THREAT_MODEL.md](../THREAT_MODEL.md) (adversaries / residual risk) · [INCIDENT_RESPONSE.md](../INCIDENT_RESPONSE.md) (operator runbook)
+
 ---
 
 ## 1. What Solum is — and what it is not
