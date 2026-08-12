@@ -31,7 +31,7 @@ Storage: JSONL beside consent store (`--subject-link-store` / default `subject_l
 
 - Genomic blobs stay in Ferrum; Solum stores only identifiers + audit.
 - Ferrum continues to poll consent by `solum_subject` / purpose — operators should use the **same string** as `solum_subject_id`.
-- BRA is documentation-linked only for H3 exit; no BRA code change required.
+- BRA may upsert `phenopacket_id` onto the subject-link via `POST /api/v1/phenopackets/{id}/solum-subject-link` (see BRA `docs/SOLUM-SUBJECT-BRIDGE.md`).
 
 ## Non-goals
 

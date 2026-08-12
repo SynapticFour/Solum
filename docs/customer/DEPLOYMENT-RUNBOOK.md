@@ -204,7 +204,7 @@ Library callers that still invoke grant/revoke/encrypt/decrypt with a plain acto
 
 | Task | CLI (from README) | Notes |
 |------|-------------------|--------|
-| Export HELIOS-oriented JSON | `solum … audit export --audit … --out …` | Export envelope only; live HELIOS signing is **deferred / not productized** ([helios.md](../helios.md)) |
+| Export HELIOS-oriented JSON | `solum … audit export --audit … --out …` or sidecar `GET /v1/audit/export` | Then run external HELIOS: [solum-ingest.md](https://github.com/SynapticFour/HELIOS/blob/main/docs/solum-ingest.md) ([helios.md](../helios.md)) |
 | Verify hash chain | `solum … audit verify --audit …` | Detects tampering / broken chain for the file store |
 | Retention | Per profile `retention` section | Operator responsibility to enforce archival / deletion outside Solum if required |
 

@@ -112,7 +112,7 @@ jobs:
 
             **Install:** extract the archive for your platform and place `solum` on a controlled `PATH`.
             **Keys:** use CustomerHeld `--keypair` files for evaluations — see [DEPLOYMENT-RUNBOOK.md](docs/customer/DEPLOYMENT-RUNBOOK.md).
-            **HELIOS:** audit export is prepared; live HELIOS signing is **not** productized — see [helios.md](docs/helios.md).
+            **HELIOS:** audit export + external `helios solum-audit` / CLIN-ACCESS-001 ingest is productized — Solum does not embed HELIOS keys; see [helios.md](docs/helios.md) and HELIOS `docs/solum-ingest.md`.
             **SBOM:** `solum-sbom.cdx.json` (CycloneDX) is attached to this release.
           files: |
             release-assets/*.tar.gz
