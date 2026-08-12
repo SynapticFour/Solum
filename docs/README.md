@@ -25,6 +25,9 @@ Shared philosophy: customer-held keys, residency enforcement, auditable access â
 | [RELEASING.md](../RELEASING.md) | SemVer / GitHub Release process |
 | [LICENSE](../LICENSE) | BUSL-1.1 ([notes](LICENSE-OPTIONS.md)) |
 | [LICENSE-COMPATIBILITY.md](../LICENSE-COMPATIBILITY.md) | Allowed dependency licenses |
+| [COMPATIBILITY.md](COMPATIBILITY.md) | API / release compatibility & BUSL Change Date |
+| [H3-EHRBASE-BACKUP.md](H3-EHRBASE-BACKUP.md) | Track B backup/restore procedure |
+| [H3-CDR-BACKUP-DRILL.md](H3-CDR-BACKUP-DRILL.md) | Site sign-off checklist for CDR drills |
 
 ## Proof / evidence path
 
