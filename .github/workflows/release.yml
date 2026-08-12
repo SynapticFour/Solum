@@ -83,18 +83,25 @@ jobs:
             ${{ matrix.asset }}.tar.gz.sha256
 
   github-release:
-    needs: build-binaries
+    needs: [build-binaries, sbom]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - name: Download artifacts
+      - name: Download binaries
         uses: actions/download-artifact@v4
         with:
           path: release-assets
           merge-multiple: true
+          pattern: solum-*
+
+      - name: Download SBOM
+        uses: actions/download-artifact@v4
+        with:
+          name: solum-sbom
+          path: release-assets
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -106,8 +113,31 @@ jobs:
             **Install:** extract the archive for your platform and place `solum` on a controlled `PATH`.
             **Keys:** use CustomerHeld `--keypair` files for evaluations — see [DEPLOYMENT-RUNBOOK.md](docs/customer/DEPLOYMENT-RUNBOOK.md).
             **HELIOS:** audit export is prepared; live HELIOS signing is **not** productized — see [helios.md](docs/helios.md).
+            **SBOM:** `solum-sbom.cdx.json` (CycloneDX) is attached to this release.
           files: |
             release-assets/*.tar.gz
             release-assets/*.sha256
+            release-assets/solum-sbom.cdx.json
+            release-assets/solum-sbom.cdx.json.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sbom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.91.1
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          cargo install cargo-cyclonedx --locked
+          cargo cyclonedx --workspace --format json --output-file solum-sbom.cdx.json
+          shasum -a 256 solum-sbom.cdx.json > solum-sbom.cdx.json.sha256
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: solum-sbom
+          path: |
+            solum-sbom.cdx.json
+            solum-sbom.cdx.json.sha256

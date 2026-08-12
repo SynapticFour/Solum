@@ -28,6 +28,8 @@ The `Release` workflow builds `solum` for:
 
 and attaches them (plus `.sha256`) to the GitHub Release.
 
+The same workflow also generates a **CycloneDX SBOM** (`solum-sbom.cdx.json`) and attaches it to the release.
+
 ## Operator install after a GitHub Release exists
 
 See [docs/customer/DEPLOYMENT-RUNBOOK.md](docs/customer/DEPLOYMENT-RUNBOOK.md) §1 — prefer release assets when present; otherwise build from source at a baseline or SemVer tag.
