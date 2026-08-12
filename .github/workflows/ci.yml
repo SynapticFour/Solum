@@ -50,10 +50,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@1.91.1
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-      - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
-      - name: cargo deny check
-        run: cargo deny check
+      - uses: EmbarkStudios/cargo-deny-action@v2
