@@ -63,7 +63,13 @@ jobs:
       - name: Install libsodium
         run: sudo apt-get update && sudo apt-get install -y libsodium-dev pkg-config
       - name: vendored crypt4gh fork tests
-        run: cargo test --manifest-path third_party/crypt4gh/Cargo.toml
+        working-directory: third_party/crypt4gh
+        run: |
+          set -euo pipefail
+          # Alice/Bob fixtures are gitignored (and would trip gitleaks if committed).
+          cargo run --quiet -- keygen --sk tests/testfiles/bob.sec --pk tests/testfiles/bob.pub --nocrypt --force
+          cargo run --quiet -- keygen --sk tests/testfiles/alice.sec --pk tests/testfiles/alice.pub --nocrypt --force
+          cargo test -- --test-threads 1
       # ferrum-storage and aws-kms pull aws-sdk-* which require rustc ≥ 1.94.1
       - uses: dtolnay/rust-toolchain@1.94.1
       - name: ferrum-storage-backend tests

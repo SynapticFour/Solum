@@ -13,7 +13,9 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
+        exclude: ^third_party/crypt4gh/tests/test_edit_list\.rs$
       - id: end-of-file-fixer
+        exclude: ^third_party/crypt4gh/tests/testfiles/testfile\.(abcd|abbbc)$
       - id: check-added-large-files
         args: [--maxkb=500]
       - id: detect-private-key

@@ -26,11 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CONTRIBUTING: no direct pushes to `main`; focused commits; no self-merge.
 - CodeQL on pull_request; dependency-review is fail-closed.
 - `deny.toml` default graph: `all-features = false`, `exclude-dev = true`.
-- CI `feature-paths` job: `ferrum-storage-backend` and mocked `aws-kms` on rustc 1.94.1 (AWS SDK MSRV); vendored crypt4gh on 1.91.1.
+- CI `feature-paths` job: `ferrum-storage-backend` and mocked `aws-kms` on rustc 1.94.1 (AWS SDK MSRV); vendored crypt4gh tests on 1.91.1 (Alice/Bob key fixtures generated in CI; they are gitignored).
 - Release workflow: `workflow_dispatch` dry-run; builds `solum-sidecar` alongside `solum`.
 
 ### Fixed
 
+- Vendored crypt4gh on-disk fixtures restored to the Ferrum copies (`testfile.abcd` / `testfile.abbbc` without a trailing newline; edit-list expected spaces) so `feature-paths` can run the fork’s suite. Pre-commit `end-of-file-fixer` / `trailing-whitespace` skip those files.
 - **H3 Demo Dockerfile** — `deploy/h3-ehrbase/Dockerfile.sidecar` drops local `.cargo/config.toml` Ferrum path-patch so `make up-h3` builds without a sibling mount.
 - **IPS Bundle HL7 Validator** — deterministic UUID v5 `fullUrl`s, LOINC display **Patient Summary**, AllergyIntolerance `clinicalStatus` (ait-1), generated narratives → Validator + `hl7.fhir.uv.ips#2.0.0` **Success** (0 errors / 0 warnings).
 - **Composition.author** — Organization Bundle entry + `reference` (closes display-only author ANNAHME).
