@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Date** | 2026-08-15 (hardening; pin SHA after the next commit) |
-| **Verified commit** | *(uncommitted remediations — re-pin to HEAD SHA after commit)* |
+| **Date** | 2026-08-15 |
+| **Verified commit** | `6b4519c98f5c1e905ab5cf3f517787021d1e2604` |
 | **Tag** | *(no new freeze tag in this refresh; prior: `stage1-baseline-sidecar-custody-2026-08-01`)* |
 | **Supersedes (doc honesty)** | Custody baseline `3742851` / tag `stage1-baseline-sidecar-custody-2026-08-01`; also corrects post-tag drift (H3 Track B, H2.4 KMS wiring, proof path) |
 
