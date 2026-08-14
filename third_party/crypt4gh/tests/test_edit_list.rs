@@ -6,10 +6,10 @@ use std::fs::File;
 pub use test_common::*;
 
 const INPUT_EDIT_LIST: &str = "Let's have
- beers
+ beers 
 in the sauna!
- or
-Dinner
+ or 
+Dinner 
 at 7pm?
 ";
 

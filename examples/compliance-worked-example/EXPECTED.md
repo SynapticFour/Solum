@@ -6,7 +6,7 @@ This file is versioned. Per-run numbers live under `artifacts/run-*/event-types.
 
 | Check | Pass criterion |
 |-------|----------------|
-| Profile | `solum check --profile config/profiles/eu-ehds.toml` exit 0 |
+| Profile | `SOLUM_STORAGE_REGION=EU solum check --profile config/profiles/eu-ehds.toml` exit 0 |
 | Consent after grant | `granted` |
 | Encrypt/decrypt | Byte-identical plaintext round-trip (`--subject` / `--purpose` required) |
 | Deny A (no `--capability`) | Non-zero exit; no ciphertext file; ≥1 `access.denied` |

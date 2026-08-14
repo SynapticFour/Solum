@@ -16,11 +16,26 @@ env:
 jobs:
   dependency-review:
     runs-on: ubuntu-latest
-    # Requires Dependency graph (Settings → Code security). Non-fatal until enabled.
     permissions:
       contents: read
       pull-requests: read
     steps:
+      # GitHub's review action requires Dependency graph (Settings → Code security).
+      # This repository currently errors "not supported" when the graph is off.
+      # cargo-deny in ci.yml remains the fail-closed license/advisory/source gate.
       - name: Dependency Review
-        uses: actions/dependency-review-action@v5
+        id: review
         continue-on-error: true
+        uses: actions/dependency-review-action@v5
+      - name: Record outcome
+        run: |
+          set -euo pipefail
+          outcome="${{ steps.review.outcome }}"
+          if [ "$outcome" = "success" ]; then
+            echo "dependency-review passed"
+            exit 0
+          fi
+          echo "::warning::dependency-review-action did not pass (outcome=$outcome)."
+          echo "Enable Settings → Code security → Dependency graph, then re-run this job."
+          echo "Until then, cargo-deny (CI supply-chain job) is the fail-closed supply-chain gate."
+          exit 0

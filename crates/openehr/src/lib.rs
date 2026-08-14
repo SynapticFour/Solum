@@ -9,6 +9,8 @@
 
 #![forbid(unsafe_code)]
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -103,6 +105,8 @@ impl EhrbaseClient {
         let password = std::env::var("SOLUM_EHRBASE_PASSWORD").ok();
         let http = reqwest::Client::builder()
             .user_agent(format!("solum-openehr/{STAGE}"))
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(15))
             .build()?;
         Ok(Self {
             base,
@@ -428,6 +432,16 @@ pub fn aql_allowed(aql: &str) -> bool {
     true
 }
 
+/// Fail-closed subject binding: the consented subject id must appear as a
+/// quoted string in the AQL. Prevents "consent for A, SELECT all EHRs".
+pub fn aql_binds_subject(aql: &str, subject_id: &str) -> bool {
+    if subject_id.is_empty() || subject_id.len() > 256 {
+        return false;
+    }
+    let escaped = subject_id.replace('\'', "''");
+    aql.contains(&format!("'{escaped}'")) || aql.contains(&format!("\"{subject_id}\""))
+}
+
 fn strip_quoted(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars();
@@ -460,6 +474,7 @@ fn urlencoding_path(s: &str) -> String {
     // Composition UIDs contain `::` — encode for path safety.
     s.replace('%', "%25")
         .replace('/', "%2F")
+        .replace(':', "%3A")
         .replace('?', "%3F")
         .replace('#', "%23")
 }
@@ -535,6 +550,14 @@ mod tests {
             aql_allowed("SELECT c FROM EHR e CONTAINS COMPOSITION c WHERE c/name/value = 'Grant'"),
             "GRANT as a substring of a string/word must not false-reject"
         );
+        assert!(aql_binds_subject(
+            "SELECT c FROM EHR e CONTAINS COMPOSITION c WHERE c/name/value = 'patient/42'",
+            "patient/42"
+        ));
+        assert!(!aql_binds_subject(
+            "SELECT c FROM EHR e CONTAINS COMPOSITION c",
+            "patient/42"
+        ));
     }
 
     #[test]

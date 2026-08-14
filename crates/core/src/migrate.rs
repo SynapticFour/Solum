@@ -65,14 +65,17 @@ pub fn resource_idempotency_key(resource: &Value) -> String {
 /// Append a dual-write dead-letter record (never silent drop).
 pub fn append_dead_letter(path: impl AsRef<Path>, record: &Value) -> Result<(), MigrateError> {
     use std::io::Write;
-    if let Some(parent) = path.as_ref().parent() {
+    let path = path.as_ref();
+    if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
+    let line = serde_json::to_string(record)?;
+    crate::rotate_jsonl_if_needed(path, line.len() as u64 + 1).map_err(MigrateError::Message)?;
     let mut f = fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(path)?;
-    writeln!(f, "{}", serde_json::to_string(record)?)?;
+    writeln!(f, "{line}")?;
     f.sync_all()?;
     Ok(())
 }

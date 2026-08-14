@@ -1,5 +1,7 @@
 # Builds solum-sidecar from the local Solum tree (H3.0 Track B façade).
-# Used by Solum-Demo docker-compose.ehrbase-sidecar.yml — not the Stage-1 tag pin.
+# Used by Solum-Demo docker-compose.ehrbase-sidecar.yml — not a production image.
+# Binds 0.0.0.0 only because SOLUM_ALLOW_PLAINTEXT_HTTP=1 + dev-local.toml.
+# Pilot profiles (eu-ehds / kenya-dpa) still refuse non-loopback HTTP.
 
 ARG RUST_VERSION=1.91.1
 
@@ -47,6 +49,7 @@ ENV SOLUM_PROFILE=/etc/solum/dev-local.toml \
     SOLUM_CONSENT_STORE=/data/consent.jsonl \
     SOLUM_SIDECAR_BIND=0.0.0.0:8787 \
     SOLUM_ALLOW_EPHEMERAL=1 \
+    SOLUM_ALLOW_PLAINTEXT_HTTP=1 \
     SOLUM_EHRBASE_URL=http://ehrbase:8080/ehrbase \
     SOLUM_CDR_TEMPLATE_OPT=/etc/solum/fixtures/minimal_observation.opt \
     RUST_LOG=info

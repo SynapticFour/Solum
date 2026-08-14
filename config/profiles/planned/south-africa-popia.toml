@@ -32,6 +32,8 @@ required_field_categories = [
     "discharge_reports",
     "clinical_notes",
     "consent_record",
+    "fhir_resource",
+    "subject_link",
 ]
 allowed_key_custody = ["customer_held"]
 

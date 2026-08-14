@@ -8,7 +8,7 @@
 #
 # Same schema_version as eu-ehds.toml — data-only extension.
 #
-# STATUS: PROVISIONAL-PRODUCTION-CANDIDATE — engineering-aligned after a
+# STATUS: EVALUATION-ONLY — engineering-aligned after a
 # **non-counsel** Vorprüfung (2026-08-06). NOT production SoR. NOT ODPC-
 # certified. Real Kenya data-protection / health-tech counsel must still
 # confirm before any PRODUCTION flip. See:
@@ -43,6 +43,8 @@ required_field_categories = [
     "discharge_reports",
     "clinical_notes",
     "consent_record",
+    "fhir_resource",
+    "subject_link",
 ]
 allowed_key_custody = ["customer_held"]
 
@@ -143,7 +145,7 @@ annex_requirements = [
     "Digital Health Act 2023 ss.46–47 — Health tourism transfers / disclosure of personal health information outside Kenya",
 ]
 notes = [
-    "STATUS: PROVISIONAL-PRODUCTION-CANDIDATE after non-counsel Vorprüfung 2026-08-06 (counsel Vorprüfung (internal)). Real Kenya counsel review still REQUIRED before PRODUCTION. Not ODPC registration/certification.",
+    "STATUS: EVALUATION-ONLY after non-counsel Vorprüfung 2026-08-06. Not a production candidate. Real Kenya counsel review still REQUIRED before PRODUCTION. Not ODPC registration/certification.",
     "Supervisory authority (DPA): Office of the Data Protection Commissioner (ODPC), https://www.odpc.go.ke/",
     "Solum is a compliance layer for clinical data — not a medical device by default.",
     "Features that interpret clinical data for diagnosis/therapy support require an MDCG-style boundary review (see CONTRIBUTING.md).",

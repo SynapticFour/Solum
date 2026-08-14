@@ -17,7 +17,7 @@ This runbook is derived from the public repository README, profile docs, and bas
 | **From source** | Supported today — build the `solum` CLI with the Rust toolchain (below). Prefer a **baseline tag** in [BASELINE.md](../BASELINE.md) or a SemVer tag once one exists. |
 | **GitHub Release assets** | Prepared — [`.github/workflows/release.yml`](../../.github/workflows/release.yml) builds platform tarballs on `v*` tags. **Use release assets only after a verified SemVer tag exists** (see [RELEASING.md](../../RELEASING.md)). Until then, treat binary install as unavailable and build from source. |
 
-**Stage‑1 evaluation:** Solum is a supervised Stage‑1 evaluation companion — not an unsupervised production EHR. Kenya profile is **PROVISIONAL-PRODUCTION-CANDIDATE** (not PRODUCTION / not patient SoR).
+**Stage‑1 evaluation:** Solum is a supervised Stage‑1 evaluation companion — not an unsupervised production EHR. Kenya profile is **EVALUATION-ONLY** (not PRODUCTION / not patient SoR).
 
 ### Build prerequisites (from-source)
 
@@ -32,7 +32,7 @@ From the repository README / contributing docs:
 Example build/run (from README):
 
 ```bash
-cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml
+SOLUM_STORAGE_REGION=EU cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml
 ```
 
 For a durable binary on a host: `cargo build --release -p solum-core` and place `target/release/solum` on a controlled path. After a GitHub Release exists, extract the matching `solum-*.tar.gz` asset instead.
@@ -40,6 +40,21 @@ For a durable binary on a host: `cargo build --release -p solum-core` and place 
 ### What `./scripts/verify.sh` is (and is not)
 
 `verify.sh` is a **developer / CI baseline tool** (format, lint, full test suite, license/advisory checks, reference demo deployments). It is **not** a production health check and should **not** be sold or scheduled as the customer’s operational monitoring. See §7.
+
+### Operator environment (pilot)
+
+| Variable | Who | Effect |
+|----------|-----|--------|
+| `SOLUM_STORAGE_REGION` | **Required** on `eu-ehds` / `kenya-dpa` CLI and sidecar | Operator residency attestation. Unset → refuse start. Example: `EU`, `EEA`, `KE`. EU/EEA refuses a contradictory `AWS_REGION`. Not a proof the host is in that region. |
+| `SOLUM_SIDECAR_TOKEN` | Sidecar | Shared-secret gate (`X-Solum-Sidecar-Token`) |
+| `SOLUM_ORG_IAM_*` | Sidecar pilots | JWKS URL/file, issuer, audience — required to start pilot profiles |
+| `SOLUM_JSONL_MAX_BYTES` | Optional | Rotate FHIR/subject/dead-letter live file (default 256 MiB) |
+| `SOLUM_AUDIT_MAX_BYTES` | Optional | Refuse audit append when the sealed chain would grow past this (default 512 MiB) |
+| `SOLUM_ALLOW_EPHEMERAL` | `dev-local` only | Permits `--ephemeral` keys |
+| `SOLUM_ALLOW_PLAINTEXT_HTTP` | `dev-local` / Docker eval only | Permits non-loopback HTTP bind. Pilot profiles still refuse. |
+| `SOLUM_AUDIT_RETENTION_DAYS` | Optional | Must be ≥ profile floor |
+
+TLS: bind `127.0.0.1` and terminate TLS at a reverse proxy. See [SIDECAR-INTEGRATION.md](SIDECAR-INTEGRATION.md).
 
 ---
 
@@ -50,7 +65,7 @@ Profiles live under `config/profiles/` as TOML **data** — not country-specific
 | File | Operator status |
 |------|-----------------|
 | `eu-ehds.toml` | Present — EU EHDS Annex II–oriented; typical Stage‑1 starting point. **Not** a legal compliance certificate. Allows **customer_held** only (ephemeral refused). |
-| `kenya-dpa.toml` | Present **PROVISIONAL-PRODUCTION-CANDIDATE** — non-counsel Vorprüfung applied; **real counsel still required**. Do **not** use as patient SoR / do **not** claim ODPC compliance. Allows **customer_held** only. See [profiles.md](../profiles.md) · [KENYA-K1-VORPRUEFUNG.md](../counsel/KENYA-K1-VORPRUEFUNG.md). |
+| `kenya-dpa.toml` | Present **EVALUATION-ONLY** — non-counsel Vorprüfung applied; **real counsel still required**. Do **not** use as patient SoR / do **not** claim ODPC compliance. Allows **customer_held** only. See [profiles.md](../profiles.md). |
 | `dev-local.toml` | **Developer demos only** — permits `ephemeral_test`. Never for paid evaluations or real patient data. |
 | `nigeria-ndpa.toml` | Planned |
 | `south-africa-popia.toml` | Planned |
@@ -73,7 +88,8 @@ AUDIT=/var/lib/solum/audit.jsonl          # choose your paths
 CONSENT=/var/lib/solum/consent.jsonl
 mkdir -p /var/lib/solum
 
-# 1. Profile / runtime conformance
+# 1. Profile / runtime conformance (pilot profiles require this env)
+export SOLUM_STORAGE_REGION=EU
 cargo run -p solum-core -- check --profile "$PROFILE"
 
 # Kenya evaluation (PROVISIONAL — not patient SoR):
@@ -206,7 +222,7 @@ Library callers that still invoke grant/revoke/encrypt/decrypt with a plain acto
 |------|-------------------|--------|
 | Export HELIOS-oriented JSON | `solum … audit export --audit … --out …` or sidecar `GET /v1/audit/export` | Then run external HELIOS: [solum-ingest.md](https://github.com/SynapticFour/HELIOS/blob/main/docs/solum-ingest.md) ([helios.md](../helios.md)) |
 | Verify hash chain | `solum … audit verify --audit …` | Detects tampering / broken chain for the file store |
-| Retention | Per profile `retention` section | Operator responsibility to enforce archival / deletion outside Solum if required |
+| Retention | Per profile `retention` section | Days are a policy floor. Façade JSONL rotates at `SOLUM_JSONL_MAX_BYTES` (default 256 MiB). Audit chain **refuses** appends above `SOLUM_AUDIT_MAX_BYTES` (default 512 MiB) — archive the sealed file; do not silently drop evidence. |
 
 **Single-writer assumption:** Stage 1’s durable file audit store is designed for **one writer**. Do not run multiple Solum instances appending to the same audit file concurrently — multi-writer backends are out of this baseline. ([BASELINE.md](../BASELINE.md))
 

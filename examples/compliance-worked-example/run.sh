@@ -39,6 +39,7 @@ ACTOR="practitioner/we-1"
 PURPOSE="care_provision"
 KEY_REF="customer/nordlicht-we-1"
 SOLUM=(cargo run -q -p solum-core --)
+export SOLUM_STORAGE_REGION="${SOLUM_STORAGE_REGION:-EU}"
 
 echo "== compliance worked example: $RUN_DIR =="
 

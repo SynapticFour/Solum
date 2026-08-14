@@ -20,7 +20,7 @@ Ferrum is the GA4GH-oriented genomic platform. Solum is a clinical **compliance 
 
 ## Consent status → Ferrum (H2.1)
 
-Ferrum may poll `GET /v1/consent/status` (sidecar token) to enforce purpose-bound deny on DRS/WES when `[solum]` is enabled. Solum remains the system of record for grant/revoke; Ferrum does not store consent. Contract: Showcase [ADR 0001](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/adr/0001-solum-ferrum-consent-access.md).
+Ferrum may poll `GET /v1/consent/status` to enforce purpose-bound deny on DRS/WES when `[solum]` is enabled. The sidecar token is required. On **pilot profiles** Ferrum must also send a Bearer JWT whose groups map to `solum:consent:read` (token alone is refused). Solum remains the system of record for grant/revoke; Ferrum does not store consent. Contract: Showcase [ADR 0001](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/adr/0001-solum-ferrum-consent-access.md).
 
 ## Subject bridge (H3.3)
 

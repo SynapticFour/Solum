@@ -79,11 +79,11 @@ struct Cli {
     #[arg(long = "jwks-file", env = "SOLUM_ORG_IAM_JWKS_FILE")]
     jwks_file: Option<PathBuf>,
 
-    /// Expected JWT issuer (optional for Ferrum Passport style; required with --oidc-audience).
+    /// Expected JWT issuer (required when --org-iam-config is set).
     #[arg(long = "oidc-issuer", env = "SOLUM_ORG_IAM_ISSUER")]
     oidc_issuer: Option<String>,
 
-    /// Optional JWT audience (standalone OIDC).
+    /// JWT audience (required when --org-iam-config is set).
     #[arg(long = "oidc-audience", env = "SOLUM_ORG_IAM_AUDIENCE")]
     oidc_audience: Option<String>,
 

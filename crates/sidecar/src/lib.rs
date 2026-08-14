@@ -20,33 +20,47 @@
 //!   (e.g. `dev-local.toml`). Pilot profiles refuse EphemeralTest at startup.
 //!
 //! Envelope KMS unwraps seeds into process memory (ZeroizeOnDrop) — not an HSM/TEE.
-//! `docs/customer/SIDECAR-INTEGRATION.md`.
+//! See `docs/customer/SIDECAR-INTEGRATION.md`.
 //!
 //! [`SidecarKeys`] is a concrete enum so axum `State` stays sized (no `dyn`
 //! provider). Ephemeral encrypt may call [`SharedEphemeralKeys::generate_test_keypair`]
 //! on first use of a `key_ref`; CustomerHeld never auto-generates.
 //!
-//! # Access control layers
+//! # Access control
 //!
 //! 1. **Sidecar gate** — shared secret header (`X-Solum-Sidecar-Token`),
 //!    constant-time compare. Fail → 401, no `Deployment` call.
-//! 2. **GTM-1 capabilities** — default: body `capability[]` → [`SolumActor`]
-//!    (same as CLI). **H2.2 org-IAM mode:** Bearer JWT verified via JWKS;
-//!    OIDC groups mapped to `CAP_*` from a TOML file; body `capability[]`
-//!    ignored. Fail → 403, no side effect.
+//! 2. **Capabilities** — **org-IAM is required** on every profile except
+//!    `dev-local` (`auth.allow_client_asserted_capabilities`). Body
+//!    `capability[]` is not an authorization source on pilot profiles.
+//!    Org-IAM: Bearer JWT (issuer + audience required) verified via JWKS;
+//!    OIDC groups mapped to `CAP_*`. Stale JWKS refresh failure is **fail-closed**.
+//! 3. **Consent + object binding** — Track B reads must name the consented
+//!    subject *and* the resource / EHR / AQL must belong to that subject.
 //!
 //! # Track B CDR (H3.0, opt-in)
 //!
 //! When `--ehrbase-url` / `SOLUM_EHRBASE_URL` is set, `/v1/cdr/*` routes front
 //! EHRbase and emit `cdr.*` audit events on successful writes. Without a URL,
-//! those routes return 503 Track B disabled.
+//! those routes return 503 Track B disabled. FHIR / subject-link / dead-letter
+//! JSONL is Crypt4GH-encrypted at rest.
+//!
+//! # TLS
+//!
+//! Plaintext HTTP is allowed only on loopback. Non-loopback bind is refused.
+//! Terminate TLS at a reverse proxy in front of `127.0.0.1`. The sidecar is
+//! not a TLS terminator.
 
 #![forbid(unsafe_code)]
 
+mod bind;
 mod fhir_store;
+mod listen;
+mod store_crypto;
 mod subject_link;
 
 pub use fhir_store::{fhir_type_allowed, FhirStore, StoredFhirResource, ALLOWED_FHIR_TYPES};
+pub use listen::{plaintext_http_env_allowed, validate_listen_bind};
 pub use subject_link::{SubjectLink, SubjectLinkStore};
 
 use std::fs;
@@ -65,18 +79,20 @@ use axum::{Json, Router};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use solum_auth_verify::{JwksVerifier, VerifyConfig};
-use solum_core::audit::FileAuditStore;
+use solum_core::audit::{events as audit_events, FileAuditStore};
 use solum_core::crypto::{
     Crypt4ghKeyProvider, Crypt4ghKeys, CustomerHeldKeyProvider, EncryptedField,
     EphemeralTestKeyProvider, KeyCustody, KeyRef,
 };
 use solum_core::profiles::TransferMechanism;
 use solum_core::{
-    apply_runtime_env_overrides, example_eu_runtime, query_consent_status, Deployment, SolumActor,
-    SolumError,
+    apply_runtime_env_overrides, example_eu_runtime, query_consent_status,
+    require_operator_region_attestation, Deployment, SolumActor, SolumError,
 };
 use solum_identity::OrgCapMapping;
-use solum_openehr::{OpenEhrAdapter, OpenEhrError, PINNED_TEMPLATE_ID, PINNED_TEMPLATE_OPT};
+use solum_openehr::{
+    aql_binds_subject, OpenEhrAdapter, OpenEhrError, PINNED_TEMPLATE_ID, PINNED_TEMPLATE_OPT,
+};
 use subtle::ConstantTimeEq;
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
@@ -275,12 +291,17 @@ pub struct AppState {
     token: Vec<u8>,
     /// When set, mutating routes derive CAP_* from verified JWT groups (H2.2).
     org_iam: Option<OrgIamRuntime>,
+    /// `dev-local` only: body `capability[]` may mint scopes. Pilot profiles false.
+    allow_client_asserted: bool,
+    /// Key used for FHIR / subject-link / dead-letter Crypt4GH envelopes.
+    store_key_ref: KeyRef,
+    encryption_categories: Vec<String>,
     /// Track B EHRbase base URL adapter (disabled when `cdr_url` is None).
     openehr: OpenEhrAdapter,
     /// Optional path to OPT XML; when unset, embedded pinned fixture is used.
     cdr_template_opt: Option<PathBuf>,
-    fhir_store: Mutex<FhirStore>,
-    subject_link_store: Mutex<SubjectLinkStore>,
+    fhir_store: AsyncMutex<FhirStore>,
+    subject_link_store: AsyncMutex<SubjectLinkStore>,
     /// Dual-write dead-letter JSONL (H3.2 live webhook). Always set at startup.
     dual_write_dead_letter: PathBuf,
     /// Runtime used at [`Deployment::open`] (consent status must match custody).
@@ -377,7 +398,7 @@ fn require_ephemeral_gate() -> Result<(), String> {
 ///
 /// Fail-closed: unreadable or invalid JSON aborts with the file path; empty
 /// directories and duplicate `key_ref` values are errors (no silent skip).
-fn load_customer_held_from_dir(dir: &Path) -> Result<CustomerHeldKeyProvider, String> {
+fn load_customer_held_from_dir(dir: &Path) -> Result<(CustomerHeldKeyProvider, KeyRef), String> {
     if !dir.is_dir() {
         return Err(format!("--keys-dir is not a directory: {}", dir.display()));
     }
@@ -396,6 +417,7 @@ fn load_customer_held_from_dir(dir: &Path) -> Result<CustomerHeldKeyProvider, St
         if !meta.is_file() {
             continue;
         }
+        chmod_owner_rw(&path);
         let raw = fs::read_to_string(&path)
             .map_err(|e| format!("failed to read keypair {}: {e}", path.display()))?;
         let file: KeypairFile = serde_json::from_str(&raw).map_err(|e| {
@@ -425,7 +447,26 @@ fn load_customer_held_from_dir(dir: &Path) -> Result<CustomerHeldKeyProvider, St
             dir.display()
         ));
     }
-    Ok(provider)
+    let store_key = provider
+        .first_key_ref()
+        .ok_or_else(|| "keys-dir loaded but no key_ref registered".to_string())?;
+    Ok((provider, store_key))
+}
+
+fn chmod_owner_rw(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = fs::metadata(path) {
+            let mut perms = meta.permissions();
+            perms.set_mode(0o600);
+            let _ = fs::set_permissions(path, perms);
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
 }
 
 /// Build [`AppState`] (validates custody flags, profile, opens stores).
@@ -454,14 +495,18 @@ pub async fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String
 
     let org_iam = load_org_iam(config).await?;
 
-    let (keys, custody, provider) = if config.ephemeral {
+    let (keys, custody, provider, store_key_ref) = if config.ephemeral {
         require_ephemeral_gate()?;
         tracing::warn!("{EPHEMERAL_KEY_WARNING}");
         eprintln!("{EPHEMERAL_KEY_WARNING}");
+        let eph = SharedEphemeralKeys::new();
+        let store_key_ref = KeyRef::new("store/sidecar");
+        eph.generate_test_keypair(store_key_ref.clone())?;
         (
-            SidecarKeys::Ephemeral(SharedEphemeralKeys::new()),
+            SidecarKeys::Ephemeral(eph),
             KeyCustody::EphemeralTest,
             Some("ephemeral-test"),
+            store_key_ref,
         )
     } else if let Some(dir) = config.wrapped_keys_dir.as_ref() {
         #[cfg(feature = "aws-kms")]
@@ -473,10 +518,14 @@ pub async fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String
             let provider = load_aws_kms_from_dir(&client, dir)
                 .await
                 .map_err(|e| e.to_string())?;
+            let store_key_ref = provider
+                .first_key_ref()
+                .ok_or_else(|| "wrapped-keys-dir loaded but no key_ref registered".to_string())?;
             (
                 SidecarKeys::AwsKms(SharedAwsKmsKeys::new(provider)),
                 KeyCustody::CustomerHeld,
                 Some("aws-kms"),
+                store_key_ref,
             )
         }
         #[cfg(not(feature = "aws-kms"))]
@@ -492,13 +541,14 @@ pub async fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String
             .keys_dir
             .as_ref()
             .expect("keys_dir checked non-None above");
-        let provider = load_customer_held_from_dir(dir)?;
+        let (provider, store_key_ref) = load_customer_held_from_dir(dir)?;
         tracing::info!("{CUSTOMER_HELD_KEY_NOTE}");
         eprintln!("{CUSTOMER_HELD_KEY_NOTE}");
         (
             SidecarKeys::CustomerHeld(SharedCustomerHeldKeys::new(provider)),
             KeyCustody::CustomerHeld,
             Some("customer-held-file"),
+            store_key_ref,
         )
     };
 
@@ -511,6 +561,23 @@ pub async fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String
         keys.clone(),
     )
     .map_err(|e| e.to_string())?;
+
+    require_operator_region_attestation(deployment.profile()).map_err(|e| e.to_string())?;
+
+    let allow_client_asserted = deployment.profile().auth.allow_client_asserted_capabilities;
+    if !allow_client_asserted && org_iam.is_none() {
+        return Err(
+            "this profile forbids client-asserted capability[]; start with --org-iam-config, \
+             --jwks-url or --jwks-file, --oidc-issuer, and --oidc-audience \
+             (only config/profiles/dev-local.toml allows capability[] for demos)"
+                .into(),
+        );
+    }
+    let encryption_categories = deployment
+        .profile()
+        .encryption
+        .required_field_categories
+        .clone();
 
     let fhir_path = config.fhir_store.clone().unwrap_or_else(|| {
         config
@@ -537,8 +604,18 @@ pub async fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("dual-write dead-letter mkdir {}: {e}", parent.display()))?;
     }
-    let fhir_store = FhirStore::open(&fhir_path)?;
-    let subject_link_store = SubjectLinkStore::open(&subject_path)?;
+    let fhir_store = FhirStore::open(
+        &fhir_path,
+        &keys,
+        store_key_ref.clone(),
+        encryption_categories.clone(),
+    )?;
+    let subject_link_store = SubjectLinkStore::open(
+        &subject_path,
+        &keys,
+        store_key_ref.clone(),
+        encryption_categories.clone(),
+    )?;
 
     Ok(Arc::new(AppState {
         deployment: AsyncMutex::new(deployment),
@@ -548,6 +625,9 @@ pub async fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String
         consent_path: config.consent_store.clone(),
         token: config.token.as_bytes().to_vec(),
         org_iam,
+        allow_client_asserted,
+        store_key_ref,
+        encryption_categories,
         openehr: match config
             .ehrbase_url
             .as_ref()
@@ -558,8 +638,8 @@ pub async fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String
             None => OpenEhrAdapter::new(),
         },
         cdr_template_opt: config.cdr_template_opt.clone(),
-        fhir_store: Mutex::new(fhir_store),
-        subject_link_store: Mutex::new(subject_link_store),
+        fhir_store: AsyncMutex::new(fhir_store),
+        subject_link_store: AsyncMutex::new(subject_link_store),
         dual_write_dead_letter,
         runtime,
     }))
@@ -570,17 +650,13 @@ async fn load_org_iam(config: &SidecarConfig) -> Result<Option<OrgIamRuntime>, S
         return Ok(None);
     };
     let mapping = OrgCapMapping::load_from_path(path)?;
-    let verify_config = if let Some(aud) = config.oidc_audience.as_ref() {
-        let issuer = config
-            .oidc_issuer
-            .clone()
-            .ok_or_else(|| "org-IAM with --oidc-audience requires --oidc-issuer".to_string())?;
-        VerifyConfig::for_standalone_oidc(issuer, aud.clone())
-    } else {
-        let mut cfg = VerifyConfig::for_ferrum_passport();
-        cfg.expected_issuer = config.oidc_issuer.clone();
-        cfg
-    };
+    let issuer = config.oidc_issuer.clone().ok_or_else(|| {
+        "org-IAM requires --oidc-issuer (and --oidc-audience); Ferrum-passport tokens without aud are not accepted".to_string()
+    })?;
+    let audience = config.oidc_audience.clone().ok_or_else(|| {
+        "org-IAM requires --oidc-audience together with --oidc-issuer".to_string()
+    })?;
+    let verify_config = VerifyConfig::for_standalone_oidc(issuer, audience);
 
     let verifier = if let Some(file) = config.jwks_file.as_ref() {
         let json = std::fs::read_to_string(file)
@@ -664,6 +740,18 @@ async fn resolve_mutating_actor(
     body_capability: Vec<String>,
 ) -> Result<SolumActor, Box<Response>> {
     let Some(org) = state.org_iam.as_ref() else {
+        if !state.allow_client_asserted {
+            return Err(Box::new(
+                (
+                    StatusCode::FORBIDDEN,
+                    Json(ErrorBody {
+                        error: "forbidden".into(),
+                        message: "client-asserted capability[] is disabled for this profile; use org-IAM Bearer JWT".into(),
+                    }),
+                )
+                    .into_response(),
+            ));
+        }
         return Ok(sidecar_actor(body_actor, body_capability));
     };
 
@@ -697,9 +785,25 @@ async fn resolve_mutating_actor(
             fetched.map(|t| t.elapsed() >= JWKS_TTL).unwrap_or(true)
         };
         if stale {
-            if let Ok(fresh) = JwksVerifier::from_url(url, org.verify_config.clone()).await {
-                *org.verifier.lock().await = fresh;
-                *org.fetched_at.lock().await = Some(std::time::Instant::now());
+            match JwksVerifier::from_url(url, org.verify_config.clone()).await {
+                Ok(fresh) => {
+                    *org.verifier.lock().await = fresh;
+                    *org.fetched_at.lock().await = Some(std::time::Instant::now());
+                }
+                Err(e) => {
+                    return Err(Box::new(
+                        (
+                            StatusCode::SERVICE_UNAVAILABLE,
+                            Json(ErrorBody {
+                                error: "jwks_refresh_failed".into(),
+                                message: format!(
+                                    "JWKS refresh failed; refusing to authenticate with stale keys: {e}"
+                                ),
+                            }),
+                        )
+                            .into_response(),
+                    ));
+                }
             }
         }
     }
@@ -744,6 +848,33 @@ async fn resolve_mutating_actor(
         }
     }
     Ok(actor)
+}
+
+async fn resolve_query_actor(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<SolumActor, Box<Response>> {
+    let actor_id = header_nonempty(headers, ACTOR_HEADER).unwrap_or_default();
+    let caps = header_nonempty(headers, CAPABILITY_HEADER)
+        .map(|s| parse_capability_csv(&s))
+        .unwrap_or_default();
+    resolve_mutating_actor(state, headers, actor_id, caps).await
+}
+
+fn require_cap(actor: &SolumActor, capability: &str) -> Result<(), Box<Response>> {
+    solum_identity::require_capability(actor, capability)
+        .map_err(|e| Box::new(map_solum_err(e.into())))
+}
+
+fn object_not_bound(message: impl Into<String>) -> Response {
+    (
+        StatusCode::FORBIDDEN,
+        Json(ErrorBody {
+            error: "object_not_bound".into(),
+            message: message.into(),
+        }),
+    )
+        .into_response()
 }
 
 async fn sidecar_token_middleware(
@@ -995,8 +1126,16 @@ async fn consent_revoke(
 
 async fn consent_status(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Query(q): Query<ConsentStatusQuery>,
 ) -> Response {
+    let actor = match resolve_query_actor(&state, &headers).await {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    if let Err(e) = require_cap(&actor, solum_identity::CAP_CONSENT_READ) {
+        return *e;
+    }
     match query_consent_status(
         &state.profile,
         &state.runtime,
@@ -1087,11 +1226,17 @@ async fn crypto_decrypt(
     }
 }
 
-async fn audit_export(State(state): State<Arc<AppState>>) -> Response {
+async fn audit_export(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let actor = match resolve_query_actor(&state, &headers).await {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    if let Err(e) = require_cap(&actor, solum_identity::CAP_AUDIT_EXPORT) {
+        return *e;
+    }
     match FileAuditStore::open(&state.audit_path) {
         Ok(store) => match store.export_helios_json() {
             Ok(json) => {
-                let actor = sidecar_actor("sidecar:audit-export".into(), vec![]);
                 let mut dep = state.deployment.lock().await;
                 if let Err(e) = dep.record_data_export_as(&actor, serde_json::Map::new()) {
                     return map_solum_err(e);
@@ -1123,7 +1268,14 @@ async fn audit_export(State(state): State<Arc<AppState>>) -> Response {
     }
 }
 
-async fn audit_verify(State(state): State<Arc<AppState>>) -> Response {
+async fn audit_verify(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let actor = match resolve_query_actor(&state, &headers).await {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    if let Err(e) = require_cap(&actor, solum_identity::CAP_AUDIT_VERIFY) {
+        return *e;
+    }
     match FileAuditStore::open(&state.audit_path) {
         Ok(store) => match store.verify_chain() {
             Ok(()) => (
@@ -1322,11 +1474,81 @@ async fn actor_from_get_headers(
     Ok((actor, subject, purpose))
 }
 
-fn lock_std<'a, T>(
-    mutex: &'a Mutex<T>,
-    name: &str,
-) -> Result<std::sync::MutexGuard<'a, T>, String> {
-    mutex.lock().map_err(|_| format!("{name} lock poisoned"))
+fn require_fhir_bound_to_subject(
+    resource_type: &str,
+    resource: &serde_json::Value,
+    subject: &str,
+) -> Result<(), Box<Response>> {
+    let id = resource.get("id").and_then(|v| v.as_str()).unwrap_or("");
+    if crate::bind::fhir_resource_belongs_to_subject(resource_type, id, resource, subject) {
+        Ok(())
+    } else {
+        Err(Box::new(object_not_bound(format!(
+            "{resource_type}/{id} is not bound to consented subject '{subject}'"
+        ))))
+    }
+}
+
+async fn require_ehr_bound_to_subject(
+    state: &AppState,
+    subject: &str,
+    ehr_id: &str,
+) -> Result<(), Response> {
+    let store = state.subject_link_store.lock().await;
+    let bound = match store.get(subject) {
+        Ok(v) => v.and_then(|l| l.ehr_id),
+        Err(e) => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    error: "internal".into(),
+                    message: e,
+                }),
+            )
+                .into_response());
+        }
+    };
+    if bound.as_deref() == Some(ehr_id) {
+        Ok(())
+    } else {
+        Err(object_not_bound(format!(
+            "EHR '{ehr_id}' is not bound to consented subject '{subject}'"
+        )))
+    }
+}
+
+async fn upsert_subject_ehr_link(
+    state: &AppState,
+    actor: &SolumActor,
+    subject: &str,
+    ehr_id: &str,
+) -> Result<(), String> {
+    let mut store = state.subject_link_store.lock().await;
+    let mut link = store.get(subject)?.unwrap_or(SubjectLink {
+        solum_subject_id: subject.to_string(),
+        ferrum_drs_id: None,
+        phenopacket_id: None,
+        ehr_id: None,
+    });
+    link.ehr_id = Some(ehr_id.to_string());
+    store.upsert(&state.keys, &link)?;
+    drop(store);
+    let mut dep = state.deployment.lock().await;
+    let mut details = serde_json::Map::new();
+    details.insert(
+        "solum_subject_id".into(),
+        serde_json::Value::String(subject.to_string()),
+    );
+    details.insert(
+        "ehr_id".into(),
+        serde_json::Value::String(ehr_id.to_string()),
+    );
+    details.insert(
+        "source".into(),
+        serde_json::Value::String("cdr.ehr.created".into()),
+    );
+    dep.record_cdr_event_as(actor, audit_events::CDR_SUBJECT_LINK_UPSERTED, details)
+        .map_err(|e| e.to_string())
 }
 
 async fn authorize_cdr_write_consented(
@@ -1406,7 +1628,9 @@ async fn cdr_upload_template(
             "template_id".into(),
             serde_json::Value::String(PINNED_TEMPLATE_ID.into()),
         );
-        if let Err(e) = dep.record_cdr_event_as(&actor, "cdr.template.uploaded", details) {
+        if let Err(e) =
+            dep.record_cdr_event_as(&actor, audit_events::CDR_TEMPLATE_UPLOADED, details)
+        {
             return map_solum_err(e);
         }
     }
@@ -1447,11 +1671,21 @@ async fn cdr_create_ehr(
         Ok(id) => id,
         Err(e) => return map_openehr_err(e),
     };
+    if let Err(e) = upsert_subject_ehr_link(&state, &actor, &subject, &ehr_id).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody {
+                error: "internal".into(),
+                message: e,
+            }),
+        )
+            .into_response();
+    }
     {
         let mut dep = state.deployment.lock().await;
         let mut details = serde_json::Map::new();
         details.insert("ehr_id".into(), serde_json::Value::String(ehr_id.clone()));
-        if let Err(e) = dep.record_cdr_event_as(&actor, "cdr.ehr.created", details) {
+        if let Err(e) = dep.record_cdr_event_as(&actor, audit_events::CDR_EHR_CREATED, details) {
             return map_solum_err(e);
         }
     }
@@ -1479,6 +1713,9 @@ async fn cdr_commit_composition(
     {
         return e;
     }
+    if let Err(resp) = require_ehr_bound_to_subject(&state, &subject, &ehr_id).await {
+        return resp;
+    }
     let client = match state.openehr.client() {
         Ok(c) => c,
         Err(e) => return map_openehr_err(e),
@@ -1486,7 +1723,7 @@ async fn cdr_commit_composition(
     let template_id = body
         .template_id
         .unwrap_or_else(|| PINNED_TEMPLATE_ID.to_string());
-    let use_example = body.use_example.unwrap_or(true);
+    let use_example = body.use_example.unwrap_or(false);
     let composition = if use_example {
         match client.example_composition(&template_id).await {
             Ok(v) => v,
@@ -1526,7 +1763,9 @@ async fn cdr_commit_composition(
             "template_id".into(),
             serde_json::Value::String(commit.template_id.clone()),
         );
-        if let Err(e) = dep.record_cdr_event_as(&actor, "cdr.composition.committed", details) {
+        if let Err(e) =
+            dep.record_cdr_event_as(&actor, audit_events::CDR_COMPOSITION_COMMITTED, details)
+        {
             return map_solum_err(e);
         }
     }
@@ -1555,6 +1794,9 @@ async fn cdr_get_composition(
             .await
     {
         return e;
+    }
+    if let Err(resp) = require_ehr_bound_to_subject(&state, &subject, &ehr_id).await {
+        return resp;
     }
     let client = match state.openehr.client() {
         Ok(c) => c,
@@ -1597,6 +1839,18 @@ async fn cdr_aql(
     {
         return e;
     }
+    if !aql_binds_subject(&body.q, &subject) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorBody {
+                error: "bad_request".into(),
+                message: format!(
+                    "AQL must quote the consented subject '{subject}' (fail-closed object bind)"
+                ),
+            }),
+        )
+            .into_response();
+    }
     let client = match state.openehr.client() {
         Ok(c) => c,
         Err(e) => return map_openehr_err(e),
@@ -1612,7 +1866,7 @@ async fn cdr_aql(
             "aql_len".into(),
             serde_json::Value::Number(body.q.len().into()),
         );
-        if let Err(e) = dep.record_cdr_event_as(&actor, "cdr.aql.executed", details) {
+        if let Err(e) = dep.record_cdr_event_as(&actor, audit_events::CDR_AQL_EXECUTED, details) {
             return map_solum_err(e);
         }
     }
@@ -1693,6 +1947,9 @@ async fn fhir_create(
                 .into_response();
         }
     }
+    if let Err(resp) = require_fhir_bound_to_subject(&resource_type, &body.resource, &subject) {
+        return *resp;
+    }
     if let Err(e) =
         authorize_cdr_write_consented(&state, &actor, &subject, &purpose, "fhir_create").await
     {
@@ -1702,14 +1959,20 @@ async fn fhir_create(
     let link_cdr = body.link_cdr.unwrap_or(false);
     match persist_fhir_resource(&state, &actor, &resource_type, body.resource, link_cdr).await {
         Ok(stored) => (StatusCode::CREATED, Json(stored.resource)).into_response(),
-        Err(msg) if msg.starts_with("body resourceType") || msg.starts_with("Patient.id") => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorBody {
-                error: "bad_request".into(),
-                message: msg,
-            }),
-        )
-            .into_response(),
+        Err(msg)
+            if msg.starts_with("body resourceType")
+                || msg.starts_with("Patient.id")
+                || msg.starts_with("link_cdr") =>
+        {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorBody {
+                    error: "bad_request".into(),
+                    message: msg,
+                }),
+            )
+                .into_response()
+        }
         Err(msg) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorBody {
@@ -1765,41 +2028,24 @@ async fn persist_fhir_resource(
         obj.insert("id".into(), serde_json::Value::String(id.clone()));
     }
 
-    let mut ehr_id = None;
-    let mut composition_uid = None;
-    if link_cdr && state.openehr.is_enabled() {
-        let existing = {
-            let store = lock_std(&state.subject_link_store, "subject link")?;
-            store.get(&id)?.and_then(|l| l.ehr_id)
-        };
-        let client = state.openehr.client().map_err(|e| e.to_string())?;
-        let eid = if let Some(e) = existing {
-            e
-        } else {
-            client.create_ehr().await.map_err(|e| e.to_string())?
-        };
-        let example = client
-            .example_composition(PINNED_TEMPLATE_ID)
-            .await
-            .map_err(|e| e.to_string())?;
-        let commit = client
-            .commit_composition(&eid, &example)
-            .await
-            .map_err(|e| e.to_string())?;
-        ehr_id = Some(commit.ehr_id);
-        composition_uid = Some(commit.composition_uid);
+    if link_cdr {
+        return Err(
+            "link_cdr is refused: the sidecar does not commit EHRbase example compositions as patient data. \
+             Persist FHIR with link_cdr=false and commit a real composition via POST /v1/cdr/.../composition with use_example=false"
+                .into(),
+        );
     }
 
     let stored = StoredFhirResource {
         resource_type: resource_type.to_string(),
         id: id.clone(),
         resource: resource.clone(),
-        ehr_id: ehr_id.clone(),
-        composition_uid: composition_uid.clone(),
+        ehr_id: None,
+        composition_uid: None,
     };
     {
-        let mut store = lock_std(&state.fhir_store, "fhir store")?;
-        store.upsert(&stored)?;
+        let mut store = state.fhir_store.lock().await;
+        store.upsert(&state.keys, &stored)?;
     }
 
     // Patient → subject bridge (H3.3): same id string partners should use as Ferrum solum_subject.
@@ -1808,11 +2054,11 @@ async fn persist_fhir_resource(
             solum_subject_id: id.clone(),
             ferrum_drs_id: None,
             phenopacket_id: None,
-            ehr_id: ehr_id.clone(),
+            ehr_id: None,
         };
         {
-            let mut store = lock_std(&state.subject_link_store, "subject link")?;
-            store.upsert(&link)?;
+            let mut store = state.subject_link_store.lock().await;
+            store.upsert(&state.keys, &link)?;
         }
         let mut dep = state.deployment.lock().await;
         let mut details = serde_json::Map::new();
@@ -1824,7 +2070,7 @@ async fn persist_fhir_resource(
             "source".into(),
             serde_json::Value::String("fhir.Patient".into()),
         );
-        dep.record_cdr_event_as(actor, "cdr.subject_link.upserted", details)
+        dep.record_cdr_event_as(actor, audit_events::CDR_SUBJECT_LINK_UPSERTED, details)
             .map_err(|e| e.to_string())?;
     }
 
@@ -1836,16 +2082,7 @@ async fn persist_fhir_resource(
             serde_json::Value::String(resource_type.to_string()),
         );
         details.insert("id".into(), serde_json::Value::String(id));
-        if let Some(ref e) = ehr_id {
-            details.insert("ehr_id".into(), serde_json::Value::String(e.clone()));
-        }
-        if let Some(ref c) = composition_uid {
-            details.insert(
-                "composition_uid".into(),
-                serde_json::Value::String(c.clone()),
-            );
-        }
-        dep.record_cdr_event_as(actor, "cdr.fhir.created", details)
+        dep.record_cdr_event_as(actor, audit_events::CDR_FHIR_CREATED, details)
             .map_err(|e| e.to_string())?;
         dep.record_data_receive_eehrxf_as(actor, serde_json::Map::new())
             .map_err(|e| e.to_string())?;
@@ -1853,8 +2090,8 @@ async fn persist_fhir_resource(
 
     Ok(PersistFhirOk {
         resource,
-        ehr_id,
-        composition_uid,
+        ehr_id: None,
+        composition_uid: None,
     })
 }
 
@@ -1872,7 +2109,7 @@ pub struct DualWriteBody {
     /// Optional legacy system id / correlation for dead-letter triage.
     #[serde(default)]
     pub source: Option<String>,
-    /// When Track B is enabled, also commit pinned openEHR composition (default true).
+    /// When true, refused: sidecar will not commit EHRbase example compositions as patient data.
     #[serde(default)]
     pub link_cdr: Option<bool>,
 }
@@ -1919,6 +2156,9 @@ async fn migrate_dual_write(
         )
             .into_response();
     }
+    if let Err(resp) = require_fhir_bound_to_subject(&resource_type, &body.resource, &subject) {
+        return *resp;
+    }
 
     let link_cdr = body.link_cdr.unwrap_or(false);
     match persist_fhir_resource(
@@ -1946,7 +2186,9 @@ async fn migrate_dual_write(
             if let Some(c) = stored.composition_uid {
                 details.insert("composition_uid".into(), serde_json::Value::String(c));
             }
-            if let Err(e) = dep.record_cdr_event_as(&actor, "cdr.dual_write.ok", details) {
+            if let Err(e) =
+                dep.record_cdr_event_as(&actor, audit_events::CDR_DUAL_WRITE_OK, details)
+            {
                 return map_solum_err(e);
             }
             (
@@ -1966,7 +2208,43 @@ async fn migrate_dual_write(
                     "resource": body.resource,
                 }),
             );
-            if let Err(e) = solum_core::append_dead_letter(&state.dual_write_dead_letter, &row) {
+            let envelope = match crate::store_crypto::encrypt_store_json(
+                &state.keys,
+                &state.encryption_categories,
+                &state.store_key_ref,
+                crate::store_crypto::FHIR_STORE_CATEGORY,
+                &row,
+            ) {
+                Ok(f) => f,
+                Err(e) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ErrorBody {
+                            error: "internal".into(),
+                            message: format!(
+                                "dual-write failed and dead-letter encrypt failed: {e}"
+                            ),
+                        }),
+                    )
+                        .into_response();
+                }
+            };
+            let envelope_val = match serde_json::to_value(&envelope) {
+                Ok(v) => v,
+                Err(e) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(ErrorBody {
+                            error: "internal".into(),
+                            message: format!("dead-letter serialize: {e}"),
+                        }),
+                    )
+                        .into_response();
+                }
+            };
+            if let Err(e) =
+                solum_core::append_dead_letter(&state.dual_write_dead_letter, &envelope_val)
+            {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(ErrorBody {
@@ -1984,9 +2262,11 @@ async fn migrate_dual_write(
                     "dead_letter".into(),
                     serde_json::Value::String(state.dual_write_dead_letter.display().to_string()),
                 );
-                if let Err(e) =
-                    dep.record_cdr_event_as(&actor, "cdr.dual_write.dead_lettered", details)
-                {
+                if let Err(e) = dep.record_cdr_event_as(
+                    &actor,
+                    audit_events::CDR_DUAL_WRITE_DEAD_LETTERED,
+                    details,
+                ) {
                     return map_solum_err(e);
                 }
             }
@@ -2036,19 +2316,7 @@ async fn fhir_get(
         return e;
     }
     let found = {
-        let store = match lock_std(&state.fhir_store, "fhir store") {
-            Ok(g) => g,
-            Err(e) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ErrorBody {
-                        error: "internal".into(),
-                        message: e,
-                    }),
-                )
-                    .into_response();
-            }
-        };
+        let store = state.fhir_store.lock().await;
         match store.get(&resource_type, &id) {
             Ok(v) => v,
             Err(e) => {
@@ -2064,7 +2332,19 @@ async fn fhir_get(
         }
     };
     match found {
-        Some(entry) => (StatusCode::OK, Json(entry.resource)).into_response(),
+        Some(entry) => {
+            if !crate::bind::fhir_resource_belongs_to_subject(
+                &resource_type,
+                &id,
+                &entry.resource,
+                &subject,
+            ) {
+                return object_not_bound(format!(
+                    "{resource_type}/{id} is not bound to consented subject '{subject}'"
+                ));
+            }
+            (StatusCode::OK, Json(entry.resource)).into_response()
+        }
         None => (
             StatusCode::NOT_FOUND,
             Json(ErrorBody {
@@ -2124,20 +2404,8 @@ async fn subject_link_upsert(
         ehr_id: body.ehr_id.clone(),
     };
     {
-        let mut store = match lock_std(&state.subject_link_store, "subject link") {
-            Ok(g) => g,
-            Err(e) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ErrorBody {
-                        error: "internal".into(),
-                        message: e,
-                    }),
-                )
-                    .into_response();
-            }
-        };
-        if let Err(e) = store.upsert(&link) {
+        let mut store = state.subject_link_store.lock().await;
+        if let Err(e) = store.upsert(&state.keys, &link) {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorBody {
@@ -2155,7 +2423,9 @@ async fn subject_link_upsert(
             "solum_subject_id".into(),
             serde_json::Value::String(body.solum_subject_id),
         );
-        if let Err(e) = dep.record_cdr_event_as(&actor, "cdr.subject_link.upserted", details) {
+        if let Err(e) =
+            dep.record_cdr_event_as(&actor, audit_events::CDR_SUBJECT_LINK_UPSERTED, details)
+        {
             return map_solum_err(e);
         }
     }
@@ -2176,20 +2446,13 @@ async fn subject_link_get(
     {
         return e;
     }
+    if solum_subject_id != subject {
+        return object_not_bound(format!(
+            "subject-link '{solum_subject_id}' is not the consented subject '{subject}'"
+        ));
+    }
     let found = {
-        let store = match lock_std(&state.subject_link_store, "subject link") {
-            Ok(g) => g,
-            Err(e) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ErrorBody {
-                        error: "internal".into(),
-                        message: e,
-                    }),
-                )
-                    .into_response();
-            }
-        };
+        let store = state.subject_link_store.lock().await;
         match store.get(&solum_subject_id) {
             Ok(v) => v,
             Err(e) => {
@@ -2244,7 +2507,15 @@ async fn transfer_check(
 
 /// Serve the router on `config.bind` until the process is stopped.
 pub async fn serve(config: SidecarConfig) -> Result<(), String> {
+    validate_listen_bind(config.bind, plaintext_http_env_allowed())?;
     let state = build_state(&config).await?;
+    if !config.bind.ip().is_loopback() && !state.allow_client_asserted {
+        return Err(
+            "non-loopback HTTP is refused on pilot profiles. Bind 127.0.0.1 and terminate TLS \
+             at a reverse proxy. SOLUM_ALLOW_PLAINTEXT_HTTP=1 is honoured only with dev-local."
+                .into(),
+        );
+    }
     let app = app_router(state);
     let listener = tokio::net::TcpListener::bind(config.bind)
         .await

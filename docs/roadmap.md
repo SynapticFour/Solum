@@ -9,7 +9,7 @@ Spec-independent controls that already have a clear regulatory floor (e.g. EHDS 
 - Secure processing environment: Crypt4GH field encryption (`solum-crypto`), granular access control, complete audit log (`solum-audit::FileAuditStore` — persistent, hash-chained)
 - Consent and access-rights management (`solum-consent` — grant/revoke with purpose binding and full history)
 - Compliance evidence **export hooks** (HELIOS-oriented JSON envelope). **Live HELIOS signing is deferred / not productized** — see [helios.md](helios.md)
-- Jurisdiction [profile system](profiles.md), `eu-ehds` + `kenya-dpa` (**PROVISIONAL-PRODUCTION-CANDIDATE** — non-counsel Vorprüfung; real counsel still required)
+- Jurisdiction [profile system](profiles.md), `eu-ehds` + `kenya-dpa` (**EVALUATION-ONLY** — non-counsel Vorprüfung; real counsel still required; not a production candidate)
 - CustomerHeld CLI / sidecar path; ephemeral keys gated to `dev-local` only
 - Optional AWS KMS envelope (`--features aws-kms`); H2.1 Ferrum consent teeth; H2.2 org-IAM
 

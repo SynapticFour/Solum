@@ -8,12 +8,17 @@ use base64::Engine;
 use serde_json::Value;
 use solum_core::crypto::generate_operator_keypair;
 use solum_sidecar::{
-    app_router, build_state, KeypairFile, SidecarConfig, CUSTOMER_HELD_KEY_NOTE,
-    EPHEMERAL_WARNING_HEADER, SIDECAR_TOKEN_HEADER,
+    app_router, build_state, validate_listen_bind, KeypairFile, SidecarConfig,
+    CUSTOMER_HELD_KEY_NOTE, EPHEMERAL_WARNING_HEADER, SIDECAR_TOKEN_HEADER,
 };
 use tempfile::tempdir;
 
-/// Serialize env mutations for ephemeral gate tests (process-wide `SOLUM_ALLOW_EPHEMERAL`).
+const TEST_OIDC_ISSUER: &str = "https://idp.test/oidc";
+const TEST_OIDC_AUD: &str = "solum-api";
+
+fn org_iam_mapping() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/org-iam/pilot-groups.toml")
+}
 fn env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
@@ -80,15 +85,27 @@ async fn spawn_ephemeral_sidecar(token: &str) -> (SocketAddr, tempfile::TempDir)
     (addr, dir)
 }
 
-/// CustomerHeld sidecar: `--keys-dir` with a pre-registered keypair.
+/// CustomerHeld sidecar: `--keys-dir` with a pre-registered keypair + org-IAM (eu-ehds).
+#[allow(clippy::await_holding_lock)]
 async fn spawn_customer_held_sidecar(
     token: &str,
     key_ref: &str,
-) -> (SocketAddr, tempfile::TempDir) {
+) -> (SocketAddr, tempfile::TempDir, String) {
     let dir = tempdir().unwrap();
     let keys_dir = dir.path().join("keys");
     std::fs::create_dir_all(&keys_dir).unwrap();
     write_keypair_file(&keys_dir, key_ref);
+    let _guard = env_lock().lock().unwrap();
+    std::env::set_var("SOLUM_STORAGE_REGION", "EU");
+    let (jwks_src, jwt, jwks_hold) = mint_rsa_jwks_and_token(&[
+        "solum-consent-ops",
+        "solum-crypto-ops",
+        "solum-cdr-ops",
+        "solum-audit-ops",
+    ]);
+    let jwks = dir.path().join("jwks.json");
+    std::fs::copy(&jwks_src, &jwks).unwrap();
+    drop(jwks_hold);
     let config = SidecarConfig {
         bind: "127.0.0.1:0".parse().unwrap(),
         profile: eu_profile(),
@@ -98,11 +115,11 @@ async fn spawn_customer_held_sidecar(
         keys_dir: Some(keys_dir),
         ephemeral: false,
         wrapped_keys_dir: None,
-        org_iam_config: None,
+        org_iam_config: Some(org_iam_mapping()),
         jwks_url: None,
-        jwks_file: None,
-        oidc_issuer: None,
-        oidc_audience: None,
+        jwks_file: Some(jwks),
+        oidc_issuer: Some(TEST_OIDC_ISSUER.into()),
+        oidc_audience: Some(TEST_OIDC_AUD.into()),
         ehrbase_url: None,
         cdr_template_opt: None,
         fhir_store: None,
@@ -112,13 +129,14 @@ async fn spawn_customer_held_sidecar(
     let state = build_state(&config)
         .await
         .expect("build_state customer-held");
+    drop(_guard);
     let app = app_router(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
-    (addr, dir)
+    (addr, dir, jwt)
 }
 
 fn client() -> reqwest::Client {
@@ -126,11 +144,11 @@ fn client() -> reqwest::Client {
 }
 
 async fn grant_care_provision_http(addr: &str, token: &str) {
-    grant_care_provision_for(addr, token, "patient/42").await;
+    grant_care_provision_for(addr, token, "patient/42", None).await;
 }
 
-async fn grant_care_provision_for(addr: &str, token: &str, subject: &str) {
-    let res = client()
+async fn grant_care_provision_for(addr: &str, token: &str, subject: &str, bearer: Option<&str>) {
+    let mut req = client()
         .post(format!("http://{addr}/v1/consent/grant"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
@@ -139,10 +157,11 @@ async fn grant_care_provision_for(addr: &str, token: &str, subject: &str) {
             "actor": "practitioner/7",
             "capability": ["solum:consent:grant"],
             "scope": ["patient_summary"]
-        }))
-        .send()
-        .await
-        .unwrap();
+        }));
+    if let Some(jwt) = bearer {
+        req = req.header("Authorization", format!("Bearer {jwt}"));
+    }
+    let res = req.send().await.unwrap();
     let status = res.status();
     let body = res.text().await.unwrap_or_default();
     assert!(
@@ -198,6 +217,8 @@ async fn grant_without_secret_is_unauthorized() {
     let status = client()
         .get(&status_url)
         .header(SIDECAR_TOKEN_HEADER, token)
+        .header("X-Solum-Actor", "practitioner/7")
+        .header("X-Solum-Capability", "solum:consent:read")
         .send()
         .await
         .unwrap();
@@ -255,6 +276,8 @@ async fn grant_missing_capability_is_forbidden_no_side_effect() {
     let status = client()
         .get(&status_url)
         .header(SIDECAR_TOKEN_HEADER, token)
+        .header("X-Solum-Actor", "practitioner/7")
+        .header("X-Solum-Capability", "solum:consent:read")
         .send()
         .await
         .unwrap();
@@ -457,6 +480,8 @@ async fn audit_verify_ok_after_operations() {
     let verify = client()
         .get(format!("http://{addr}/v1/audit/verify"))
         .header(SIDECAR_TOKEN_HEADER, token)
+        .header("X-Solum-Actor", "practitioner/7")
+        .header("X-Solum-Capability", "solum:audit:verify")
         .send()
         .await
         .unwrap();
@@ -467,6 +492,8 @@ async fn audit_verify_ok_after_operations() {
     let export = client()
         .get(format!("http://{addr}/v1/audit/export"))
         .header(SIDECAR_TOKEN_HEADER, token)
+        .header("X-Solum-Actor", "practitioner/7")
+        .header("X-Solum-Capability", "solum:audit:export")
         .send()
         .await
         .unwrap();
@@ -479,13 +506,14 @@ async fn audit_verify_ok_after_operations() {
 async fn customer_held_encrypt_decrypt_round_trip() {
     let token = "test-secret-ch-roundtrip";
     let key_ref = "customer/sidecar-1";
-    let (addr, _dir) = spawn_customer_held_sidecar(token, key_ref).await;
-    grant_care_provision_http(&addr.to_string(), token).await;
+    let (addr, _dir, jwt) = spawn_customer_held_sidecar(token, key_ref).await;
+    grant_care_provision_for(&addr.to_string(), token, "patient/42", Some(&jwt)).await;
     let plain = b"customer-held-plaintext";
 
     let enc = client()
         .post(format!("http://{addr}/v1/crypto/encrypt"))
         .header(SIDECAR_TOKEN_HEADER, token)
+        .header("Authorization", format!("Bearer {jwt}"))
         .json(&serde_json::json!({
             "category": "patient_summary",
             "subject": "patient/42",
@@ -511,6 +539,7 @@ async fn customer_held_encrypt_decrypt_round_trip() {
     let dec = client()
         .post(format!("http://{addr}/v1/crypto/decrypt"))
         .header(SIDECAR_TOKEN_HEADER, token)
+        .header("Authorization", format!("Bearer {jwt}"))
         .json(&serde_json::json!({
             "subject": "patient/42",
             "purpose": "care_provision",
@@ -534,12 +563,13 @@ async fn customer_held_encrypt_decrypt_round_trip() {
 #[tokio::test]
 async fn customer_held_unknown_key_ref_does_not_auto_generate() {
     let token = "test-secret-ch-unknown";
-    let (addr, _dir) = spawn_customer_held_sidecar(token, "customer/known-1").await;
-    grant_care_provision_http(&addr.to_string(), token).await;
+    let (addr, _dir, jwt) = spawn_customer_held_sidecar(token, "customer/known-1").await;
+    grant_care_provision_for(&addr.to_string(), token, "patient/42", Some(&jwt)).await;
 
     let enc = client()
         .post(format!("http://{addr}/v1/crypto/encrypt"))
         .header(SIDECAR_TOKEN_HEADER, token)
+        .header("Authorization", format!("Bearer {jwt}"))
         .json(&serde_json::json!({
             "category": "patient_summary",
             "subject": "patient/42",
@@ -678,6 +708,8 @@ fn mint_rsa_jwks_and_token(groups: &[&str]) -> (PathBuf, String, tempfile::TempD
         &header,
         &json!({
             "sub": "practitioner/org-iam",
+            "iss": TEST_OIDC_ISSUER,
+            "aud": TEST_OIDC_AUD,
             "exp": t + 3600,
             "groups": groups,
         }),
@@ -708,8 +740,8 @@ async fn spawn_org_iam_sidecar(
         org_iam_config: Some(mapping_path),
         jwks_url: None,
         jwks_file: Some(jwks_file),
-        oidc_issuer: None,
-        oidc_audience: None,
+        oidc_issuer: Some(TEST_OIDC_ISSUER.into()),
+        oidc_audience: Some(TEST_OIDC_AUD.into()),
         ehrbase_url: None,
         cdr_template_opt: None,
         fhir_store: None,
@@ -733,7 +765,7 @@ async fn org_iam_grant_with_mapped_group() {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/org-iam/pilot-groups.toml");
     let (jwks, jwt, _keydir) = mint_rsa_jwks_and_token(&["solum-consent-ops"]);
     let token = "org-iam-secret";
-    let (addr, _dir) = spawn_org_iam_sidecar(token, jwks, mapping).await;
+    let (addr, dir) = spawn_org_iam_sidecar(token, jwks, mapping).await;
     let url = format!("http://{addr}/v1/consent/grant");
     let res = client()
         .post(&url)
@@ -750,6 +782,11 @@ async fn org_iam_grant_with_mapped_group() {
         .await
         .unwrap();
     assert_eq!(res.status(), 201, "body={}", res.text().await.unwrap());
+    let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
+    assert!(
+        audit.contains("identity.authenticated"),
+        "org-IAM success must emit identity.authenticated: {audit}"
+    );
 }
 
 #[tokio::test]
@@ -1070,7 +1107,7 @@ async fn cdr_facade_write_read_and_audit() {
 async fn fhir_create_get_without_cdr_link() {
     let token = "fhir-ok-token";
     let (addr, dir) = spawn_ephemeral_sidecar(token).await;
-    grant_care_provision_for(&addr.to_string(), token, "jane-1").await;
+    grant_care_provision_for(&addr.to_string(), token, "jane-1", None).await;
     let create = client()
         .post(format!("http://{addr}/v1/fhir/Patient"))
         .header(SIDECAR_TOKEN_HEADER, token)
@@ -1150,7 +1187,7 @@ async fn aql_allowlisted_ok() {
             "capability": ["solum:cdr:read"],
             "subject": "patient/42",
             "purpose": "care_provision",
-            "q": "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c"
+            "q": "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c WHERE e/ehr_id/value = 'patient/42'"
         }))
         .send()
         .await
@@ -1164,7 +1201,7 @@ async fn aql_allowlisted_ok() {
 async fn subject_link_round_trip() {
     let token = "subject-link-token";
     let (addr, dir) = spawn_ephemeral_sidecar(token).await;
-    grant_care_provision_for(&addr.to_string(), token, "subj-42").await;
+    grant_care_provision_for(&addr.to_string(), token, "subj-42", None).await;
     let put = client()
         .post(format!("http://{addr}/v1/cdr/subject-link"))
         .header(SIDECAR_TOKEN_HEADER, token)
@@ -1201,7 +1238,7 @@ async fn subject_link_round_trip() {
 async fn fhir_patient_auto_subject_link() {
     let token = "patient-bridge-token";
     let (addr, dir) = spawn_ephemeral_sidecar(token).await;
-    grant_care_provision_for(&addr.to_string(), token, "bridge-patient-1").await;
+    grant_care_provision_for(&addr.to_string(), token, "bridge-patient-1", None).await;
     let create = client()
         .post(format!("http://{addr}/v1/fhir/Patient"))
         .header(SIDECAR_TOKEN_HEADER, token)
@@ -1247,7 +1284,7 @@ async fn fhir_patient_auto_subject_link() {
 async fn dual_write_ok_without_cdr() {
     let token = "dual-ok-token";
     let (addr, dir) = spawn_ephemeral_sidecar(token).await;
-    grant_care_provision_for(&addr.to_string(), token, "dw-1").await;
+    grant_care_provision_for(&addr.to_string(), token, "dw-1", None).await;
     let res = client()
         .post(format!("http://{addr}/v1/migrate/dual-write"))
         .header(SIDECAR_TOKEN_HEADER, token)
@@ -1279,7 +1316,7 @@ async fn dual_write_dead_letters_on_cdr_failure() {
     let token = "dual-dl-token";
     let (addr, dir) =
         spawn_ephemeral_sidecar_with_ehrbase(token, "http://127.0.0.1:1/ehrbase".into()).await;
-    grant_care_provision_for(&addr.to_string(), token, "c-fail").await;
+    grant_care_provision_for(&addr.to_string(), token, "c-fail", None).await;
     let res = client()
         .post(format!("http://{addr}/v1/migrate/dual-write"))
         .header(SIDECAR_TOKEN_HEADER, token)
@@ -1293,6 +1330,7 @@ async fn dual_write_dead_letters_on_cdr_failure() {
             "resource": {
                 "resourceType": "Condition",
                 "id": "c-fail",
+                "subject": {"reference": "Patient/c-fail"},
                 "code": {"text": "test"}
             }
         }))
@@ -1303,7 +1341,15 @@ async fn dual_write_dead_letters_on_cdr_failure() {
     let body: Value = res.json().await.unwrap();
     assert_eq!(body["dead_lettered"], true);
     let dl = std::fs::read_to_string(dir.path().join("dual_write_dead_letter.jsonl")).unwrap();
-    assert!(dl.contains("c-fail"), "dead-letter={dl}");
+    assert!(!dl.is_empty(), "dead-letter file empty");
+    assert!(
+        !dl.contains("c-fail"),
+        "dead-letter must not contain plaintext subject: {dl}"
+    );
+    assert!(
+        dl.contains("ciphertext"),
+        "dead-letter must be a Crypt4GH envelope: {dl}"
+    );
     let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
     assert!(audit.contains("cdr.dual_write.dead_lettered"));
 }
@@ -1408,12 +1454,51 @@ async fn kenya_dpa_customer_held_starts_with_ke_region() {
     let keys_dir = dir.path().join("keys");
     std::fs::create_dir_all(&keys_dir).unwrap();
     write_keypair_file(&keys_dir, "ke/ok");
+    let (jwks_src, _jwt, jwks_hold) = mint_rsa_jwks_and_token(&["solum-audit-ops"]);
+    let jwks = dir.path().join("jwks.json");
+    std::fs::copy(&jwks_src, &jwks).unwrap();
+    drop(jwks_hold);
     let config = SidecarConfig {
         bind: "127.0.0.1:0".parse().unwrap(),
         profile: kenya_profile(),
         audit: dir.path().join("audit.jsonl"),
         consent_store: dir.path().join("consent.jsonl"),
         token: "kenya-ok".into(),
+        keys_dir: Some(keys_dir),
+        ephemeral: false,
+        wrapped_keys_dir: None,
+        org_iam_config: Some(org_iam_mapping()),
+        jwks_url: None,
+        jwks_file: Some(jwks),
+        oidc_issuer: Some(TEST_OIDC_ISSUER.into()),
+        oidc_audience: Some(TEST_OIDC_AUD.into()),
+        ehrbase_url: None,
+        cdr_template_opt: None,
+        fhir_store: None,
+        subject_link_store: None,
+        dual_write_dead_letter: None,
+    };
+    build_state(&config)
+        .await
+        .expect("kenya CustomerHeld + KE + org-IAM");
+    std::env::remove_var("SOLUM_STORAGE_REGION");
+}
+
+#[tokio::test]
+#[allow(clippy::await_holding_lock)]
+async fn eu_ehds_refuses_without_org_iam() {
+    let _guard = env_lock().lock().unwrap();
+    std::env::set_var("SOLUM_STORAGE_REGION", "EU");
+    let dir = tempdir().unwrap();
+    let keys_dir = dir.path().join("keys");
+    std::fs::create_dir_all(&keys_dir).unwrap();
+    write_keypair_file(&keys_dir, "eu/no-iam");
+    let err = match build_state(&SidecarConfig {
+        bind: "127.0.0.1:0".parse().unwrap(),
+        profile: eu_profile(),
+        audit: dir.path().join("audit.jsonl"),
+        consent_store: dir.path().join("consent.jsonl"),
+        token: "tok".into(),
         keys_dir: Some(keys_dir),
         ephemeral: false,
         wrapped_keys_dir: None,
@@ -1427,25 +1512,191 @@ async fn kenya_dpa_customer_held_starts_with_ke_region() {
         fhir_store: None,
         subject_link_store: None,
         dual_write_dead_letter: None,
+    })
+    .await
+    {
+        Ok(_) => panic!("eu-ehds must require org-IAM"),
+        Err(e) => e,
     };
-    let state = build_state(&config).await.expect("kenya CustomerHeld + KE");
+    assert!(
+        err.contains("org-iam") || err.contains("client-asserted"),
+        "err={err}"
+    );
+}
+
+#[tokio::test]
+#[allow(clippy::await_holding_lock)]
+async fn eu_ehds_refuses_without_region_attestation() {
+    let _guard = env_lock().lock().unwrap();
     std::env::remove_var("SOLUM_STORAGE_REGION");
-    drop(_guard);
-    let app = app_router(state);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
-    });
-    let res = client()
-        .get(format!("http://{addr}/v1/audit/verify"))
-        .header(SIDECAR_TOKEN_HEADER, "kenya-ok")
+    let dir = tempdir().unwrap();
+    let keys_dir = dir.path().join("keys");
+    std::fs::create_dir_all(&keys_dir).unwrap();
+    write_keypair_file(&keys_dir, "eu/no-region");
+    let (jwks_src, _jwt, jwks_hold) = mint_rsa_jwks_and_token(&["solum-consent-ops"]);
+    let jwks = dir.path().join("jwks.json");
+    std::fs::copy(&jwks_src, &jwks).unwrap();
+    drop(jwks_hold);
+    let err = match build_state(&SidecarConfig {
+        bind: "127.0.0.1:0".parse().unwrap(),
+        profile: eu_profile(),
+        audit: dir.path().join("audit.jsonl"),
+        consent_store: dir.path().join("consent.jsonl"),
+        token: "tok".into(),
+        keys_dir: Some(keys_dir),
+        ephemeral: false,
+        wrapped_keys_dir: None,
+        org_iam_config: Some(org_iam_mapping()),
+        jwks_url: None,
+        jwks_file: Some(jwks),
+        oidc_issuer: Some(TEST_OIDC_ISSUER.into()),
+        oidc_audience: Some(TEST_OIDC_AUD.into()),
+        ehrbase_url: None,
+        cdr_template_opt: None,
+        fhir_store: None,
+        subject_link_store: None,
+        dual_write_dead_letter: None,
+    })
+    .await
+    {
+        Ok(_) => panic!("eu-ehds must require SOLUM_STORAGE_REGION"),
+        Err(e) => e,
+    };
+    assert!(
+        err.contains("SOLUM_STORAGE_REGION") || err.contains("attestation"),
+        "err={err}"
+    );
+}
+
+#[tokio::test]
+async fn audit_export_without_capability_is_forbidden() {
+    let token = "audit-export-deny";
+    let (addr, _dir) = spawn_ephemeral_sidecar(token).await;
+    let export = client()
+        .get(format!("http://{addr}/v1/audit/export"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .header("X-Solum-Actor", "practitioner/7")
+        .header("X-Solum-Capability", "solum:consent:grant")
         .send()
         .await
         .unwrap();
-    assert!(
-        res.status().is_success() || res.status().as_u16() == 400,
-        "sidecar up: {}",
-        res.status()
+    assert_eq!(
+        export.status(),
+        403,
+        "body={}",
+        export.text().await.unwrap()
     );
+}
+
+#[tokio::test]
+async fn fhir_get_rejects_cross_subject_idor() {
+    let token = "fhir-idor";
+    let (addr, _dir) = spawn_ephemeral_sidecar(token).await;
+    grant_care_provision_for(&addr.to_string(), token, "jane-1", None).await;
+    grant_care_provision_for(&addr.to_string(), token, "patient/99", None).await;
+    let create = client()
+        .post(format!("http://{addr}/v1/fhir/Patient"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "actor": "practitioner/h3",
+            "capability": ["solum:cdr:write"],
+            "subject": "jane-1",
+            "purpose": "care_provision",
+            "link_cdr": false,
+            "resource": {
+                "resourceType": "Patient",
+                "id": "jane-1",
+                "name": [{"family": "Doe"}]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        create.status(),
+        201,
+        "body={}",
+        create.text().await.unwrap()
+    );
+    let get = client()
+        .get(format!("http://{addr}/v1/fhir/Patient/jane-1"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .header("X-Solum-Actor", "practitioner/h3")
+        .header("X-Solum-Capability", "solum:cdr:read")
+        .header("X-Solum-Subject", "patient/99")
+        .header("X-Solum-Purpose", "care_provision")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(get.status(), 403, "body={}", get.text().await.unwrap());
+}
+
+#[tokio::test]
+async fn aql_without_quoted_subject_is_rejected() {
+    let ehr = spawn_mock_ehrbase().await;
+    let token = "aql-idor";
+    let (addr, _dir) =
+        spawn_ephemeral_sidecar_with_ehrbase(token, format!("http://{ehr}/ehrbase")).await;
+    grant_care_provision_http(&addr.to_string(), token).await;
+    let res = client()
+        .post(format!("http://{addr}/v1/cdr/aql"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "actor": "practitioner/h3",
+            "capability": ["solum:cdr:read"],
+            "subject": "patient/42",
+            "purpose": "care_provision",
+            "q": "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c"
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 400, "body={}", res.text().await.unwrap());
+}
+
+#[tokio::test]
+async fn fhir_store_jsonl_is_crypt4gh_not_plaintext() {
+    let token = "fhir-enc-store";
+    let (addr, dir) = spawn_ephemeral_sidecar(token).await;
+    grant_care_provision_for(&addr.to_string(), token, "enc-p", None).await;
+    let create = client()
+        .post(format!("http://{addr}/v1/fhir/Patient"))
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .json(&serde_json::json!({
+            "actor": "practitioner/h3",
+            "capability": ["solum:cdr:write"],
+            "subject": "enc-p",
+            "purpose": "care_provision",
+            "link_cdr": false,
+            "resource": {
+                "resourceType": "Patient",
+                "id": "enc-p",
+                "name": [{"family": "SecretFamily"}]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        create.status(),
+        201,
+        "body={}",
+        create.text().await.unwrap()
+    );
+    let raw = std::fs::read_to_string(dir.path().join("fhir_store.jsonl")).unwrap();
+    assert!(
+        !raw.contains("SecretFamily"),
+        "FHIR JSONL must not store plaintext: {raw}"
+    );
+    assert!(
+        raw.contains("ciphertext"),
+        "expected Crypt4GH envelope: {raw}"
+    );
+}
+
+#[test]
+fn non_loopback_bind_without_tls_is_refused() {
+    let bind: std::net::SocketAddr = "0.0.0.0:8787".parse().unwrap();
+    let err = validate_listen_bind(bind, false).unwrap_err();
+    assert!(err.contains("non-loopback"), "{err}");
 }

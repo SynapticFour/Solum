@@ -19,14 +19,14 @@ Profiles live in [`config/profiles/`](../config/profiles/). Each file is a juris
 | File | Status |
 |------|--------|
 | `eu-ehds.toml` | Present — EU EHDS Annex II orientation (`customer_held` only) |
-| `kenya-dpa.toml` | Present (**PROVISIONAL-PRODUCTION-CANDIDATE** — non-counsel Vorprüfung applied; real counsel still required) — Kenya DPA 2019 + Digital Health Act 2023 (`customer_held` only) |
+| `kenya-dpa.toml` | Present (**EVALUATION-ONLY** — non-counsel Vorprüfung applied; real counsel still required; **not** a production candidate) — Kenya DPA 2019 + Digital Health Act 2023 (`customer_held` only) |
 | `dev-local.toml` | Developer demos only — allows `ephemeral_test`; never for paid evaluations |
 | `planned/nigeria-ndpa.toml` | **DRAFT scaffold** — not auto-loaded; not counsel-reviewed ([planned/README.md](../config/profiles/planned/README.md)) |
 | `planned/south-africa-popia.toml` | **DRAFT scaffold** — not auto-loaded; not counsel-reviewed |
 
 ### Kenya (provisional)
 
-`kenya-dpa.toml` is a **PROVISIONAL-PRODUCTION-CANDIDATE** after a **non-counsel** Vorprüfung (counsel package (private)). It is **not** PRODUCTION, **not** ODPC-certified, and **not** for live patient system-of-record until qualified Kenya counsel confirms counsel package (private).
+`kenya-dpa.toml` is **EVALUATION-ONLY** after a **non-counsel** Vorprüfung. It is **not** a production candidate, **not** ODPC-certified, and **not** for live patient system-of-record until qualified Kenya counsel confirms.
 
 Engineering posture after Vorprüfung:
 
@@ -37,7 +37,7 @@ Engineering posture after Vorprüfung:
 - National Health Data Bank = operator obligation / Solum non-goal
 - Edge offline policies: written in [H4-OFFLINE-SYNC-POLICY.md](H4-OFFLINE-SYNC-POLICY.md); field reconcile remains K3
 
-**Portfolio decision:** Kenya is the **first non-EU geography** to drive toward production-ready (provisional). Work breakdown: [H4 geography decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md) · Showcase [H4-PILOT-CHECKLIST.md](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-PILOT-CHECKLIST.md) (K1 legal / K2 technical / K3 field).
+**Portfolio decision:** Kenya is the **first non-EU geography** under evaluation. It is **not** production-ready until counsel. Work breakdown: [H4 geography decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md) · Showcase [H4-PILOT-CHECKLIST.md](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-PILOT-CHECKLIST.md) (K1 legal / K2 technical / K3 field).
 
 Adding a jurisdiction: copy an existing TOML, adjust fields, drop it into the directory. `load_profiles_dir` picks up every `*.toml` without a code change (unless the schema itself is extended).
 
@@ -67,8 +67,8 @@ Example refusal: profile `eu-ehds` allows only `EU` / `EEA`, runtime sets `stora
 ## CLI smoke check
 
 ```bash
-# EU
-cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml
+# EU — operator must attest residency (not inferred from the profile default)
+SOLUM_STORAGE_REGION=EU cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml
 
 SOLUM_STORAGE_REGION=us-east-1 cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml
 # expect non-zero exit
@@ -92,4 +92,4 @@ SOLUM_STORAGE_REGION=KE solum-sidecar \
   --token "$SOLUM_SIDECAR_TOKEN"
 ```
 
-`kenya-dpa` remains **PROVISIONAL-PRODUCTION-CANDIDATE** until counsel confirms — check success ≠ ODPC clearance.
+`kenya-dpa` remains **EVALUATION-ONLY** until counsel confirms — check success ≠ ODPC clearance.

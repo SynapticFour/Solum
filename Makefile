@@ -1,5 +1,7 @@
 # Synaptic Four — common local verbs (fmt/lint/test).
-# Docker stack up/down/destroy will be added when a local compose path exists.
+# No generic product Docker image in this repo. Track B evaluation image:
+# deploy/h3-ehrbase/Dockerfile.sidecar (dev-local + SOLUM_ALLOW_PLAINTEXT_HTTP;
+# consumed by Solum-Demo compose). Production: reverse-proxy TLS in front of 127.0.0.1.
 
 .PHONY: fmt clippy test check deny verify
 

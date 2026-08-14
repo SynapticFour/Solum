@@ -14,6 +14,8 @@ members = [
     "examples/ferrum-companion",
     "examples/fhir-ips-export",
 ]
+# Vendored Crypt4GH fork is [patch.crates-io], not a workspace crate.
+exclude = ["third_party/crypt4gh"]
 
 [workspace.package]
 version = "0.1.0"

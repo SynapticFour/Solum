@@ -7,8 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Sidecar AuthZ** — pilot profiles (`eu-ehds`, `kenya-dpa`) require org-IAM (issuer + audience). Body `capability[]` is not an authorization source except `dev-local`. Ferrum `GET /v1/consent/status` on those profiles needs a Bearer JWT mapped to `solum:consent:read` (token alone is 403).
+- **Object-bound consent** — FHIR GET, subject-link GET, composition GET, and AQL must bind to the consented subject (fail-closed IDOR).
+- **Encryption at rest** — FHIR façade, subject-link, and dual-write dead-letter JSONL are Crypt4GH envelopes; leftover plaintext lines refuse to load.
+- **Audit/consent GET** — `/v1/audit/export`, `/v1/audit/verify`, `/v1/consent/status` require the matching capability (no token-only export).
+- **Listen policy** — non-loopback HTTP bind is refused; terminate TLS at a reverse proxy in front of `127.0.0.1`. `SOLUM_ALLOW_PLAINTEXT_HTTP=1` is honoured only with `dev-local` (Docker eval).
+- **JWKS** — stale URL refresh failure is fail-closed (503), not silent reuse of old keys.
+- **`link_cdr`** — refused (no EHRbase example compositions as patient data). CDR commit defaults `use_example=false`.
+- **Residency attestation** — pilot CLI/sidecar require explicit `SOLUM_STORAGE_REGION`; EU/EEA attestation refuses a contradictory `AWS_REGION`.
+- **JSONL budget** — façade files rotate at `SOLUM_JSONL_MAX_BYTES` (default 256 MiB). Audit hash-chain **refuses** appends above `SOLUM_AUDIT_MAX_BYTES` (default 512 MiB) instead of rotating evidence.
+
+### Changed
+
+- Kenya profile status **EVALUATION-ONLY** (was incorrectly labelled a production candidate). Docs no longer claim “EU and Africa as equal cores.”
+- Org-IAM JWTs must carry `iss` and `aud`.
+- CONTRIBUTING: no direct pushes to `main`; focused commits; no self-merge.
+- CodeQL on pull_request; dependency-review is fail-closed.
+- `deny.toml` default graph: `all-features = false`, `exclude-dev = true`.
+- CI `feature-paths` job: `ferrum-storage-backend` and mocked `aws-kms` on rustc 1.94.1 (AWS SDK MSRV); vendored crypt4gh tests on 1.91.1 (Alice/Bob key fixtures generated in CI; they are gitignored).
+- Release workflow: `workflow_dispatch` dry-run; builds `solum-sidecar` alongside `solum`.
+
 ### Fixed
 
+- Vendored crypt4gh on-disk fixtures restored to the Ferrum copies (`testfile.abcd` / `testfile.abbbc` without a trailing newline; edit-list expected spaces) so `feature-paths` can run the fork’s suite. Pre-commit `end-of-file-fixer` / `trailing-whitespace` skip those files.
 - **H3 Demo Dockerfile** — `deploy/h3-ehrbase/Dockerfile.sidecar` drops local `.cargo/config.toml` Ferrum path-patch so `make up-h3` builds without a sibling mount.
 - **IPS Bundle HL7 Validator** — deterministic UUID v5 `fullUrl`s, LOINC display **Patient Summary**, AllergyIntolerance `clinicalStatus` (ait-1), generated narratives → Validator + `hl7.fhir.uv.ips#2.0.0` **Success** (0 errors / 0 warnings).
 - **Composition.author** — Organization Bundle entry + `reference` (closes display-only author ANNAHME).

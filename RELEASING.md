@@ -5,7 +5,7 @@ This repository follows Semantic Versioning (`MAJOR.MINOR.PATCH`) for **GitHub R
 ## Before the first production SemVer tag
 
 1. Ensure [`.github/workflows/ci.yml`](.github/workflows/ci.yml) is green on `main`.
-2. Ensure [`.github/workflows/release.yml`](.github/workflows/release.yml) has been exercised successfully (tag push or dry-run on a throwaway `v0.0.0-rcN` if needed) so CLI binaries actually build and attach.
+2. Ensure [`.github/workflows/release.yml`](.github/workflows/release.yml) has been exercised successfully. Prefer **Actions → Release → Run workflow** with `create_release=false` (dry-run artifacts) before the first `v*` tag.
 3. Update [CHANGELOG.md](CHANGELOG.md): move `[Unreleased]` notes into a dated `## [X.Y.Z]` section.
 4. Confirm workspace `version` in root [`Cargo.toml`](Cargo.toml) matches the intended tag (or document intentional drift).
 5. **Do not** cut a production SemVer tag if release CI has never produced artifacts successfully.
@@ -18,13 +18,15 @@ git tag -a vX.Y.Z -m "vX.Y.Z"
 git push origin vX.Y.Z   # only when you intend to publish
 ```
 
-The `Release` workflow builds `solum` for:
+The `Release` workflow builds `solum` and `solum-sidecar` for:
 
 | Asset | Platform |
 |-------|----------|
 | `solum-x86_64-unknown-linux-gnu.tar.gz` | Linux x86_64 |
 | `solum-aarch64-apple-darwin.tar.gz` | macOS Apple Silicon |
 | `solum-x86_64-apple-darwin.tar.gz` | macOS Intel |
+| `solum-sidecar-x86_64-unknown-linux-gnu.tar.gz` | Linux x86_64 sidecar |
+| `solum-sidecar-aarch64-apple-darwin.tar.gz` | macOS Apple Silicon sidecar |
 
 and attaches them (plus `.sha256`) to the GitHub Release.
 

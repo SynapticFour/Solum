@@ -26,6 +26,17 @@ use crate::AuditEvent;
 /// Hash that precedes the first record in a chain (64 hex zero characters).
 pub const GENESIS_HASH: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
+/// Default audit-file cap (512 MiB). Override with `SOLUM_AUDIT_MAX_BYTES`.
+pub const DEFAULT_AUDIT_MAX_BYTES: u64 = 512 * 1024 * 1024;
+
+fn audit_max_bytes() -> u64 {
+    std::env::var("SOLUM_AUDIT_MAX_BYTES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(DEFAULT_AUDIT_MAX_BYTES)
+}
+
 #[derive(Debug, Error)]
 pub enum AuditStoreError {
     #[error("audit store I/O error at {path}: {source}")]
@@ -44,6 +55,11 @@ pub enum AuditStoreError {
     },
     #[error("audit chain broken at seq {seq}: {reason}")]
     ChainBroken { seq: u64, reason: String },
+    #[error(
+        "audit store {path} would exceed SOLUM_AUDIT_MAX_BYTES ({max}); \
+         archive the sealed chain before appending (hash chain is not silently rotated)"
+    )]
+    Capacity { path: String, max: u64 },
 }
 
 /// One persisted, hash-chained audit record.
@@ -119,12 +135,21 @@ pub struct FileAuditStore {
     path: PathBuf,
     last_seq: u64,
     last_hash: String,
+    max_bytes: u64,
 }
 
 impl FileAuditStore {
     /// Open (or create) an append-only audit log at `path`, recovering chain
     /// state (last sequence number + last hash) from any existing content.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, AuditStoreError> {
+        Self::open_with_limit(path, audit_max_bytes())
+    }
+
+    /// Same as [`Self::open`] with an explicit byte cap (tests / operators).
+    pub fn open_with_limit(
+        path: impl AsRef<Path>,
+        max_bytes: u64,
+    ) -> Result<Self, AuditStoreError> {
         let path = path.as_ref().to_path_buf();
         let (last_seq, last_hash) = if path.exists() {
             let records = Self::read_records(&path)?;
@@ -140,6 +165,7 @@ impl FileAuditStore {
             path,
             last_seq,
             last_hash,
+            max_bytes,
         })
     }
 
@@ -191,6 +217,13 @@ impl FileAuditStore {
             })?;
         let mut line = serde_json::to_string(&record)?;
         line.push('\n');
+        let current_len = file.metadata().map(|m| m.len()).unwrap_or(0);
+        if current_len.saturating_add(line.len() as u64) > self.max_bytes {
+            return Err(AuditStoreError::Capacity {
+                path: self.path.display().to_string(),
+                max: self.max_bytes,
+            });
+        }
         file.write_all(line.as_bytes())
             .and_then(|_| file.sync_all())
             .map_err(|source| AuditStoreError::Io {
@@ -341,5 +374,22 @@ mod tests {
         let json = store.export_helios_json().unwrap();
         assert!(json.contains("solum-audit-helios-chain-v1"));
         assert!(json.contains("access.granted"));
+    }
+
+    #[test]
+    fn refuses_append_when_over_byte_cap() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.jsonl");
+        {
+            let mut store = FileAuditStore::open_with_limit(&path, u64::MAX).unwrap();
+            store.append(sample_event("access.granted")).unwrap();
+        }
+        let len = std::fs::metadata(&path).unwrap().len();
+        let mut store = FileAuditStore::open_with_limit(&path, len).unwrap();
+        let err = store
+            .append(sample_event("data.read"))
+            .expect_err("append must fail when file is already at the byte cap");
+        assert!(matches!(err, AuditStoreError::Capacity { .. }));
+        assert!(store.verify_chain().is_ok());
     }
 }

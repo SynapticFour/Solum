@@ -29,6 +29,8 @@ required_field_categories = [
     "discharge_reports",
     "clinical_notes",
     "consent_record",
+    "fhir_resource",
+    "subject_link",
 ]
 allowed_key_custody = ["customer_held", "ephemeral_test"]
 
@@ -76,3 +78,6 @@ notes = [
     "DEV ONLY — ephemeral keys and loose residency are intentional for local demos.",
     "Paid evaluations and pilots must use eu-ehds (or a reviewed jurisdiction profile) with CustomerHeld --keypair files.",
 ]
+
+[auth]
+allow_client_asserted_capabilities = true

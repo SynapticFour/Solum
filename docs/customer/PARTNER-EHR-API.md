@@ -2,15 +2,22 @@
 
 Solum provides **APIs**, not a hospital EHR UI. Partners (or site IT) build clinical UX against these surfaces while Solum owns compliance, audit, and optional openEHR persistence.
 
-**Auth:** every route requires `X-Solum-Sidecar-Token`. Mutating routes need GTM-1 capabilities (or H2.2 org-IAM Bearer JWT → CAP_*).
+**Auth:** every route requires `X-Solum-Sidecar-Token`.
+
+- **Pilot profiles (`eu-ehds`, `kenya-dpa`):** org-IAM Bearer JWT is required (`iss` + `aud`). Body `capability[]` is ignored. Privileged GETs need the matching CAP from JWT groups.
+- **`dev-local` only:** JSON `capability[]` / `X-Solum-Capability` may mint scopes.
+- Track B reads are bound to the consented subject (FHIR resource, EHR id, or quoted AQL subject). Cross-subject GET → 403.
+- There is **no** `solum:*` wildcard. List exact CAP strings below.
 
 ## Capability strings
 
 | Capability | Use |
 |------------|-----|
-| `solum:consent:*` / `solum:crypto:*` | Track A Stage-1 |
+| `solum:consent:grant` / `revoke` / `read` | Track A consent |
+| `solum:crypto:encrypt` / `decrypt` | Track A field crypto |
 | `solum:cdr:write` | CDR, FHIR create, subject-link upsert, template upload |
 | `solum:cdr:read` | Composition/FHIR/AQL/subject-link read |
+| `solum:audit:export` / `verify` | Audit GET |
 
 ## Track B — openEHR CDR
 
