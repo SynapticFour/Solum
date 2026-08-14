@@ -10,6 +10,8 @@ unmaintained = "workspace"
 ignore = [
     { id = "RUSTSEC-2023-0071", reason = "Same rsa advisory via two jsonwebtoken paths: (1) transitive jsonwebtoken <- ferrum-core (RSA-signed JWT verification); (2) direct jsonwebtoken dependency of solum-auth-verify (rust_crypto feature, RS256 path). Not via solum-crypto's own Crypt4GH field encryption. No new risk — one advisory ID, two reference sources. No upstream fix available yet. Tracked upstream in Ferrum; revisit when ferrum-core migrates away from RSA-based JWT or a patched rsa crate ships. See LICENSE-COMPATIBILITY.md / this entry for the accepted-risk record." },
     { id = "RUSTSEC-2026-0104", reason = "CRL-parse panic in rustls-webpki 0.101.7 via rustls 0.21.12 <- aws-smithy-http-client 1.2.0 (AWS SDK KMS/S3/STS used by solum-crypto and ferrum-storage). Workspace already has patched rustls-webpki 0.103.13 on the rustls 0.23 path; rustls 0.21 cannot take 0.103. Not reachable until a CRL is parsed, and only on the AWS TLS stack. Revisit when aws-smithy-http-client / aws-sdk-* drop rustls 0.21. See LICENSE-COMPATIBILITY.md." },
+    { id = "RUSTSEC-2026-0098", reason = "Same rustls-webpki 0.101.7 / rustls 0.21.12 AWS SDK path as RUSTSEC-2026-0104: URI name constraints incorrectly accepted. Patched in 0.103.12+; rustls 0.21 cannot take that series. Revisit when aws-sdk-* drop rustls 0.21. See LICENSE-COMPATIBILITY.md." },
+    { id = "RUSTSEC-2026-0099", reason = "Same rustls-webpki 0.101.7 / rustls 0.21.12 AWS SDK path as RUSTSEC-2026-0104: wildcard name constraints incorrectly accepted. Patched in 0.103.12+; rustls 0.21 cannot take that series. Revisit when aws-sdk-* drop rustls 0.21. See LICENSE-COMPATIBILITY.md." },
 ]
 
 [licenses]

@@ -66,6 +66,8 @@ From [`deny.toml`](../deny.toml) `[advisories].ignore` and [LICENSE-COMPATIBILIT
 - **Reason (deny.toml):** CRL-parse panic in `rustls-webpki` 0.101.7 via `rustls` 0.21.12 ← `aws-smithy-http-client` (AWS SDK KMS/S3/STS used by `solum-crypto` and `ferrum-storage`). Workspace already has patched `rustls-webpki` 0.103.13 on the `rustls` 0.23 path; `rustls` 0.21 cannot take 0.103. Not reachable until a CRL is parsed, and only on the AWS TLS stack.
 - **Revisit when:** `aws-smithy-http-client` / `aws-sdk-*` drop `rustls` 0.21 — then drop the ignore and re-run `cargo deny check advisories`.
 
+Same lockfile pin also currently requires ignoring [RUSTSEC-2026-0098](https://rustsec.org/advisories/RUSTSEC-2026-0098) and [RUSTSEC-2026-0099](https://rustsec.org/advisories/RUSTSEC-2026-0099) (name-constraint bugs in `rustls-webpki` 0.101.7). Same blast radius and revisit condition.
+
 ### Gitleaks allowlist — Crypt4GH PEM armor headers
 
 From [`.gitleaks.toml`](../.gitleaks.toml) (`private-key` rule allowlist, `condition = "AND"`):
