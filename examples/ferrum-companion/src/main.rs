@@ -69,15 +69,18 @@ async fn run_async() -> Result<(), String> {
 #[cfg(feature = "storage-backend")]
 async fn storage_round_trip() -> Result<(), String> {
     use ferrum_storage::LocalStorage;
-    use solum_core::crypto::EphemeralTestKeyProvider;
-    use solum_core::{example_eu_runtime, Deployment};
+    use solum_core::crypto::CustomerHeldKeyProvider;
+    use solum_core::identity;
+    use solum_core::{example_eu_runtime, Deployment, SolumActor};
 
     let work = tempfile::tempdir().map_err(|e| e.to_string())?;
     let profile_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/profiles/eu-ehds.toml");
     let key_ref = KeyRef::new("companion/storage-1");
-    let mut keys = EphemeralTestKeyProvider::new();
-    keys.generate_test_keypair(key_ref.clone())
+    let (pubkey, privkey) =
+        solum_core::crypto::generate_operator_keypair().map_err(|e| e.to_string())?;
+    let mut keys = CustomerHeldKeyProvider::new();
+    keys.register_customer_keypair(key_ref.clone(), pubkey, privkey)
         .map_err(|e| e.to_string())?;
 
     let local = LocalStorage::new(work.path().join("objects")).map_err(|e| e.to_string())?;
@@ -91,6 +94,18 @@ async fn storage_round_trip() -> Result<(), String> {
     .map_err(|e| e.to_string())?
     .with_storage(local);
 
+    let actor = SolumActor::standalone(
+        "practitioner/7",
+        vec![
+            identity::CAP_CONSENT_GRANT.into(),
+            identity::CAP_CRYPTO_ENCRYPT.into(),
+            identity::CAP_CRYPTO_DECRYPT.into(),
+        ],
+    );
+    deployment
+        .grant_consent_as("patient/42", "care_provision", vec![], &actor)
+        .map_err(|e| e.to_string())?;
+
     let plain = b"patient-summary-ferrum-storage-demo";
     let storage_key = "fields/patient_summary/companion-1.json";
     deployment
@@ -98,7 +113,9 @@ async fn storage_round_trip() -> Result<(), String> {
             "patient_summary",
             plain,
             &key_ref,
-            "ferrum:passport:researcher@example.org",
+            &actor,
+            "patient/42",
+            "care_provision",
             storage_key,
         )
         .await
@@ -107,7 +124,9 @@ async fn storage_round_trip() -> Result<(), String> {
         .read_and_decrypt_field(
             storage_key,
             &key_ref,
-            "ferrum:passport:researcher@example.org",
+            &actor,
+            "patient/42",
+            "care_provision",
         )
         .await
         .map_err(|e| e.to_string())?;

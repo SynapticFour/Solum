@@ -53,6 +53,7 @@ use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use tokio::sync::Mutex as AsyncMutex;
 
 use axum::body::Body;
 use axum::extract::{Path as AxumPath, Query, State};
@@ -69,8 +70,10 @@ use solum_core::crypto::{
     Crypt4ghKeyProvider, Crypt4ghKeys, CustomerHeldKeyProvider, EncryptedField,
     EphemeralTestKeyProvider, KeyCustody, KeyRef,
 };
+use solum_core::profiles::TransferMechanism;
 use solum_core::{
-    example_eu_runtime, query_consent_status, ActorSource, Deployment, SolumActor, SolumError,
+    apply_runtime_env_overrides, example_eu_runtime, query_consent_status, Deployment, SolumActor,
+    SolumError,
 };
 use solum_identity::OrgCapMapping;
 use solum_openehr::{OpenEhrAdapter, OpenEhrError, PINNED_TEMPLATE_ID, PINNED_TEMPLATE_OPT};
@@ -78,21 +81,13 @@ use subtle::ConstantTimeEq;
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
-/// Same warning text as the CLI (`solum-core` binary) ephemeral path.
-pub const EPHEMERAL_KEY_WARNING: &str = "\
-⚠ Using EphemeralTestKeyProvider — keys are NOT persisted across runs
-and are NOT suitable for real patient data or paid evaluations.
-Requires SOLUM_ALLOW_EPHEMERAL=1 and a profile that allows ephemeral_test
-(e.g. config/profiles/dev-local.toml). Pilot profiles (eu-ehds, kenya-dpa)
-refuse EphemeralTest custody at startup.
-Keys exist only in the sidecar process memory for this run; restarting
-the process loses them. Demo-only — not an HSM.";
+pub use solum_core::crypto::{KeypairFile, CUSTOMER_HELD_KEY_NOTE, EPHEMERAL_KEY_WARNING};
 
-/// Same honesty note as the CLI CustomerHeld `--keypair` path.
-pub const CUSTOMER_HELD_KEY_NOTE: &str = "\
-Using CustomerHeld key material from --keys-dir (operator-supplied files).
-Solum does not mint these keys during encrypt; protect keypair files
-as you would other secrets (0600 on Unix recommended).";
+/// GET identity headers (capabilities must not travel in the query string).
+pub const ACTOR_HEADER: &str = "x-solum-actor";
+pub const CAPABILITY_HEADER: &str = "x-solum-capability";
+pub const SUBJECT_HEADER: &str = "x-solum-subject";
+pub const PURPOSE_HEADER: &str = "x-solum-purpose";
 
 /// Honesty note for AWS KMS envelope path (feature `aws-kms` / `--wrapped-keys-dir`).
 pub const AWS_KMS_KEY_NOTE: &str = "\
@@ -105,17 +100,6 @@ pub const EPHEMERAL_WARNING_HEADER: &str = "x-solum-ephemeral-keys";
 
 /// Shared-secret header for the sidecar access gate (not GTM-1).
 pub const SIDECAR_TOKEN_HEADER: &str = "x-solum-sidecar-token";
-
-/// Same JSON layout as CLI `KeypairFile` (`solum crypto keygen` output).
-///
-/// `pubkey` / `privkey` are raw byte arrays (serde JSON number arrays), matching
-/// the CLI — not a divergent sidecar schema.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KeypairFile {
-    pub key_ref: String,
-    pub pubkey: Vec<u8>,
-    pub privkey: Vec<u8>,
-}
 
 /// Shareable handle to a single [`EphemeralTestKeyProvider`].
 #[derive(Clone)]
@@ -282,7 +266,7 @@ impl Crypt4ghKeyProvider for SidecarKeys {
 
 /// Process-wide sidecar state: one Deployment over [`SidecarKeys`].
 pub struct AppState {
-    deployment: Mutex<Deployment<SidecarKeys>>,
+    deployment: AsyncMutex<Deployment<SidecarKeys>>,
     keys: SidecarKeys,
     profile: PathBuf,
     audit_path: PathBuf,
@@ -299,13 +283,17 @@ pub struct AppState {
     subject_link_store: Mutex<SubjectLinkStore>,
     /// Dual-write dead-letter JSONL (H3.2 live webhook). Always set at startup.
     dual_write_dead_letter: PathBuf,
+    /// Runtime used at [`Deployment::open`] (consent status must match custody).
+    runtime: solum_core::profiles::RuntimeConfig,
 }
 
 /// Org-IAM runtime: JWKS verifier + group→CAP mapping.
-#[derive(Clone)]
 pub struct OrgIamRuntime {
     mapping: OrgCapMapping,
-    verifier: JwksVerifier,
+    verifier: AsyncMutex<JwksVerifier>,
+    jwks_url: Option<String>,
+    verify_config: VerifyConfig,
+    fetched_at: AsyncMutex<Option<std::time::Instant>>,
 }
 
 /// Startup configuration (CLI flags / env).
@@ -351,9 +339,7 @@ impl SidecarConfig {
         provider: Option<&str>,
     ) -> solum_core::profiles::RuntimeConfig {
         let mut runtime = example_eu_runtime();
-        if let Ok(region) = std::env::var("SOLUM_STORAGE_REGION") {
-            runtime.storage_region = region;
-        }
+        apply_runtime_env_overrides(&mut runtime);
         runtime.key_management.provider =
             provider.map(|s| s.to_string()).or_else(|| match &custody {
                 KeyCustody::CustomerHeld => Some("customer-held-file".into()),
@@ -516,9 +502,10 @@ pub async fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String
         )
     };
 
+    let runtime = config.runtime_config(custody, provider);
     let deployment = Deployment::open(
         &config.profile,
-        &config.runtime_config(custody, provider),
+        &runtime,
         &config.audit,
         &config.consent_store,
         keys.clone(),
@@ -554,7 +541,7 @@ pub async fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String
     let subject_link_store = SubjectLinkStore::open(&subject_path)?;
 
     Ok(Arc::new(AppState {
-        deployment: Mutex::new(deployment),
+        deployment: AsyncMutex::new(deployment),
         keys,
         profile: config.profile.clone(),
         audit_path: config.audit.clone(),
@@ -574,6 +561,7 @@ pub async fn build_state(config: &SidecarConfig) -> Result<Arc<AppState>, String
         fhir_store: Mutex::new(fhir_store),
         subject_link_store: Mutex::new(subject_link_store),
         dual_write_dead_letter,
+        runtime,
     }))
 }
 
@@ -597,9 +585,9 @@ async fn load_org_iam(config: &SidecarConfig) -> Result<Option<OrgIamRuntime>, S
     let verifier = if let Some(file) = config.jwks_file.as_ref() {
         let json = std::fs::read_to_string(file)
             .map_err(|e| format!("failed to read JWKS file {}: {e}", file.display()))?;
-        JwksVerifier::from_jwks_json(&json, verify_config).map_err(|e| e.to_string())?
+        JwksVerifier::from_jwks_json(&json, verify_config.clone()).map_err(|e| e.to_string())?
     } else if let Some(url) = config.jwks_url.as_ref() {
-        JwksVerifier::from_url(url, verify_config)
+        JwksVerifier::from_url(url, verify_config.clone())
             .await
             .map_err(|e| e.to_string())?
     } else {
@@ -613,7 +601,13 @@ async fn load_org_iam(config: &SidecarConfig) -> Result<Option<OrgIamRuntime>, S
         entries = mapping.entries.len(),
         "org-IAM enabled (H2.2): Bearer JWT groups → CAP_*"
     );
-    Ok(Some(OrgIamRuntime { mapping, verifier }))
+    Ok(Some(OrgIamRuntime {
+        mapping,
+        verifier: AsyncMutex::new(verifier),
+        jwks_url: config.jwks_url.clone(),
+        verify_config,
+        fetched_at: AsyncMutex::new(Some(std::time::Instant::now())),
+    }))
 }
 
 /// Axum router with auth middleware and `/v1/*` routes.
@@ -637,6 +631,7 @@ pub fn app_router(state: Arc<AppState>) -> Router {
             get(cdr_get_composition),
         )
         .route("/v1/cdr/aql", post(cdr_aql))
+        .route("/v1/transfer/check", post(transfer_check))
         .route("/v1/cdr/subject-link", post(subject_link_upsert))
         .route(
             "/v1/cdr/subject-link/:solum_subject_id",
@@ -658,16 +653,11 @@ pub fn app_router(state: Arc<AppState>) -> Router {
 
 /// Same construction as CLI `cli_actor` in `solum-core` `main.rs`.
 pub fn sidecar_actor(subject_id: String, capabilities: Vec<String>) -> SolumActor {
-    SolumActor {
-        subject_id,
-        display: None,
-        source: ActorSource::LocalDev,
-        scopes: capabilities,
-    }
+    SolumActor::standalone(subject_id, capabilities)
 }
 
 /// Resolve the actor for a mutating request (org-IAM or client capability[]).
-fn resolve_mutating_actor(
+async fn resolve_mutating_actor(
     state: &AppState,
     headers: &HeaderMap,
     body_actor: String,
@@ -700,7 +690,21 @@ fn resolve_mutating_actor(
         ));
     };
 
-    let verified = match org.verifier.verify(token) {
+    const JWKS_TTL: std::time::Duration = std::time::Duration::from_secs(3600);
+    if let Some(url) = org.jwks_url.as_ref() {
+        let stale = {
+            let fetched = org.fetched_at.lock().await;
+            fetched.map(|t| t.elapsed() >= JWKS_TTL).unwrap_or(true)
+        };
+        if stale {
+            if let Ok(fresh) = JwksVerifier::from_url(url, org.verify_config.clone()).await {
+                *org.verifier.lock().await = fresh;
+                *org.fetched_at.lock().await = Some(std::time::Instant::now());
+            }
+        }
+    }
+
+    let verified = match org.verifier.lock().await.verify(token) {
         Ok(v) => v,
         Err(e) => {
             return Err(Box::new(
@@ -718,9 +722,8 @@ fn resolve_mutating_actor(
 
     let claim_vals = verified.claim_values(&org.mapping.claim_path);
     let scopes = org.mapping.resolve_capabilities(&claim_vals);
-    // body.capability intentionally ignored in org-IAM mode
     let _ = body_capability;
-    Ok(SolumActor {
+    let actor = SolumActor {
         subject_id: verified.subject,
         display: if body_actor.is_empty() {
             None
@@ -729,7 +732,18 @@ fn resolve_mutating_actor(
         },
         source: verified.actor_source,
         scopes,
-    })
+    };
+    {
+        let mut dep = state.deployment.lock().await;
+        let mut details = serde_json::Map::new();
+        if let Some(iss) = verified.issuer.as_ref() {
+            details.insert("issuer".into(), serde_json::Value::String(iss.clone()));
+        }
+        if let Err(e) = dep.record_identity_authenticated_as(&actor, details) {
+            return Err(Box::new(map_solum_err(e)));
+        }
+    }
+    Ok(actor)
 }
 
 async fn sidecar_token_middleware(
@@ -780,11 +794,19 @@ struct ErrorBody {
 
 fn map_solum_err(err: SolumError) -> Response {
     match err {
-        SolumError::Authorization(e) => (
+        SolumError::Authorization(_) | SolumError::ConsentDenied { .. } => (
             StatusCode::FORBIDDEN,
             Json(ErrorBody {
                 error: "forbidden".into(),
-                message: e.to_string(),
+                message: err.to_string(),
+            }),
+        )
+            .into_response(),
+        SolumError::Audit(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorBody {
+                error: "internal".into(),
+                message: err.to_string(),
             }),
         )
             .into_response(),
@@ -944,23 +966,11 @@ async fn consent_grant(
     headers: HeaderMap,
     Json(body): Json<ConsentGrantRequest>,
 ) -> Response {
-    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability).await {
         Ok(a) => a,
         Err(r) => return *r,
     };
-    let mut deployment = match state.deployment.lock() {
-        Ok(g) => g,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "internal".into(),
-                    message: "deployment lock poisoned".into(),
-                }),
-            )
-                .into_response();
-        }
-    };
+    let mut deployment = state.deployment.lock().await;
     match deployment.grant_consent_as(&body.subject, &body.purpose, body.scope, &actor) {
         Ok(record) => (StatusCode::CREATED, Json(record)).into_response(),
         Err(e) => map_solum_err(e),
@@ -972,23 +982,11 @@ async fn consent_revoke(
     headers: HeaderMap,
     Json(body): Json<ConsentRevokeRequest>,
 ) -> Response {
-    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability).await {
         Ok(a) => a,
         Err(r) => return *r,
     };
-    let mut deployment = match state.deployment.lock() {
-        Ok(g) => g,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "internal".into(),
-                    message: "deployment lock poisoned".into(),
-                }),
-            )
-                .into_response();
-        }
-    };
+    let mut deployment = state.deployment.lock().await;
     match deployment.revoke_consent_as(&body.subject, &body.purpose, &actor) {
         Ok(record) => (StatusCode::OK, Json(record)).into_response(),
         Err(e) => map_solum_err(e),
@@ -999,18 +997,9 @@ async fn consent_status(
     State(state): State<Arc<AppState>>,
     Query(q): Query<ConsentStatusQuery>,
 ) -> Response {
-    // Consent status does not touch Crypt4GH keys — CustomerHeld runtime matches
-    // pilot profiles (same as CLI consent status).
-    let runtime = {
-        let mut runtime = example_eu_runtime();
-        if let Ok(region) = std::env::var("SOLUM_STORAGE_REGION") {
-            runtime.storage_region = region;
-        }
-        runtime
-    };
     match query_consent_status(
         &state.profile,
-        &runtime,
+        &state.runtime,
         &state.consent_path,
         &q.subject,
         &q.purpose,
@@ -1048,23 +1037,11 @@ async fn crypto_encrypt(
     if let Err(resp) = ensure_ephemeral_key_for_encrypt(&state.keys, &key_ref) {
         return *resp;
     }
-    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability).await {
         Ok(a) => a,
         Err(r) => return *r,
     };
-    let mut deployment = match state.deployment.lock() {
-        Ok(g) => g,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "internal".into(),
-                    message: "deployment lock poisoned".into(),
-                }),
-            )
-                .into_response();
-        }
-    };
+    let mut deployment = state.deployment.lock().await;
     let (headers, warning) = crypto_response_meta(&state.keys);
     match deployment.encrypt_field_as(
         &body.category,
@@ -1090,23 +1067,11 @@ async fn crypto_decrypt(
     Json(body): Json<DecryptRequest>,
 ) -> Response {
     let key_ref = KeyRef::new(body.key_ref);
-    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability).await {
         Ok(a) => a,
         Err(r) => return *r,
     };
-    let mut deployment = match state.deployment.lock() {
-        Ok(g) => g,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    error: "internal".into(),
-                    message: "deployment lock poisoned".into(),
-                }),
-            )
-                .into_response();
-        }
-    };
+    let mut deployment = state.deployment.lock().await;
     let (headers, warning) = crypto_response_meta(&state.keys);
     match deployment.decrypt_field_as(&body.field, &key_ref, &actor, &body.subject, &body.purpose) {
         Ok(plaintext) => (
@@ -1123,15 +1088,21 @@ async fn crypto_decrypt(
 }
 
 async fn audit_export(State(state): State<Arc<AppState>>) -> Response {
-    // Read-only open of the same path Deployment appends to (fsync'd per append).
     match FileAuditStore::open(&state.audit_path) {
         Ok(store) => match store.export_helios_json() {
-            Ok(json) => (
-                StatusCode::OK,
-                [(header::CONTENT_TYPE, "application/json")],
-                json,
-            )
-                .into_response(),
+            Ok(json) => {
+                let actor = sidecar_actor("sidecar:audit-export".into(), vec![]);
+                let mut dep = state.deployment.lock().await;
+                if let Err(e) = dep.record_data_export_as(&actor, serde_json::Map::new()) {
+                    return map_solum_err(e);
+                }
+                (
+                    StatusCode::OK,
+                    [(header::CONTENT_TYPE, "application/json")],
+                    json,
+                )
+                    .into_response()
+            }
             Err(e) => (
                 StatusCode::BAD_REQUEST,
                 Json(ErrorBody {
@@ -1189,6 +1160,10 @@ pub struct CdrActorBody {
     pub actor: String,
     #[serde(default)]
     pub capability: Vec<String>,
+    #[serde(default)]
+    pub subject: Option<String>,
+    #[serde(default)]
+    pub purpose: Option<String>,
     /// When true (default for commit), fetch EHRbase canonical example for the template.
     #[serde(default)]
     pub use_example: Option<bool>,
@@ -1201,6 +1176,7 @@ pub struct CdrActorBody {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct CdrReadQuery {
     pub actor: String,
     /// Comma-separated capability strings (GET cannot send JSON arrays cleanly).
@@ -1270,6 +1246,115 @@ fn parse_capability_csv(s: &str) -> Vec<String> {
         .collect()
 }
 
+fn header_nonempty(headers: &HeaderMap, name: &str) -> Option<String> {
+    headers
+        .get(name)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+fn missing_header(name: &str) -> Box<Response> {
+    Box::new(
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorBody {
+                error: "bad_request".into(),
+                message: format!("missing header {name}"),
+            }),
+        )
+            .into_response(),
+    )
+}
+
+fn require_subject_purpose(
+    subject: Option<&str>,
+    purpose: Option<&str>,
+) -> Result<(String, String), Box<Response>> {
+    let subject = subject
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            Box::new(
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorBody {
+                        error: "bad_request".into(),
+                        message: "subject is required for this operation".into(),
+                    }),
+                )
+                    .into_response(),
+            )
+        })?;
+    let purpose = purpose
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            Box::new(
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorBody {
+                        error: "bad_request".into(),
+                        message: "purpose is required for this operation".into(),
+                    }),
+                )
+                    .into_response(),
+            )
+        })?;
+    Ok((subject.to_string(), purpose.to_string()))
+}
+
+async fn actor_from_get_headers(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<(SolumActor, String, String), Box<Response>> {
+    let actor_id =
+        header_nonempty(headers, ACTOR_HEADER).ok_or_else(|| missing_header(ACTOR_HEADER))?;
+    let caps = header_nonempty(headers, CAPABILITY_HEADER)
+        .map(|s| parse_capability_csv(&s))
+        .unwrap_or_default();
+    let subject =
+        header_nonempty(headers, SUBJECT_HEADER).ok_or_else(|| missing_header(SUBJECT_HEADER))?;
+    let purpose =
+        header_nonempty(headers, PURPOSE_HEADER).ok_or_else(|| missing_header(PURPOSE_HEADER))?;
+    let actor = resolve_mutating_actor(state, headers, actor_id, caps).await?;
+    Ok((actor, subject, purpose))
+}
+
+fn lock_std<'a, T>(
+    mutex: &'a Mutex<T>,
+    name: &str,
+) -> Result<std::sync::MutexGuard<'a, T>, String> {
+    mutex.lock().map_err(|_| format!("{name} lock poisoned"))
+}
+
+async fn authorize_cdr_write_consented(
+    state: &AppState,
+    actor: &SolumActor,
+    subject: &str,
+    purpose: &str,
+    operation: &str,
+) -> Result<(), Response> {
+    let mut dep = state.deployment.lock().await;
+    dep.authorize_cdr_write_as(actor).map_err(map_solum_err)?;
+    dep.require_consent_as(actor, subject, purpose, operation)
+        .map_err(map_solum_err)
+}
+
+async fn authorize_cdr_read_consented(
+    state: &AppState,
+    actor: &SolumActor,
+    subject: &str,
+    purpose: &str,
+    operation: &str,
+) -> Result<(), Response> {
+    let mut dep = state.deployment.lock().await;
+    dep.authorize_cdr_read_as(actor).map_err(map_solum_err)?;
+    dep.require_consent_as(actor, subject, purpose, operation)
+        .map_err(map_solum_err)
+}
+
 fn load_template_opt(state: &AppState) -> Result<String, Box<Response>> {
     if let Some(path) = state.cdr_template_opt.as_ref() {
         return fs::read_to_string(path).map_err(|e| {
@@ -1293,12 +1378,12 @@ async fn cdr_upload_template(
     headers: HeaderMap,
     Json(body): Json<CdrActorBody>,
 ) -> Response {
-    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability).await {
         Ok(a) => a,
         Err(r) => return *r,
     };
     {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
+        let mut dep = state.deployment.lock().await;
         if let Err(e) = dep.authorize_cdr_write_as(&actor) {
             return map_solum_err(e);
         }
@@ -1315,7 +1400,7 @@ async fn cdr_upload_template(
         return map_openehr_err(e);
     }
     {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
+        let mut dep = state.deployment.lock().await;
         let mut details = serde_json::Map::new();
         details.insert(
             "template_id".into(),
@@ -1340,26 +1425,30 @@ async fn cdr_create_ehr(
     headers: HeaderMap,
     Json(body): Json<CdrActorBody>,
 ) -> Response {
-    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
-        Ok(a) => a,
-        Err(r) => return *r,
-    };
-    {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
-        if let Err(e) = dep.authorize_cdr_write_as(&actor) {
-            return map_solum_err(e);
-        }
-    }
     let client = match state.openehr.client() {
         Ok(c) => c,
         Err(e) => return map_openehr_err(e),
     };
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability).await {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    let (subject, purpose) =
+        match require_subject_purpose(body.subject.as_deref(), body.purpose.as_deref()) {
+            Ok(v) => v,
+            Err(r) => return *r,
+        };
+    if let Err(e) =
+        authorize_cdr_write_consented(&state, &actor, &subject, &purpose, "cdr_create_ehr").await
+    {
+        return e;
+    }
     let ehr_id = match client.create_ehr().await {
         Ok(id) => id,
         Err(e) => return map_openehr_err(e),
     };
     {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
+        let mut dep = state.deployment.lock().await;
         let mut details = serde_json::Map::new();
         details.insert("ehr_id".into(), serde_json::Value::String(ehr_id.clone()));
         if let Err(e) = dep.record_cdr_event_as(&actor, "cdr.ehr.created", details) {
@@ -1375,15 +1464,20 @@ async fn cdr_commit_composition(
     AxumPath(ehr_id): AxumPath<String>,
     Json(body): Json<CdrActorBody>,
 ) -> Response {
-    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability).await {
         Ok(a) => a,
         Err(r) => return *r,
     };
+    let (subject, purpose) =
+        match require_subject_purpose(body.subject.as_deref(), body.purpose.as_deref()) {
+            Ok(v) => v,
+            Err(r) => return *r,
+        };
+    if let Err(e) =
+        authorize_cdr_write_consented(&state, &actor, &subject, &purpose, "cdr_commit_composition")
+            .await
     {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
-        if let Err(e) = dep.authorize_cdr_write_as(&actor) {
-            return map_solum_err(e);
-        }
+        return e;
     }
     let client = match state.openehr.client() {
         Ok(c) => c,
@@ -1418,7 +1512,7 @@ async fn cdr_commit_composition(
         Err(e) => return map_openehr_err(e),
     };
     {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
+        let mut dep = state.deployment.lock().await;
         let mut details = serde_json::Map::new();
         details.insert(
             "ehr_id".into(),
@@ -1451,18 +1545,16 @@ async fn cdr_get_composition(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     AxumPath((ehr_id, composition_uid)): AxumPath<(String, String)>,
-    Query(q): Query<CdrReadQuery>,
 ) -> Response {
-    let caps = parse_capability_csv(&q.capability);
-    let actor = match resolve_mutating_actor(&state, &headers, q.actor, caps) {
-        Ok(a) => a,
+    let (actor, subject, purpose) = match actor_from_get_headers(&state, &headers).await {
+        Ok(v) => v,
         Err(r) => return *r,
     };
+    if let Err(e) =
+        authorize_cdr_read_consented(&state, &actor, &subject, &purpose, "cdr_get_composition")
+            .await
     {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
-        if let Err(e) = dep.authorize_cdr_read_as(&actor) {
-            return map_solum_err(e);
-        }
+        return e;
     }
     let client = match state.openehr.client() {
         Ok(c) => c,
@@ -1479,6 +1571,10 @@ pub struct AqlRequest {
     pub actor: String,
     #[serde(default)]
     pub capability: Vec<String>,
+    #[serde(default)]
+    pub subject: Option<String>,
+    #[serde(default)]
+    pub purpose: Option<String>,
     pub q: String,
 }
 
@@ -1487,15 +1583,19 @@ async fn cdr_aql(
     headers: HeaderMap,
     Json(body): Json<AqlRequest>,
 ) -> Response {
-    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability).await {
         Ok(a) => a,
         Err(r) => return *r,
     };
+    let (subject, purpose) =
+        match require_subject_purpose(body.subject.as_deref(), body.purpose.as_deref()) {
+            Ok(v) => v,
+            Err(r) => return *r,
+        };
+    if let Err(e) =
+        authorize_cdr_read_consented(&state, &actor, &subject, &purpose, "cdr_aql").await
     {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
-        if let Err(e) = dep.authorize_cdr_read_as(&actor) {
-            return map_solum_err(e);
-        }
+        return e;
     }
     let client = match state.openehr.client() {
         Ok(c) => c,
@@ -1506,7 +1606,7 @@ async fn cdr_aql(
         Err(e) => return map_openehr_err(e),
     };
     {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
+        let mut dep = state.deployment.lock().await;
         let mut details = serde_json::Map::new();
         details.insert(
             "aql_len".into(),
@@ -1524,9 +1624,14 @@ pub struct FhirWriteBody {
     pub actor: String,
     #[serde(default)]
     pub capability: Vec<String>,
+    #[serde(default)]
+    pub subject: Option<String>,
+    #[serde(default)]
+    pub purpose: Option<String>,
     /// FHIR resource JSON (must include resourceType matching path, or Bundle).
     pub resource: serde_json::Value,
     /// When Track B is enabled, also commit pinned openEHR composition and link ids.
+    /// Default false until OPT mapping is honest (not a silent Patient→Observation rewrite).
     #[serde(default)]
     pub link_cdr: Option<bool>,
 }
@@ -1550,21 +1655,54 @@ async fn fhir_create(
         )
             .into_response();
     }
-    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability).await {
         Ok(a) => a,
         Err(r) => return *r,
     };
-    {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
-        if let Err(e) = dep.authorize_cdr_write_as(&actor) {
-            return map_solum_err(e);
+    let (subject, purpose) =
+        match require_subject_purpose(body.subject.as_deref(), body.purpose.as_deref()) {
+            Ok(v) => v,
+            Err(r) => return *r,
+        };
+    if resource_type == "Patient" {
+        let rid = body
+            .resource
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if rid.is_empty() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorBody {
+                    error: "bad_request".into(),
+                    message:
+                        "Patient.id is required (fail-closed; sidecar does not invent subject ids)"
+                            .into(),
+                }),
+            )
+                .into_response();
+        }
+        if rid != subject {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorBody {
+                    error: "bad_request".into(),
+                    message: format!("subject '{subject}' must match Patient.id '{rid}'"),
+                }),
+            )
+                .into_response();
         }
     }
+    if let Err(e) =
+        authorize_cdr_write_consented(&state, &actor, &subject, &purpose, "fhir_create").await
+    {
+        return e;
+    }
 
-    let link_cdr = body.link_cdr.unwrap_or(true);
+    let link_cdr = body.link_cdr.unwrap_or(false);
     match persist_fhir_resource(&state, &actor, &resource_type, body.resource, link_cdr).await {
         Ok(stored) => (StatusCode::CREATED, Json(stored.resource)).into_response(),
-        Err(msg) if msg.starts_with("body resourceType") => (
+        Err(msg) if msg.starts_with("body resourceType") || msg.starts_with("Patient.id") => (
             StatusCode::BAD_REQUEST,
             Json(ErrorBody {
                 error: "bad_request".into(),
@@ -1614,11 +1752,15 @@ async fn persist_fhir_resource(
             );
         }
     }
-    let id = resource
-        .get("id")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let id = match resource.get("id").and_then(|v| v.as_str()) {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ if resource_type == "Patient" => {
+            return Err(
+                "Patient.id is required (fail-closed; sidecar does not invent subject ids)".into(),
+            );
+        }
+        _ => Uuid::new_v4().to_string(),
+    };
     if let Some(obj) = resource.as_object_mut() {
         obj.insert("id".into(), serde_json::Value::String(id.clone()));
     }
@@ -1626,14 +1768,20 @@ async fn persist_fhir_resource(
     let mut ehr_id = None;
     let mut composition_uid = None;
     if link_cdr && state.openehr.is_enabled() {
+        let existing = {
+            let store = lock_std(&state.subject_link_store, "subject link")?;
+            store.get(&id)?.and_then(|l| l.ehr_id)
+        };
         let client = state.openehr.client().map_err(|e| e.to_string())?;
-        let eid = client.create_ehr().await.map_err(|e| e.to_string())?;
+        let eid = if let Some(e) = existing {
+            e
+        } else {
+            client.create_ehr().await.map_err(|e| e.to_string())?
+        };
         let example = client
             .example_composition(PINNED_TEMPLATE_ID)
             .await
             .map_err(|e| e.to_string())?;
-        // Mapping honesty: still `minimal_observation.en.v1` until patient-summary OPT is
-        // pinned (see docs/H3-CLINICAL-MODELLING.md). Correlation lives in audit + subject-link.
         let commit = client
             .commit_composition(&eid, &example)
             .await
@@ -1650,7 +1798,7 @@ async fn persist_fhir_resource(
         composition_uid: composition_uid.clone(),
     };
     {
-        let store = state.fhir_store.lock().expect("fhir store mutex");
+        let mut store = lock_std(&state.fhir_store, "fhir store")?;
         store.upsert(&stored)?;
     }
 
@@ -1662,9 +1810,11 @@ async fn persist_fhir_resource(
             phenopacket_id: None,
             ehr_id: ehr_id.clone(),
         };
-        let store = state.subject_link_store.lock().expect("subject link mutex");
-        store.upsert(&link)?;
-        let mut dep = state.deployment.lock().expect("deployment mutex");
+        {
+            let mut store = lock_std(&state.subject_link_store, "subject link")?;
+            store.upsert(&link)?;
+        }
+        let mut dep = state.deployment.lock().await;
         let mut details = serde_json::Map::new();
         details.insert(
             "solum_subject_id".into(),
@@ -1679,7 +1829,7 @@ async fn persist_fhir_resource(
     }
 
     {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
+        let mut dep = state.deployment.lock().await;
         let mut details = serde_json::Map::new();
         details.insert(
             "resource_type".into(),
@@ -1697,6 +1847,8 @@ async fn persist_fhir_resource(
         }
         dep.record_cdr_event_as(actor, "cdr.fhir.created", details)
             .map_err(|e| e.to_string())?;
+        dep.record_data_receive_eehrxf_as(actor, serde_json::Map::new())
+            .map_err(|e| e.to_string())?;
     }
 
     Ok(PersistFhirOk {
@@ -1711,6 +1863,10 @@ pub struct DualWriteBody {
     pub actor: String,
     #[serde(default)]
     pub capability: Vec<String>,
+    #[serde(default)]
+    pub subject: Option<String>,
+    #[serde(default)]
+    pub purpose: Option<String>,
     /// FHIR resource JSON (must include resourceType).
     pub resource: serde_json::Value,
     /// Optional legacy system id / correlation for dead-letter triage.
@@ -1728,16 +1884,20 @@ async fn migrate_dual_write(
     headers: HeaderMap,
     Json(body): Json<DualWriteBody>,
 ) -> Response {
-    let actor = match resolve_mutating_actor(&state, &headers, body.actor.clone(), body.capability)
+    let actor =
+        match resolve_mutating_actor(&state, &headers, body.actor.clone(), body.capability).await {
+            Ok(a) => a,
+            Err(r) => return *r,
+        };
+    let (subject, purpose) =
+        match require_subject_purpose(body.subject.as_deref(), body.purpose.as_deref()) {
+            Ok(v) => v,
+            Err(r) => return *r,
+        };
+    if let Err(e) =
+        authorize_cdr_write_consented(&state, &actor, &subject, &purpose, "dual_write").await
     {
-        Ok(a) => a,
-        Err(r) => return *r,
-    };
-    {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
-        if let Err(e) = dep.authorize_cdr_write_as(&actor) {
-            return map_solum_err(e);
-        }
+        return e;
     }
 
     let resource_type = body
@@ -1760,7 +1920,7 @@ async fn migrate_dual_write(
             .into_response();
     }
 
-    let link_cdr = body.link_cdr.unwrap_or(true);
+    let link_cdr = body.link_cdr.unwrap_or(false);
     match persist_fhir_resource(
         &state,
         &actor,
@@ -1771,7 +1931,7 @@ async fn migrate_dual_write(
     .await
     {
         Ok(stored) => {
-            let mut dep = state.deployment.lock().expect("deployment mutex");
+            let mut dep = state.deployment.lock().await;
             let mut details = serde_json::Map::new();
             details.insert(
                 "resource_type".into(),
@@ -1817,7 +1977,7 @@ async fn migrate_dual_write(
                     .into_response();
             }
             {
-                let mut dep = state.deployment.lock().expect("deployment mutex");
+                let mut dep = state.deployment.lock().await;
                 let mut details = serde_json::Map::new();
                 details.insert("reason".into(), serde_json::Value::String(reason.clone()));
                 details.insert(
@@ -1844,6 +2004,7 @@ async fn migrate_dual_write(
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct FhirReadQuery {
     pub actor: String,
     #[serde(default)]
@@ -1854,7 +2015,6 @@ async fn fhir_get(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     AxumPath((resource_type, id)): AxumPath<(String, String)>,
-    Query(q): Query<FhirReadQuery>,
 ) -> Response {
     if !fhir_type_allowed(&resource_type) {
         return (
@@ -1866,19 +2026,29 @@ async fn fhir_get(
         )
             .into_response();
     }
-    let caps = parse_capability_csv(&q.capability);
-    let actor = match resolve_mutating_actor(&state, &headers, q.actor, caps) {
-        Ok(a) => a,
+    let (actor, subject, purpose) = match actor_from_get_headers(&state, &headers).await {
+        Ok(v) => v,
         Err(r) => return *r,
     };
+    if let Err(e) =
+        authorize_cdr_read_consented(&state, &actor, &subject, &purpose, "fhir_get").await
     {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
-        if let Err(e) = dep.authorize_cdr_read_as(&actor) {
-            return map_solum_err(e);
-        }
+        return e;
     }
     let found = {
-        let store = state.fhir_store.lock().expect("fhir store mutex");
+        let store = match lock_std(&state.fhir_store, "fhir store") {
+            Ok(g) => g,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody {
+                        error: "internal".into(),
+                        message: e,
+                    }),
+                )
+                    .into_response();
+            }
+        };
         match store.get(&resource_type, &id) {
             Ok(v) => v,
             Err(e) => {
@@ -1911,6 +2081,8 @@ pub struct SubjectLinkBody {
     pub actor: String,
     #[serde(default)]
     pub capability: Vec<String>,
+    #[serde(default)]
+    pub purpose: Option<String>,
     pub solum_subject_id: String,
     #[serde(default)]
     pub ferrum_drs_id: Option<String>,
@@ -1925,15 +2097,25 @@ async fn subject_link_upsert(
     headers: HeaderMap,
     Json(body): Json<SubjectLinkBody>,
 ) -> Response {
-    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability) {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability).await {
         Ok(a) => a,
         Err(r) => return *r,
     };
+    let purpose =
+        match require_subject_purpose(Some(&body.solum_subject_id), body.purpose.as_deref()) {
+            Ok((_, p)) => p,
+            Err(r) => return *r,
+        };
+    if let Err(e) = authorize_cdr_write_consented(
+        &state,
+        &actor,
+        &body.solum_subject_id,
+        &purpose,
+        "subject_link_upsert",
+    )
+    .await
     {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
-        if let Err(e) = dep.authorize_cdr_write_as(&actor) {
-            return map_solum_err(e);
-        }
+        return e;
     }
     let link = SubjectLink {
         solum_subject_id: body.solum_subject_id.clone(),
@@ -1942,7 +2124,19 @@ async fn subject_link_upsert(
         ehr_id: body.ehr_id.clone(),
     };
     {
-        let store = state.subject_link_store.lock().expect("subject link mutex");
+        let mut store = match lock_std(&state.subject_link_store, "subject link") {
+            Ok(g) => g,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody {
+                        error: "internal".into(),
+                        message: e,
+                    }),
+                )
+                    .into_response();
+            }
+        };
         if let Err(e) = store.upsert(&link) {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -1955,7 +2149,7 @@ async fn subject_link_upsert(
         }
     }
     {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
+        let mut dep = state.deployment.lock().await;
         let mut details = serde_json::Map::new();
         details.insert(
             "solum_subject_id".into(),
@@ -1972,21 +2166,30 @@ async fn subject_link_get(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     AxumPath(solum_subject_id): AxumPath<String>,
-    Query(q): Query<FhirReadQuery>,
 ) -> Response {
-    let caps = parse_capability_csv(&q.capability);
-    let actor = match resolve_mutating_actor(&state, &headers, q.actor, caps) {
-        Ok(a) => a,
+    let (actor, subject, purpose) = match actor_from_get_headers(&state, &headers).await {
+        Ok(v) => v,
         Err(r) => return *r,
     };
+    if let Err(e) =
+        authorize_cdr_read_consented(&state, &actor, &subject, &purpose, "subject_link_get").await
     {
-        let mut dep = state.deployment.lock().expect("deployment mutex");
-        if let Err(e) = dep.authorize_cdr_read_as(&actor) {
-            return map_solum_err(e);
-        }
+        return e;
     }
     let found = {
-        let store = state.subject_link_store.lock().expect("subject link mutex");
+        let store = match lock_std(&state.subject_link_store, "subject link") {
+            Ok(g) => g,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(ErrorBody {
+                        error: "internal".into(),
+                        message: e,
+                    }),
+                )
+                    .into_response();
+            }
+        };
         match store.get(&solum_subject_id) {
             Ok(v) => v,
             Err(e) => {
@@ -2011,6 +2214,31 @@ async fn subject_link_get(
             }),
         )
             .into_response(),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TransferCheckBody {
+    pub actor: String,
+    #[serde(default)]
+    pub capability: Vec<String>,
+    pub mechanism: TransferMechanism,
+    pub destination: String,
+}
+
+async fn transfer_check(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<TransferCheckBody>,
+) -> Response {
+    let actor = match resolve_mutating_actor(&state, &headers, body.actor, body.capability).await {
+        Ok(a) => a,
+        Err(r) => return *r,
+    };
+    let mut dep = state.deployment.lock().await;
+    match dep.check_transfer_as(&body.mechanism, &body.destination, &actor) {
+        Ok(()) => (StatusCode::OK, Json(serde_json::json!({ "status": "ok" }))).into_response(),
+        Err(e) => map_solum_err(e),
     }
 }
 

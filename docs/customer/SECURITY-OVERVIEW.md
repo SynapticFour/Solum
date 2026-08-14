@@ -105,7 +105,7 @@ On the structured-actor path (actor identity that carries **scopes / capabilitie
 |-----------|------------------------|
 | **Capability-based** | Each sensitive operation needs its own explicit permission string (e.g. grant consent ≠ revoke consent; encrypt ≠ decrypt). Having one capability does **not** imply another. |
 | **Fail-closed** | If the required capability is missing — including when the actor has **empty** scopes — the operation is **denied**. There is no implicit “admin” or `solum:*` wildcard. |
-| **Audited denials** | A denied attempt writes an `authorization.denied` audit event (failure outcome). The underlying consent or crypto side effect does **not** run. |
+| **Audited denials** | A denied attempt writes an `access.denied` audit event (failure outcome). The underlying consent or crypto side effect does **not** run. |
 | **Exact match only** | Capabilities are compared as exact strings. Hierarchies / wildcards are **not** supported in this baseline. |
 
 **Important asymmetry:** Older **library** call paths that identify the actor only as a plain text string **do not carry scopes and therefore do not enforce these checks**. That is intentional (legacy path) and remains an **open security flank** for any integrator that still calls those APIs. The shipped **CLI** uses the capability-checked path: pass `--capability` (repeatable); omit it → empty scopes → **fail-closed denial**. See §8 and [DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md). ([BASELINE.md](../BASELINE.md))

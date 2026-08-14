@@ -21,7 +21,7 @@ Artifacts land in `artifacts/run-<UTC>/` (gitignored). `artifacts/latest` points
 |------|-------------|
 | Profile check | `eu-ehds` accepts local runtime |
 | Grant → encrypt → decrypt | Round-trip OK under CustomerHeld `--keypair` |
-| Encrypt without `--capability` | Fail-closed + `authorization.denied` audit |
+| Encrypt without `--capability` | Fail-closed + `access.denied` audit |
 | Revoke | Status `revoked` |
 | Decrypt after revoke | See `deny-b-result.txt` — may be **gap** (crypto does not re-check consent) |
 | Audit | `audit verify` → `ok` |

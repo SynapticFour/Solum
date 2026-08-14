@@ -88,7 +88,10 @@ pub enum ConsentError {
 #[derive(Debug)]
 pub struct ConsentStore {
     path: PathBuf,
-    current: HashMap<(String, String), ConsentRecord>,
+    /// subject_id → purpose → last decision. Nested maps avoid allocating a
+    /// `(String, String)` key on every lookup.
+    current: HashMap<String, HashMap<String, ConsentRecord>>,
+    history: Vec<ConsentRecord>,
 }
 
 impl ConsentStore {
@@ -96,13 +99,22 @@ impl ConsentStore {
     /// prior decisions to rebuild current state.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, ConsentError> {
         let path = path.as_ref().to_path_buf();
-        let mut current = HashMap::new();
+        let mut current: HashMap<String, HashMap<String, ConsentRecord>> = HashMap::new();
+        let mut history = Vec::new();
         if path.exists() {
             for record in Self::read_records(&path)? {
-                current.insert((record.subject_id.clone(), record.purpose.clone()), record);
+                current
+                    .entry(record.subject_id.clone())
+                    .or_default()
+                    .insert(record.purpose.clone(), record.clone());
+                history.push(record);
             }
         }
-        Ok(Self { path, current })
+        Ok(Self {
+            path,
+            current,
+            history,
+        })
     }
 
     fn read_records(path: &Path) -> Result<Vec<ConsentRecord>, ConsentError> {
@@ -149,7 +161,10 @@ impl ConsentStore {
                 source,
             })?;
         self.current
-            .insert((record.subject_id.clone(), record.purpose.clone()), record);
+            .entry(record.subject_id.clone())
+            .or_default()
+            .insert(record.purpose.clone(), record.clone());
+        self.history.push(record);
         Ok(())
     }
 
@@ -188,7 +203,8 @@ impl ConsentStore {
         let purpose = purpose.into();
         let scope = self
             .current
-            .get(&(subject_id.clone(), purpose.clone()))
+            .get(subject_id.as_str())
+            .and_then(|m| m.get(purpose.as_str()))
             .map(|r| r.scope.clone())
             .unwrap_or_default();
         let record = ConsentRecord {
@@ -208,7 +224,8 @@ impl ConsentStore {
     /// `(subject_id, purpose)` pair.
     pub fn status(&self, subject_id: &str, purpose: &str) -> Option<ConsentStatus> {
         self.current
-            .get(&(subject_id.to_string(), purpose.to_string()))
+            .get(subject_id)
+            .and_then(|m| m.get(purpose))
             .map(|r| r.status)
     }
 
@@ -223,8 +240,7 @@ impl ConsentStore {
 
     /// Current decision record for `(subject_id, purpose)`, if any.
     pub fn current_record(&self, subject_id: &str, purpose: &str) -> Option<&ConsentRecord> {
-        self.current
-            .get(&(subject_id.to_string(), purpose.to_string()))
+        self.current.get(subject_id).and_then(|m| m.get(purpose))
     }
 
     /// Active grant covers `category` when status is Granted and either the
@@ -244,9 +260,11 @@ impl ConsentStore {
         &self,
         subject_id: &str,
     ) -> Result<Vec<ConsentRecord>, ConsentError> {
-        Ok(Self::read_records(&self.path)?
-            .into_iter()
+        Ok(self
+            .history
+            .iter()
             .filter(|r| r.subject_id == subject_id)
+            .cloned()
             .collect())
     }
 }
@@ -256,16 +274,22 @@ impl ConsentStore {
 /// [`ConsentStore::grant`] so an unrecognised purpose fails before it is
 /// persisted, not after.
 pub fn validate_purpose(profile: &JurisdictionProfile, purpose: &str) -> Result<(), ConsentError> {
-    let allowed: Vec<String> = profile
+    let recognised = profile
         .consent
         .required_purposes
         .iter()
         .chain(profile.consent.optional_purposes.iter())
-        .cloned()
-        .collect();
-    if allowed.iter().any(|p| p == purpose) {
+        .any(|p| p == purpose);
+    if recognised {
         Ok(())
     } else {
+        let allowed: Vec<String> = profile
+            .consent
+            .required_purposes
+            .iter()
+            .chain(profile.consent.optional_purposes.iter())
+            .cloned()
+            .collect();
         Err(ConsentError::PurposeNotRecognised {
             purpose: purpose.to_string(),
             allowed,
@@ -274,11 +298,9 @@ pub fn validate_purpose(profile: &JurisdictionProfile, purpose: &str) -> Result<
 }
 
 /// Whether this crate's record-keeping model can back a given
-/// [`ConsentWorkflow`] variant. Stage 1 implements the grant/revoke +
-/// purpose-binding mechanics shared by all four variants; workflow-specific
-/// UX (e.g. witness capture for `ExplicitRecorded`, dynamic re-consent
-/// prompts for `DynamicRevocable`) is a caller/UI concern layered on top,
-/// not enforced by this crate.
+/// [`ConsentWorkflow`] variant. Grant/revoke + purpose binding is the
+/// shared state machine for all four variants; workflow-specific UX
+/// (witness capture, dynamic re-consent prompts) remains a caller concern.
 pub fn supports_workflow(_workflow: &ConsentWorkflow) -> bool {
     true
 }

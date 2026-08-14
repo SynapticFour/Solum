@@ -1812,6 +1812,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4577ecaa3c4f96589d473f679a71b596316f6641bc350038b962a5daf0085d7a"
 
 [[package]]
+name = "futures-macro"
+version = "0.3.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d6d3cde68c518367be28956066ddfef33813991b77a55005a69dae04bf3b10b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "futures-sink"
 version = "0.3.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1831,6 +1842,7 @@ checksum = "a77a90a256fce34da66415271e30f94ee91c57b04b8a2c042d9cf3220179deaa"
 dependencies = [
  "futures-core",
  "futures-io",
+ "futures-macro",
  "futures-sink",
  "futures-task",
  "memchr",
@@ -3458,12 +3470,14 @@ dependencies = [
  "sync_wrapper",
  "tokio",
  "tokio-rustls 0.26.4",
+ "tokio-util",
  "tower 0.5.3",
  "tower-http 0.6.11",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams",
  "web-sys",
  "webpki-roots",
 ]
@@ -4015,14 +4029,12 @@ dependencies = [
 name = "solum-audit"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "chrono",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
  "thiserror 1.0.69",
- "tracing",
 ]
 
 [[package]]
@@ -4045,14 +4057,12 @@ dependencies = [
 name = "solum-consent"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "chrono",
  "serde",
  "serde_json",
  "solum-profiles",
  "tempfile",
  "thiserror 1.0.69",
- "tracing",
  "uuid",
 ]
 
@@ -4060,7 +4070,6 @@ dependencies = [
 name = "solum-core"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "assert_cmd",
  "chrono",
  "clap 4.6.4",
@@ -4084,7 +4093,6 @@ dependencies = [
 name = "solum-crypto"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "aws-sdk-kms",
  "aws-smithy-mocks",
  "crypt4gh",
@@ -4124,13 +4132,11 @@ dependencies = [
 name = "solum-fhir"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "serde",
  "serde_json",
  "solum-crypto",
  "solum-profiles",
  "thiserror 1.0.69",
- "tracing",
  "uuid",
 ]
 
@@ -4149,27 +4155,23 @@ dependencies = [
 name = "solum-openehr"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "axum",
  "reqwest",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
- "tracing",
 ]
 
 [[package]]
 name = "solum-profiles"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "serde",
  "serde_json",
  "solum-crypto",
  "thiserror 1.0.69",
  "toml",
- "tracing",
 ]
 
 [[package]]
@@ -4673,7 +4675,6 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
- "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2 0.6.5",
@@ -5169,6 +5170,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc1b4cb0cc549fcf58d7dfc081778139b3d283a081644e833e84682ad71cea24"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "wasm-streams"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
+dependencies = [
+ "futures-util",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

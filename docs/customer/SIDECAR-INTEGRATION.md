@@ -102,6 +102,15 @@ cargo run -p solum-sidecar -- \
 
 ## 5. curl examples
 
+GET composition / FHIR / subject-link reads send identity in headers, **not** the query string:
+
+- `X-Solum-Actor`
+- `X-Solum-Capability` (comma-separated CAP strings)
+- `X-Solum-Subject`
+- `X-Solum-Purpose`
+
+CDR/FHIR writes that touch a patient also require JSON `subject` + `purpose` and an active consent grant. Template upload remains capability-only.
+
 ### Consent grant / status / revoke
 
 ```bash

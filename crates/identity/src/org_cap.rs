@@ -64,26 +64,38 @@ impl OrgCapMapping {
 ///
 /// Supports top-level keys and dotted paths (`realm_access.roles`). Values may
 /// be a string or an array of strings.
+/// Extract string claim values from a JWT claims object (ADS-style path).
+///
+/// Supports top-level keys and dotted paths (`realm_access.roles`). Values may
+/// be a string or an array of strings.
 pub fn claim_values_from_json(claims: &serde_json::Value, path: &str) -> Vec<String> {
+    match claims.as_object() {
+        Some(map) => claim_values_from_map(map, path),
+        None => vec![],
+    }
+}
+
+/// Same as [`claim_values_from_json`] without wrapping a `Map` in a `Value`.
+pub fn claim_values_from_map(
+    map: &serde_json::Map<String, serde_json::Value>,
+    path: &str,
+) -> Vec<String> {
     if path.is_empty() {
         return vec![];
     }
-    if let Some(obj) = claims.as_object() {
-        if let Some(value) = obj.get(path) {
-            return values_from_json(value);
-        }
+    if let Some(value) = map.get(path) {
+        return values_from_json(value);
     }
     if path.contains('.') {
-        let mut current = claims.clone();
-        for segment in path.split('.') {
-            current = match current {
-                serde_json::Value::Object(map) => {
-                    map.get(segment).cloned().unwrap_or(serde_json::Value::Null)
-                }
-                _ => serde_json::Value::Null,
-            };
+        let mut segs = path.split('.');
+        let Some(first) = segs.next() else {
+            return vec![];
+        };
+        let mut current = map.get(first);
+        for seg in segs {
+            current = current.and_then(|v| v.get(seg));
         }
-        return values_from_json(&current);
+        return current.map(values_from_json).unwrap_or_default();
     }
     vec![]
 }

@@ -36,7 +36,7 @@
 
 mod org_cap;
 
-pub use org_cap::{claim_values_from_json, OrgCapMapEntry, OrgCapMapping};
+pub use org_cap::{claim_values_from_json, claim_values_from_map, OrgCapMapEntry, OrgCapMapping};
 
 use thiserror::Error;
 

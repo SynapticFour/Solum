@@ -165,6 +165,10 @@ pub struct RuntimeConfig {
     pub enabled_audit_events: Vec<String>,
     /// Consent workflow implemented by the deployment.
     pub consent_workflow: ConsentWorkflow,
+    /// Declared audit-log retention in days. Must be ≥ the profile floor
+    /// (`retention.audit_log_retention_days`). Append-only stores do not rotate;
+    /// a value below the floor is a startup refusal (declaration with teeth).
+    pub audit_retention_days: u32,
 }
 
 #[derive(Debug, Error)]
@@ -299,6 +303,13 @@ pub fn validate_startup(
         )));
     }
 
+    if runtime.audit_retention_days < profile.retention.audit_log_retention_days {
+        return Err(refuse(format!(
+            "audit_retention_days {} is below profile floor {}",
+            runtime.audit_retention_days, profile.retention.audit_log_retention_days
+        )));
+    }
+
     Ok(())
 }
 
@@ -371,6 +382,7 @@ mod tests {
             },
             enabled_audit_events: profile.audit.mandatory_events.clone(),
             consent_workflow: profile.consent.workflow.clone(),
+            audit_retention_days: profile.retention.audit_log_retention_days,
         }
     }
 

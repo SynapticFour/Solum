@@ -18,6 +18,24 @@ use serde::{Deserialize, Serialize};
 mod store;
 pub use store::{AuditRecord, AuditStoreError, FileAuditStore, GENESIS_HASH};
 
+/// Stable event-type strings required by jurisdiction profiles and written by
+/// [`crate::FileAuditStore`] callers (`Deployment`, sidecar).
+pub mod events {
+    pub const ACCESS_GRANTED: &str = "access.granted";
+    pub const ACCESS_DENIED: &str = "access.denied";
+    pub const DATA_READ: &str = "data.read";
+    pub const DATA_EXPORT: &str = "data.export";
+    pub const DATA_RECEIVE_EEHRXF: &str = "data.receive_eehrxf";
+    pub const CONSENT_GRANTED: &str = "consent.granted";
+    pub const CONSENT_REVOKED: &str = "consent.revoked";
+    pub const CONSENT_DENIED: &str = "consent.denied";
+    pub const IDENTITY_AUTHENTICATED: &str = "identity.authenticated";
+    pub const KEY_USE: &str = "key.use";
+    pub const RESIDENCY_TRANSFER_ATTEMPT: &str = "residency.transfer_attempt";
+    pub const DATA_ENCRYPT: &str = "data.encrypt";
+    pub const DATA_DECRYPT: &str = "data.decrypt";
+}
+
 /// A single auditable event required by jurisdiction profiles.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AuditEvent {
@@ -31,7 +49,7 @@ pub struct AuditEvent {
     pub details: serde_json::Map<String, serde_json::Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AuditOutcome {
     Success,
@@ -42,8 +60,9 @@ pub enum AuditOutcome {
     Failure,
 }
 
-/// In-memory audit buffer (replace with durable store in later stages).
+/// In-memory audit buffer for unit tests. Product paths use [`FileAuditStore`].
 #[derive(Debug, Default)]
+#[doc(hidden)]
 pub struct AuditLog {
     events: Vec<AuditEvent>,
 }

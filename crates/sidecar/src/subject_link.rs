@@ -1,5 +1,6 @@
-//! File-backed subject bridge store (H3.3) — JSONL.
+//! File-backed subject bridge store (H3.3) — append-only JSONL.
 
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -24,6 +25,7 @@ pub struct SubjectLink {
 #[derive(Debug)]
 pub struct SubjectLinkStore {
     path: PathBuf,
+    current: HashMap<String, SubjectLink>,
 }
 
 impl SubjectLinkStore {
@@ -33,51 +35,41 @@ impl SubjectLinkStore {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("subject-link mkdir {}: {e}", parent.display()))?;
         }
-        if !path.exists() {
+        let mut current = HashMap::new();
+        if path.exists() {
+            let file = File::open(&path)
+                .map_err(|e| format!("subject-link open {}: {e}", path.display()))?;
+            for line in BufReader::new(file).lines() {
+                let line = line.map_err(|e| format!("subject-link read: {e}"))?;
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let link: SubjectLink =
+                    serde_json::from_str(&line).map_err(|e| format!("subject-link parse: {e}"))?;
+                current.insert(link.solum_subject_id.clone(), link);
+            }
+        } else {
             File::create(&path)
                 .map_err(|e| format!("subject-link create {}: {e}", path.display()))?;
         }
-        Ok(Self { path })
+        Ok(Self { path, current })
     }
 
-    pub fn upsert(&self, link: &SubjectLink) -> Result<(), String> {
-        let mut keep = self.read_all()?;
-        keep.retain(|e| e.solum_subject_id != link.solum_subject_id);
-        keep.push(link.clone());
-        self.rewrite_all(&keep)
+    pub fn upsert(&mut self, link: &SubjectLink) -> Result<(), String> {
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+            .map_err(|e| format!("subject-link append {}: {e}", self.path.display()))?;
+        let line = serde_json::to_string(link).map_err(|e| e.to_string())?;
+        writeln!(file, "{line}").map_err(|e| e.to_string())?;
+        file.sync_all().map_err(|e| e.to_string())?;
+        self.current
+            .insert(link.solum_subject_id.clone(), link.clone());
+        Ok(())
     }
 
     pub fn get(&self, solum_subject_id: &str) -> Result<Option<SubjectLink>, String> {
-        Ok(self
-            .read_all()?
-            .into_iter()
-            .find(|e| e.solum_subject_id == solum_subject_id))
-    }
-
-    fn read_all(&self) -> Result<Vec<SubjectLink>, String> {
-        let file = File::open(&self.path)
-            .map_err(|e| format!("subject-link open {}: {e}", self.path.display()))?;
-        let mut out = Vec::new();
-        for line in BufReader::new(file).lines() {
-            let line = line.map_err(|e| format!("subject-link read: {e}"))?;
-            if line.trim().is_empty() {
-                continue;
-            }
-            out.push(serde_json::from_str(&line).map_err(|e| format!("subject-link parse: {e}"))?);
-        }
-        Ok(out)
-    }
-
-    fn rewrite_all(&self, entries: &[SubjectLink]) -> Result<(), String> {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(&self.path)
-            .map_err(|e| format!("subject-link rewrite {}: {e}", self.path.display()))?;
-        for e in entries {
-            let line = serde_json::to_string(e).map_err(|e| e.to_string())?;
-            writeln!(file, "{line}").map_err(|e| e.to_string())?;
-        }
-        Ok(())
+        Ok(self.current.get(solum_subject_id).cloned())
     }
 }

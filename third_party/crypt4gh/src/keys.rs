@@ -497,7 +497,9 @@ fn ssh_get_public_key(line: &str) -> Result<[u8; 32], Crypt4GHError> {
 	let mut pkey_stream = Cursor::new(pkey);
 
 	let key_type = decode_string_ssh(&mut pkey_stream)?;
-	assert!(key_type == b"ssh-ed25519", "Unsupported public key type");
+	if key_type != b"ssh-ed25519" {
+		return Err(Crypt4GHError::InvalidSSHKey);
+	}
 
 	let pubkey_bytes = decode_string_ssh(&mut pkey_stream)?;
 	convert_ed25519_pk_to_curve25519(&pubkey_bytes)
@@ -505,6 +507,9 @@ fn ssh_get_public_key(line: &str) -> Result<[u8; 32], Crypt4GHError> {
 
 fn convert_ed25519_pk_to_curve25519(ed25519_pk: &[u8]) -> Result<[u8; 32], Crypt4GHError> {
 	let mut curve_pk = [0_u8; 32];
+	// SAFETY: `curve_pk` is a 32-byte buffer; libsodium writes a Curve25519
+	// public key into it. `ed25519_pk` is a valid Ed25519 public key slice
+	// from the parsed SSH blob (32 bytes after decode_string_ssh).
 	let ok =
 		unsafe { libsodium_sys::crypto_sign_ed25519_pk_to_curve25519(curve_pk.as_mut_ptr(), ed25519_pk.as_ptr()) == 0 };
 	if ok {
@@ -517,6 +522,8 @@ fn convert_ed25519_pk_to_curve25519(ed25519_pk: &[u8]) -> Result<[u8; 32], Crypt
 
 fn convert_ed25519_sk_to_curve25519(ed25519_sk: &[u8]) -> Result<[u8; 32], Crypt4GHError> {
 	let mut curve_sk = [0_u8; 32];
+	// SAFETY: `curve_sk` is a 32-byte buffer; libsodium derives a Curve25519
+	// secret from the Ed25519 secret in `ed25519_sk` (caller-validated length).
 	let ok =
 		unsafe { libsodium_sys::crypto_sign_ed25519_sk_to_curve25519(curve_sk.as_mut_ptr(), ed25519_sk.as_ptr()) == 0 };
 	if ok {

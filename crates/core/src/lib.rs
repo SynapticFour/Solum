@@ -20,8 +20,8 @@ use solum_crypto::{
     Crypt4ghKeyProvider, EncryptedField, FieldCategoryGate, KeyManagementConfig, KeyRef,
 };
 use solum_profiles::{
-    load_profile, validate_startup, ConsentWorkflow, JurisdictionProfile, ProfileError,
-    RuntimeConfig,
+    load_profile, validate_startup, validate_transfer, ConsentWorkflow, JurisdictionProfile,
+    ProfileError, RuntimeConfig, TransferMechanism,
 };
 use thiserror::Error;
 
@@ -41,6 +41,19 @@ pub enum SolumError {
     Profile(#[from] ProfileError),
     #[error(transparent)]
     Authorization(#[from] AuthorizationError),
+    #[error(transparent)]
+    Audit(#[from] solum_audit::AuditStoreError),
+    #[error(transparent)]
+    Consent(#[from] solum_consent::ConsentError),
+    #[error(transparent)]
+    Crypto(#[from] solum_crypto::CryptoError),
+    #[error("consent denied for {subject_id}/{purpose} category {category}: {reason}")]
+    ConsentDenied {
+        subject_id: String,
+        purpose: String,
+        category: String,
+        reason: String,
+    },
     #[error("{0}")]
     Message(String),
 }
@@ -81,7 +94,29 @@ pub fn example_eu_runtime() -> RuntimeConfig {
             "residency.transfer_attempt".into(),
         ],
         consent_workflow: ConsentWorkflow::GdprGranular,
+        audit_retention_days: 3650,
     }
+}
+
+/// Audit retention that sits above every shipped profile floor (kenya-dpa 7300,
+/// eu-ehds 3650, dev-local 30). CLI and sidecar use this unless
+/// `SOLUM_AUDIT_RETENTION_DAYS` is set.
+pub const DEFAULT_RUNTIME_AUDIT_RETENTION_DAYS: u32 = 36500;
+
+/// Apply `SOLUM_STORAGE_REGION` and `SOLUM_AUDIT_RETENTION_DAYS` (or
+/// [`DEFAULT_RUNTIME_AUDIT_RETENTION_DAYS`]) onto a runtime built from
+/// [`example_eu_runtime`].
+pub fn apply_runtime_env_overrides(runtime: &mut RuntimeConfig) {
+    if let Ok(region) = std::env::var("SOLUM_STORAGE_REGION") {
+        let region = region.trim();
+        if !region.is_empty() {
+            runtime.storage_region = region.to_string();
+        }
+    }
+    runtime.audit_retention_days = std::env::var("SOLUM_AUDIT_RETENTION_DAYS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_RUNTIME_AUDIT_RETENTION_DAYS);
 }
 
 /// A validated jurisdiction profile bundled with its persistent audit store,
@@ -95,7 +130,7 @@ pub fn example_eu_runtime() -> RuntimeConfig {
 /// the lower-level crates (e.g. in tests) is still fine when you don't need
 /// that guarantee.
 pub struct Deployment<P: Crypt4ghKeyProvider> {
-    pub profile: JurisdictionProfile,
+    profile: JurisdictionProfile,
     audit: solum_audit::FileAuditStore,
     consent: solum_consent::ConsentStore,
     keys: P,
@@ -121,10 +156,9 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
         keys: P,
     ) -> Result<Self, SolumError> {
         let profile = start_with_profile(profile_path, runtime)?;
-        let audit = solum_audit::FileAuditStore::open(audit_path)
-            .map_err(|e| SolumError::Message(format!("audit store: {e}")))?;
-        let consent = solum_consent::ConsentStore::open(consent_path)
-            .map_err(|e| SolumError::Message(format!("consent store: {e}")))?;
+        let audit = solum_audit::FileAuditStore::open(audit_path).map_err(SolumError::Audit)?;
+        let consent =
+            solum_consent::ConsentStore::open(consent_path).map_err(SolumError::Consent)?;
         Ok(Self {
             profile,
             audit,
@@ -149,12 +183,23 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
         }
     }
 
+    /// Active jurisdiction profile (validated at [`Self::open`]).
+    pub fn profile(&self) -> &JurisdictionProfile {
+        &self.profile
+    }
+
     fn append_audit_event(&mut self, mut event: solum_audit::AuditEvent) -> Result<(), SolumError> {
         Self::stamp_tenant_id_into(&mut event.details);
-        self.audit
-            .append(event)
-            .map_err(|e| SolumError::Message(e.to_string()))?;
+        self.audit.append(event)?;
         Ok(())
+    }
+
+    fn string_details(pairs: &[(&str, &str)]) -> serde_json::Map<String, serde_json::Value> {
+        let mut details = serde_json::Map::new();
+        for (k, v) in pairs {
+            details.insert((*k).into(), serde_json::Value::String((*v).to_string()));
+        }
+        details
     }
 
     /// Attach a Ferrum [`ferrum_storage::ObjectStorage`] backend (additive).
@@ -168,26 +213,19 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
         self
     }
 
-    /// Encrypt via the existing sync [`Self::encrypt_field`], then persist the
-    /// serialized [`EncryptedField`] with `ObjectStorage::put_bytes`.
-    ///
-    /// Async only at the storage boundary — no `block_on` inside this crate.
-    /// Requires feature `ferrum-storage-backend` and a prior [`Self::with_storage`].
-    ///
-    /// Uses the legacy `&str` crypto path (no capability/consent). Prefer
-    /// encrypting via [`Self::encrypt_field_as`] then storing separately until a
-    /// gated storage helper ships.
+    /// Encrypt via [`Self::encrypt_field_as`], then persist the serialized
+    /// [`EncryptedField`] with `ObjectStorage::put_bytes`.
     #[cfg(feature = "ferrum-storage-backend")]
-    #[allow(deprecated)]
     pub async fn encrypt_field_and_store(
         &mut self,
         category: &str,
         plaintext: &[u8],
         key_ref: &KeyRef,
-        actor: &str,
+        actor: &SolumActor,
+        subject_id: &str,
+        purpose: &str,
         storage_key: &str,
     ) -> Result<EncryptedField, SolumError> {
-        // Clone the Arc so encrypt_field can take &mut self without overlapping borrows.
         let storage = self
             .storage
             .as_ref()
@@ -197,7 +235,8 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
                 )
             })?
             .clone();
-        let field = self.encrypt_field(category, plaintext, key_ref, actor)?;
+        let field =
+            self.encrypt_field_as(category, plaintext, key_ref, actor, subject_id, purpose)?;
         let bytes = serde_json::to_vec(&field)
             .map_err(|e| SolumError::Message(format!("serialize EncryptedField: {e}")))?;
         storage
@@ -208,23 +247,18 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
     }
 
     /// Load a serialized [`EncryptedField`] via `ObjectStorage::get`, then decrypt
-    /// with the existing sync [`Self::decrypt_field`].
-    ///
-    /// Takes `&mut self` because [`Self::decrypt_field`] co-writes the audit event
-    /// (same as the non-storage path). Requires feature `ferrum-storage-backend`.
-    ///
-    /// Uses the legacy `&str` crypto path — see [`Self::encrypt_field_and_store`].
+    /// with [`Self::decrypt_field_as`].
     #[cfg(feature = "ferrum-storage-backend")]
-    #[allow(deprecated)]
     pub async fn read_and_decrypt_field(
         &mut self,
         storage_key: &str,
         key_ref: &KeyRef,
-        actor: &str,
+        actor: &SolumActor,
+        subject_id: &str,
+        purpose: &str,
     ) -> Result<Vec<u8>, SolumError> {
         use tokio::io::AsyncReadExt;
 
-        // Clone the Arc; drop the reader before decrypt_field (&mut self + audit).
         let storage = self
             .storage
             .as_ref()
@@ -246,29 +280,24 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
         drop(reader);
         let field: EncryptedField = serde_json::from_slice(&bytes)
             .map_err(|e| SolumError::Message(format!("deserialize EncryptedField: {e}")))?;
-        self.decrypt_field(&field, key_ref, actor)
+        self.decrypt_field_as(&field, key_ref, actor, subject_id, purpose)
     }
 
-    /// Fail-closed capability gate for `*_as` methods: on miss, write one
-    /// `authorization.denied` audit event and return [`SolumError::Authorization`].
+    /// Fail-closed capability gate: on miss, write `access.denied` and return
+    /// [`SolumError::Authorization`]. On success, write `access.granted`.
     fn authorize_or_deny(
         &mut self,
         actor: &SolumActor,
         capability: &str,
         attempted_operation: &str,
     ) -> Result<(), SolumError> {
+        let details = Self::string_details(&[
+            ("capability", capability),
+            ("attempted_operation", attempted_operation),
+        ]);
         if let Err(e) = solum_identity::require_capability(actor, capability) {
-            let mut details = serde_json::Map::new();
-            details.insert(
-                "capability".into(),
-                serde_json::Value::String(capability.to_string()),
-            );
-            details.insert(
-                "attempted_operation".into(),
-                serde_json::Value::String(attempted_operation.to_string()),
-            );
             self.append_audit_event(solum_audit::AuditEvent {
-                event_type: "authorization.denied".into(),
+                event_type: solum_audit::events::ACCESS_DENIED.into(),
                 timestamp: Utc::now(),
                 actor: actor.to_audit_string(),
                 data_category: None,
@@ -277,13 +306,41 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
             })?;
             return Err(SolumError::Authorization(e));
         }
+        self.append_audit_event(solum_audit::AuditEvent {
+            event_type: solum_audit::events::ACCESS_GRANTED.into(),
+            timestamp: Utc::now(),
+            actor: actor.to_audit_string(),
+            data_category: None,
+            outcome: solum_audit::AuditOutcome::Success,
+            details,
+        })?;
         Ok(())
+    }
+
+    /// Purpose-level consent (Track B CDR / FHIR). Empty grant scope is enough.
+    pub fn require_consent_as(
+        &mut self,
+        actor: &SolumActor,
+        subject_id: &str,
+        purpose: &str,
+        attempted_operation: &str,
+    ) -> Result<(), SolumError> {
+        if self.consent.is_granted(subject_id, purpose) {
+            return Ok(());
+        }
+        self.deny_consent(
+            actor,
+            subject_id,
+            purpose,
+            "*",
+            attempted_operation,
+            "active_consent_required",
+        )
     }
 
     /// Fail-closed consent gate for crypto `*_as` methods: require an active
     /// grant for `(subject_id, purpose)` that covers `category` (empty grant
     /// scope = purpose-level; otherwise `category` must appear in scope).
-    /// On miss, write one `consent.denied` audit event.
     fn require_consent_for_category(
         &mut self,
         actor: &SolumActor,
@@ -303,38 +360,46 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
         } else {
             "category_not_in_consent_scope"
         };
-        let mut details = serde_json::Map::new();
-        details.insert(
-            "subject_id".into(),
-            serde_json::Value::String(subject_id.to_string()),
-        );
-        details.insert(
-            "purpose".into(),
-            serde_json::Value::String(purpose.to_string()),
-        );
-        details.insert(
-            "category".into(),
-            serde_json::Value::String(category.to_string()),
-        );
-        details.insert(
-            "attempted_operation".into(),
-            serde_json::Value::String(attempted_operation.to_string()),
-        );
-        details.insert(
-            "reason".into(),
-            serde_json::Value::String(reason.to_string()),
-        );
+        self.deny_consent(
+            actor,
+            subject_id,
+            purpose,
+            category,
+            attempted_operation,
+            reason,
+        )
+    }
+
+    fn deny_consent(
+        &mut self,
+        actor: &SolumActor,
+        subject_id: &str,
+        purpose: &str,
+        category: &str,
+        attempted_operation: &str,
+        reason: &str,
+    ) -> Result<(), SolumError> {
+        let details = Self::string_details(&[
+            ("subject_id", subject_id),
+            ("purpose", purpose),
+            ("category", category),
+            ("attempted_operation", attempted_operation),
+            ("reason", reason),
+        ]);
         self.append_audit_event(solum_audit::AuditEvent {
-            event_type: "consent.denied".into(),
+            event_type: solum_audit::events::CONSENT_DENIED.into(),
             timestamp: Utc::now(),
             actor: actor.to_audit_string(),
             data_category: Some(category.to_string()),
             outcome: solum_audit::AuditOutcome::Failure,
             details,
         })?;
-        Err(SolumError::Message(format!(
-            "consent denied for {subject_id}/{purpose} category {category}: {reason}"
-        )))
+        Err(SolumError::ConsentDenied {
+            subject_id: subject_id.to_string(),
+            purpose: purpose.to_string(),
+            category: category.to_string(),
+            reason: reason.to_string(),
+        })
     }
 
     /// Grant consent for `(subject_id, purpose)` — rejecting purposes the
@@ -349,26 +414,24 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
         since = "0.1.0",
         note = "use grant_consent_as with SolumActor scopes (capability-checked)"
     )]
-    pub fn grant_consent(
+    pub(crate) fn grant_consent(
         &mut self,
         subject_id: &str,
         purpose: &str,
         scope: Vec<String>,
         actor: &str,
     ) -> Result<solum_consent::ConsentRecord, SolumError> {
-        solum_consent::validate_purpose(&self.profile, purpose)
-            .map_err(|e| SolumError::Message(e.to_string()))?;
+        solum_consent::validate_purpose(&self.profile, purpose)?;
         let record = self
             .consent
-            .grant(subject_id, purpose, scope.clone(), actor)
-            .map_err(|e| SolumError::Message(e.to_string()))?;
+            .grant(subject_id, purpose, scope.clone(), actor)?;
         self.append_audit_event(solum_audit::AuditEvent {
-            event_type: "consent.granted".into(),
+            event_type: solum_audit::events::CONSENT_GRANTED.into(),
             timestamp: record.recorded_at,
             actor: actor.to_string(),
             data_category: scope.first().cloned(),
             outcome: solum_audit::AuditOutcome::Success,
-            details: Default::default(),
+            details: Self::string_details(&[("subject_id", subject_id), ("purpose", purpose)]),
         })?;
         Ok(record)
     }
@@ -402,23 +465,20 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
         since = "0.1.0",
         note = "use revoke_consent_as with SolumActor scopes (capability-checked)"
     )]
-    pub fn revoke_consent(
+    pub(crate) fn revoke_consent(
         &mut self,
         subject_id: &str,
         purpose: &str,
         actor: &str,
     ) -> Result<solum_consent::ConsentRecord, SolumError> {
-        let record = self
-            .consent
-            .revoke(subject_id, purpose, actor)
-            .map_err(|e| SolumError::Message(e.to_string()))?;
+        let record = self.consent.revoke(subject_id, purpose, actor)?;
         self.append_audit_event(solum_audit::AuditEvent {
-            event_type: "consent.revoked".into(),
+            event_type: solum_audit::events::CONSENT_REVOKED.into(),
             timestamp: record.recorded_at,
             actor: actor.to_string(),
             data_category: None,
             outcome: solum_audit::AuditOutcome::Success,
-            details: Default::default(),
+            details: Self::string_details(&[("subject_id", subject_id), ("purpose", purpose)]),
         })?;
         Ok(record)
     }
@@ -453,41 +513,51 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
         since = "0.1.0",
         note = "use encrypt_field_as (capability + consent gated); &str path bypasses both"
     )]
-    pub fn encrypt_field(
+    #[allow(dead_code)] // exercised by crate tests; product path uses encrypt_field_inner
+    pub(crate) fn encrypt_field(
         &mut self,
         category: &str,
         plaintext: &[u8],
         key_ref: &KeyRef,
         actor: &str,
     ) -> Result<EncryptedField, SolumError> {
-        let gate = FieldCategoryGate::new(&self.profile.encryption.required_field_categories);
-        // Reject unknown categories without an audit event (marketing-purpose pattern).
-        solum_crypto::validate_field_category(&gate, category)
-            .map_err(|e| SolumError::Message(e.to_string()))?;
+        self.encrypt_field_inner(category, plaintext, key_ref, actor, None, None)
+    }
 
+    fn encrypt_field_inner(
+        &mut self,
+        category: &str,
+        plaintext: &[u8],
+        key_ref: &KeyRef,
+        actor: &str,
+        subject_id: Option<&str>,
+        purpose: Option<&str>,
+    ) -> Result<EncryptedField, SolumError> {
+        let gate = FieldCategoryGate::new(&self.profile.encryption.required_field_categories);
+        solum_crypto::validate_field_category(&gate, category)?;
+        let details = self.crypto_details(category, key_ref, subject_id, purpose);
         match solum_crypto::encrypt_field(&gate, &self.keys, category, plaintext, key_ref) {
             Ok(field) => {
-                self.append_audit_event(solum_audit::AuditEvent {
-                    event_type: "data.encrypt".into(),
-                    timestamp: Utc::now(),
-                    actor: actor.to_string(),
-                    data_category: Some(category.to_string()),
-                    outcome: solum_audit::AuditOutcome::Success,
-                    details: Default::default(),
-                })?;
+                self.append_crypto_events(
+                    actor,
+                    category,
+                    solum_audit::events::DATA_ENCRYPT,
+                    solum_audit::AuditOutcome::Success,
+                    details,
+                    false,
+                )?;
                 Ok(field)
             }
             Err(e) => {
-                self.append_audit_event(solum_audit::AuditEvent {
-                    event_type: "data.encrypt".into(),
-                    timestamp: Utc::now(),
-                    actor: actor.to_string(),
-                    data_category: Some(category.to_string()),
-                    outcome: solum_audit::AuditOutcome::Failure,
-                    details: Default::default(),
-                })
-                .map_err(|audit_err| SolumError::Message(audit_err.to_string()))?;
-                Err(SolumError::Message(e.to_string()))
+                self.append_crypto_events(
+                    actor,
+                    category,
+                    solum_audit::events::DATA_ENCRYPT,
+                    solum_audit::AuditOutcome::Failure,
+                    details,
+                    false,
+                )?;
+                Err(e.into())
             }
         }
     }
@@ -508,14 +578,17 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
     ) -> Result<EncryptedField, SolumError> {
         self.authorize_or_deny(actor, solum_identity::CAP_CRYPTO_ENCRYPT, "encrypt_field")?;
         let gate = FieldCategoryGate::new(&self.profile.encryption.required_field_categories);
-        solum_crypto::validate_field_category(&gate, category)
-            .map_err(|e| SolumError::Message(e.to_string()))?;
+        solum_crypto::validate_field_category(&gate, category)?;
         self.require_consent_for_category(actor, subject_id, purpose, category, "encrypt_field")?;
         let actor_s = actor.to_audit_string();
-        #[allow(deprecated)]
-        {
-            self.encrypt_field(category, plaintext, key_ref, &actor_s)
-        }
+        self.encrypt_field_inner(
+            category,
+            plaintext,
+            key_ref,
+            &actor_s,
+            Some(subject_id),
+            Some(purpose),
+        )
     }
 
     /// Decrypt a Crypt4GH field and emit a `data.decrypt` audit event.
@@ -531,37 +604,109 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
         since = "0.1.0",
         note = "use decrypt_field_as (capability + consent gated); &str path bypasses both"
     )]
-    pub fn decrypt_field(
+    #[allow(dead_code)] // exercised by crate tests; product path uses decrypt_field_inner
+    pub(crate) fn decrypt_field(
         &mut self,
         field: &EncryptedField,
         key_ref: &KeyRef,
         actor: &str,
     ) -> Result<Vec<u8>, SolumError> {
+        self.decrypt_field_inner(field, key_ref, actor, None, None)
+    }
+
+    fn decrypt_field_inner(
+        &mut self,
+        field: &EncryptedField,
+        key_ref: &KeyRef,
+        actor: &str,
+        subject_id: Option<&str>,
+        purpose: Option<&str>,
+    ) -> Result<Vec<u8>, SolumError> {
+        let details = self.crypto_details(&field.category, key_ref, subject_id, purpose);
         match solum_crypto::decrypt_field(&self.keys, field, key_ref) {
             Ok(plaintext) => {
-                self.append_audit_event(solum_audit::AuditEvent {
-                    event_type: "data.decrypt".into(),
-                    timestamp: Utc::now(),
-                    actor: actor.to_string(),
-                    data_category: Some(field.category.clone()),
-                    outcome: solum_audit::AuditOutcome::Success,
-                    details: Default::default(),
-                })?;
+                self.append_crypto_events(
+                    actor,
+                    &field.category,
+                    solum_audit::events::DATA_DECRYPT,
+                    solum_audit::AuditOutcome::Success,
+                    details,
+                    true,
+                )?;
                 Ok(plaintext)
             }
             Err(e) => {
-                self.append_audit_event(solum_audit::AuditEvent {
-                    event_type: "data.decrypt".into(),
-                    timestamp: Utc::now(),
-                    actor: actor.to_string(),
-                    data_category: Some(field.category.clone()),
-                    outcome: solum_audit::AuditOutcome::Failure,
-                    details: Default::default(),
-                })
-                .map_err(|audit_err| SolumError::Message(audit_err.to_string()))?;
-                Err(SolumError::Message(e.to_string()))
+                self.append_crypto_events(
+                    actor,
+                    &field.category,
+                    solum_audit::events::DATA_DECRYPT,
+                    solum_audit::AuditOutcome::Failure,
+                    details,
+                    false,
+                )?;
+                Err(e.into())
             }
         }
+    }
+
+    fn crypto_details(
+        &self,
+        category: &str,
+        key_ref: &KeyRef,
+        subject_id: Option<&str>,
+        purpose: Option<&str>,
+    ) -> serde_json::Map<String, serde_json::Value> {
+        let mut details = Self::string_details(&[("category", category), ("key_ref", &key_ref.id)]);
+        if let Some(s) = subject_id {
+            details.insert(
+                "subject_id".into(),
+                serde_json::Value::String(s.to_string()),
+            );
+        }
+        if let Some(p) = purpose {
+            details.insert("purpose".into(), serde_json::Value::String(p.to_string()));
+        }
+        details
+    }
+
+    fn append_crypto_events(
+        &mut self,
+        actor: &str,
+        category: &str,
+        primary: &str,
+        outcome: solum_audit::AuditOutcome,
+        details: serde_json::Map<String, serde_json::Value>,
+        also_data_read: bool,
+    ) -> Result<(), SolumError> {
+        let actor_s = actor.to_string();
+        let cat = Some(category.to_string());
+        self.append_audit_event(solum_audit::AuditEvent {
+            event_type: primary.into(),
+            timestamp: Utc::now(),
+            actor: actor_s.clone(),
+            data_category: cat.clone(),
+            outcome,
+            details: details.clone(),
+        })?;
+        self.append_audit_event(solum_audit::AuditEvent {
+            event_type: solum_audit::events::KEY_USE.into(),
+            timestamp: Utc::now(),
+            actor: actor_s.clone(),
+            data_category: cat.clone(),
+            outcome,
+            details: details.clone(),
+        })?;
+        if also_data_read {
+            self.append_audit_event(solum_audit::AuditEvent {
+                event_type: solum_audit::events::DATA_READ.into(),
+                timestamp: Utc::now(),
+                actor: actor_s,
+                data_category: cat,
+                outcome,
+                details,
+            })?;
+        }
+        Ok(())
     }
 
     /// [`decrypt_field`] with a structured [`SolumActor`]. Requires
@@ -585,10 +730,7 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
             "decrypt_field",
         )?;
         let actor_s = actor.to_audit_string();
-        #[allow(deprecated)]
-        {
-            self.decrypt_field(field, key_ref, &actor_s)
-        }
+        self.decrypt_field_inner(field, key_ref, &actor_s, Some(subject_id), Some(purpose))
     }
 
     /// Encrypt a typed [`solum_fhir::PatientSummary`] via
@@ -664,18 +806,121 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
         self.consent.is_granted(subject_id, purpose)
     }
 
+    /// Consent grant/revoke history for one subject (in-memory index).
+    pub fn consent_history(
+        &self,
+        subject_id: &str,
+    ) -> Result<Vec<solum_consent::ConsentRecord>, SolumError> {
+        Ok(self.consent.history_for_subject(subject_id)?)
+    }
+
+    /// Validate a cross-border transfer against the active profile and write
+    /// `residency.transfer_attempt` (success or failure).
+    pub fn check_transfer(
+        &mut self,
+        mechanism: &TransferMechanism,
+        destination: &str,
+        actor: &str,
+    ) -> Result<(), SolumError> {
+        let mut details = Self::string_details(&[("destination", destination)]);
+        details.insert(
+            "mechanism".into(),
+            serde_json::Value::String(format!("{mechanism:?}")),
+        );
+        match validate_transfer(&self.profile, mechanism, destination) {
+            Ok(()) => {
+                self.append_audit_event(solum_audit::AuditEvent {
+                    event_type: solum_audit::events::RESIDENCY_TRANSFER_ATTEMPT.into(),
+                    timestamp: Utc::now(),
+                    actor: actor.to_string(),
+                    data_category: None,
+                    outcome: solum_audit::AuditOutcome::Success,
+                    details,
+                })?;
+                Ok(())
+            }
+            Err(e) => {
+                details.insert("reason".into(), serde_json::Value::String(e.to_string()));
+                self.append_audit_event(solum_audit::AuditEvent {
+                    event_type: solum_audit::events::RESIDENCY_TRANSFER_ATTEMPT.into(),
+                    timestamp: Utc::now(),
+                    actor: actor.to_string(),
+                    data_category: None,
+                    outcome: solum_audit::AuditOutcome::Failure,
+                    details,
+                })?;
+                Err(e.into())
+            }
+        }
+    }
+
+    /// [`check_transfer`] with a structured [`SolumActor`] (`solum:cdr:write`).
+    pub fn check_transfer_as(
+        &mut self,
+        mechanism: &TransferMechanism,
+        destination: &str,
+        actor: &SolumActor,
+    ) -> Result<(), SolumError> {
+        self.authorize_or_deny(actor, solum_identity::CAP_CDR_WRITE, "transfer_check")?;
+        self.check_transfer(mechanism, destination, &actor.to_audit_string())
+    }
+
+    /// Record a successful identity verification (`identity.authenticated`).
+    pub fn record_identity_authenticated_as(
+        &mut self,
+        actor: &SolumActor,
+        details: serde_json::Map<String, serde_json::Value>,
+    ) -> Result<(), SolumError> {
+        self.append_audit_event(solum_audit::AuditEvent {
+            event_type: solum_audit::events::IDENTITY_AUTHENTICATED.into(),
+            timestamp: Utc::now(),
+            actor: actor.to_audit_string(),
+            data_category: None,
+            outcome: solum_audit::AuditOutcome::Success,
+            details,
+        })
+    }
+
+    /// Record an audit-log export (`data.export`).
+    pub fn record_data_export_as(
+        &mut self,
+        actor: &SolumActor,
+        details: serde_json::Map<String, serde_json::Value>,
+    ) -> Result<(), SolumError> {
+        self.append_audit_event(solum_audit::AuditEvent {
+            event_type: solum_audit::events::DATA_EXPORT.into(),
+            timestamp: Utc::now(),
+            actor: actor.to_audit_string(),
+            data_category: None,
+            outcome: solum_audit::AuditOutcome::Success,
+            details,
+        })
+    }
+
+    /// Record inbound EEHRxF / FHIR receipt (`data.receive_eehrxf`).
+    pub fn record_data_receive_eehrxf_as(
+        &mut self,
+        actor: &SolumActor,
+        details: serde_json::Map<String, serde_json::Value>,
+    ) -> Result<(), SolumError> {
+        self.append_audit_event(solum_audit::AuditEvent {
+            event_type: solum_audit::events::DATA_RECEIVE_EEHRXF.into(),
+            timestamp: Utc::now(),
+            actor: actor.to_audit_string(),
+            data_category: Some("clinical_fhir".into()),
+            outcome: solum_audit::AuditOutcome::Success,
+            details,
+        })
+    }
+
     /// Full audit trail so far (for log review / HELIOS export).
     pub fn audit_events(&self) -> Result<Vec<solum_audit::AuditRecord>, SolumError> {
-        self.audit
-            .read_all()
-            .map_err(|e| SolumError::Message(e.to_string()))
+        Ok(self.audit.read_all()?)
     }
 
     /// Verify the audit chain has not been tampered with since it was written.
     pub fn verify_audit_chain(&self) -> Result<(), SolumError> {
-        self.audit
-            .verify_chain()
-            .map_err(|e| SolumError::Message(e.to_string()))
+        Ok(self.audit.verify_chain()?)
     }
 }
 
@@ -700,8 +945,7 @@ pub fn query_consent_status(
     purpose: &str,
 ) -> Result<&'static str, SolumError> {
     let _profile = start_with_profile(profile_path, runtime)?;
-    let store = solum_consent::ConsentStore::open(consent_path)
-        .map_err(|e| SolumError::Message(format!("consent store: {e}")))?;
+    let store = solum_consent::ConsentStore::open(consent_path)?;
     Ok(match store.status(subject_id, purpose) {
         Some(solum_consent::ConsentStatus::Granted) => "granted",
         Some(solum_consent::ConsentStatus::Revoked) => "revoked",
@@ -903,16 +1147,23 @@ mod tests {
         assert!(!err.to_string().is_empty());
 
         let events = deployment.audit_events().unwrap();
-        assert_eq!(events.len(), 2);
-        assert_eq!(events[0].event.event_type, "data.encrypt");
-        assert_eq!(events[0].event.outcome, solum_audit::AuditOutcome::Success);
-        assert_eq!(events[1].event.event_type, "data.decrypt");
-        assert_eq!(events[1].event.outcome, solum_audit::AuditOutcome::Failure);
-        assert_eq!(events[1].event.actor, "attacker/9");
+        let decrypts: Vec<_> = events
+            .iter()
+            .filter(|r| r.event.event_type == solum_audit::events::DATA_DECRYPT)
+            .collect();
+        assert_eq!(decrypts.len(), 1);
         assert_eq!(
-            events[1].event.data_category.as_deref(),
+            decrypts[0].event.outcome,
+            solum_audit::AuditOutcome::Failure
+        );
+        assert_eq!(decrypts[0].event.actor, "attacker/9");
+        assert_eq!(
+            decrypts[0].event.data_category.as_deref(),
             Some("clinical_notes")
         );
+        assert!(events
+            .iter()
+            .any(|r| r.event.event_type == solum_audit::events::KEY_USE));
         assert!(deployment.verify_audit_chain().is_ok());
     }
 
@@ -956,14 +1207,26 @@ mod tests {
             .unwrap();
 
         let events = deployment.audit_events().unwrap();
-        assert_eq!(events.len(), 2);
-        let a = &events[0].event;
-        let b = &events[1].event;
+        assert_eq!(events.len(), 4);
+        let granted: Vec<_> = events
+            .iter()
+            .filter(|r| r.event.event_type == solum_audit::events::CONSENT_GRANTED)
+            .collect();
+        assert_eq!(granted.len(), 2);
+        let a = &granted[0].event;
+        let b = &granted[1].event;
 
         assert_eq!(a.event_type, b.event_type);
         assert_eq!(a.data_category, b.data_category);
         assert_eq!(a.outcome, b.outcome);
-        assert_eq!(a.details, b.details);
+        assert_eq!(
+            a.details.get("purpose").and_then(|v| v.as_str()),
+            Some("care_provision")
+        );
+        assert_eq!(
+            b.details.get("purpose").and_then(|v| v.as_str()),
+            Some("care_provision")
+        );
         assert_eq!(a.actor, "ferrum:passport:researcher@example.org");
         assert_eq!(b.actor, "standalone:practitioner/7");
         assert_ne!(a.actor, b.actor);
@@ -978,7 +1241,7 @@ mod tests {
     ) {
         assert_eq!(events.len(), 1);
         let e = &events[0].event;
-        assert_eq!(e.event_type, "authorization.denied");
+        assert_eq!(e.event_type, solum_audit::events::ACCESS_DENIED);
         assert_eq!(e.outcome, solum_audit::AuditOutcome::Failure);
         assert_eq!(e.actor, expected_actor);
         assert_eq!(
@@ -1011,8 +1274,15 @@ mod tests {
 
         assert!(deployment.is_consented("patient/42", "care_provision"));
         let events = deployment.audit_events().unwrap();
-        assert_eq!(events.len(), 1);
-        assert_eq!(events[0].event.event_type, "consent.granted");
+        assert_eq!(events.len(), 2);
+        assert_eq!(
+            events[0].event.event_type,
+            solum_audit::events::ACCESS_GRANTED
+        );
+        assert_eq!(
+            events[1].event.event_type,
+            solum_audit::events::CONSENT_GRANTED
+        );
         assert!(deployment.verify_audit_chain().is_ok());
     }
 
@@ -1080,8 +1350,11 @@ mod tests {
         assert!(deployment.is_consented("patient/42", "care_provision"));
 
         let events = deployment.audit_events().unwrap();
-        assert_eq!(events.len(), 2); // grant + authorization.denied
-        assert_eq!(events[1].event.event_type, "authorization.denied");
+        assert_eq!(events.len(), 2); // grant + access.denied
+        assert_eq!(
+            events[1].event.event_type,
+            solum_audit::events::ACCESS_DENIED
+        );
         assert_eq!(
             events[1]
                 .event
@@ -1100,8 +1373,15 @@ mod tests {
         assert!(!deployment.is_consented("patient/42", "care_provision"));
 
         let events = deployment.audit_events().unwrap();
-        assert_eq!(events.len(), 3);
-        assert_eq!(events[2].event.event_type, "consent.revoked");
+        assert_eq!(events.len(), 4); // grant + deny + access.granted + consent.revoked
+        assert_eq!(
+            events[2].event.event_type,
+            solum_audit::events::ACCESS_GRANTED
+        );
+        assert_eq!(
+            events[3].event.event_type,
+            solum_audit::events::CONSENT_REVOKED
+        );
         assert!(deployment.verify_audit_chain().is_ok());
     }
 
@@ -1120,7 +1400,10 @@ mod tests {
         assert!(matches!(err, SolumError::Authorization(_)));
         assert!(deployment.is_consented("patient/42", "care_provision"));
         let events = deployment.audit_events().unwrap();
-        assert_eq!(events[1].event.event_type, "authorization.denied");
+        assert_eq!(
+            events[1].event.event_type,
+            solum_audit::events::ACCESS_DENIED
+        );
         assert!(deployment.verify_audit_chain().is_ok());
     }
 
@@ -1164,7 +1447,7 @@ mod tests {
                 purpose,
             )
             .expect_err("encrypt without consent must deny");
-        assert!(matches!(err, SolumError::Message(_)));
+        assert!(matches!(err, SolumError::ConsentDenied { .. }));
         assert_eq!(
             deployment
                 .audit_events()
@@ -1211,7 +1494,7 @@ mod tests {
         let err = deployment
             .decrypt_field_as(&enc, &key_ref, &decrypt_actor, subject, purpose)
             .expect_err("decrypt after revoke must deny");
-        assert!(matches!(err, SolumError::Message(_)));
+        assert!(matches!(err, SolumError::ConsentDenied { .. }));
         assert_eq!(
             deployment
                 .audit_events()
@@ -1267,10 +1550,14 @@ mod tests {
             .expect_err("empty scopes must deny decrypt");
         assert!(matches!(err, SolumError::Authorization(_)));
         let events = deployment.audit_events().unwrap();
-        assert_eq!(events.len(), 2);
-        assert_eq!(events[1].event.event_type, "authorization.denied");
         assert_eq!(
-            events[1]
+            events.last().unwrap().event.event_type,
+            solum_audit::events::ACCESS_DENIED
+        );
+        assert_eq!(
+            events
+                .last()
+                .unwrap()
                 .event
                 .details
                 .get("attempted_operation")
@@ -1340,12 +1627,25 @@ mod tests {
 
         let plain = b"patient-summary-storage-demo";
         let storage_key = "fields/patient_summary/demo-1.json";
+        let actor = SolumActor::standalone(
+            "practitioner/7",
+            vec![
+                identity::CAP_CONSENT_GRANT.into(),
+                identity::CAP_CRYPTO_ENCRYPT.into(),
+                identity::CAP_CRYPTO_DECRYPT.into(),
+            ],
+        );
+        deployment
+            .grant_consent_as("patient/42", "care_provision", vec![], &actor)
+            .unwrap();
         let enc = deployment
             .encrypt_field_and_store(
                 "patient_summary",
                 plain,
                 &key_ref,
-                "practitioner/7",
+                &actor,
+                "patient/42",
+                "care_provision",
                 storage_key,
             )
             .await
@@ -1353,7 +1653,13 @@ mod tests {
         assert_eq!(enc.category, "patient_summary");
 
         let out = deployment
-            .read_and_decrypt_field(storage_key, &key_ref, "practitioner/7")
+            .read_and_decrypt_field(
+                storage_key,
+                &key_ref,
+                &actor,
+                "patient/42",
+                "care_provision",
+            )
             .await
             .expect("read_and_decrypt_field");
         assert_eq!(out, plain);
@@ -1362,5 +1668,32 @@ mod tests {
         assert!(events.iter().any(|r| r.event.event_type == "data.encrypt"));
         assert!(events.iter().any(|r| r.event.event_type == "data.decrypt"));
         assert!(deployment.verify_audit_chain().is_ok());
+    }
+
+    #[test]
+    fn check_transfer_emits_residency_event() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut deployment, _) = open_deployment(&dir);
+        deployment
+            .check_transfer(&TransferMechanism::HdabMediated, "EU", "practitioner/7")
+            .expect("EU HDAB transfer is permitted");
+        let err = deployment
+            .check_transfer(&TransferMechanism::HdabMediated, "US", "practitioner/7")
+            .expect_err("US is not a permitted destination");
+        assert!(matches!(err, SolumError::Profile(_)));
+        let events = deployment.audit_events().unwrap();
+        let attempts: Vec<_> = events
+            .iter()
+            .filter(|r| r.event.event_type == solum_audit::events::RESIDENCY_TRANSFER_ATTEMPT)
+            .collect();
+        assert_eq!(attempts.len(), 2);
+        assert_eq!(
+            attempts[0].event.outcome,
+            solum_audit::AuditOutcome::Success
+        );
+        assert_eq!(
+            attempts[1].event.outcome,
+            solum_audit::AuditOutcome::Failure
+        );
     }
 }

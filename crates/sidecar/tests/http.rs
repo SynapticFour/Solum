@@ -126,11 +126,15 @@ fn client() -> reqwest::Client {
 }
 
 async fn grant_care_provision_http(addr: &str, token: &str) {
+    grant_care_provision_for(addr, token, "patient/42").await;
+}
+
+async fn grant_care_provision_for(addr: &str, token: &str, subject: &str) {
     let res = client()
         .post(format!("http://{addr}/v1/consent/grant"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
-            "subject": "patient/42",
+            "subject": subject,
             "purpose": "care_provision",
             "actor": "practitioner/7",
             "capability": ["solum:consent:grant"],
@@ -961,14 +965,16 @@ async fn cdr_write_denied_without_capability() {
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
             "actor": "practitioner/h3",
-            "capability": []
+            "capability": [],
+            "subject": "patient/42",
+            "purpose": "care_provision"
         }))
         .send()
         .await
         .unwrap();
     assert_eq!(res.status(), 403, "body={}", res.text().await.unwrap());
     let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
-    assert!(audit.contains("authorization.denied"));
+    assert!(audit.contains("access.denied"));
 }
 
 #[tokio::test]
@@ -990,12 +996,16 @@ async fn cdr_facade_write_read_and_audit() {
         .unwrap();
     assert_eq!(tmpl.status(), 200, "body={}", tmpl.text().await.unwrap());
 
+    grant_care_provision_http(&addr.to_string(), token).await;
+
     let ehr_res = client()
         .post(format!("http://{addr}/v1/cdr/ehr"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
             "actor": "practitioner/h3",
-            "capability": ["solum:cdr:write"]
+            "capability": ["solum:cdr:write"],
+            "subject": "patient/42",
+            "purpose": "care_provision"
         }))
         .send()
         .await
@@ -1015,6 +1025,8 @@ async fn cdr_facade_write_read_and_audit() {
         .json(&serde_json::json!({
             "actor": "practitioner/h3",
             "capability": ["solum:cdr:write"],
+            "subject": "patient/42",
+            "purpose": "care_provision",
             "use_example": true
         }))
         .send()
@@ -1034,10 +1046,10 @@ async fn cdr_facade_write_read_and_audit() {
             "http://{addr}/v1/cdr/ehr/{ehr_id}/composition/{uid}"
         ))
         .header(SIDECAR_TOKEN_HEADER, token)
-        .query(&[
-            ("actor", "practitioner/h3"),
-            ("capability", "solum:cdr:read"),
-        ])
+        .header("X-Solum-Actor", "practitioner/h3")
+        .header("X-Solum-Capability", "solum:cdr:read")
+        .header("X-Solum-Subject", "patient/42")
+        .header("X-Solum-Purpose", "care_provision")
         .send()
         .await
         .unwrap();
@@ -1058,15 +1070,19 @@ async fn cdr_facade_write_read_and_audit() {
 async fn fhir_create_get_without_cdr_link() {
     let token = "fhir-ok-token";
     let (addr, dir) = spawn_ephemeral_sidecar(token).await;
+    grant_care_provision_for(&addr.to_string(), token, "jane-1").await;
     let create = client()
         .post(format!("http://{addr}/v1/fhir/Patient"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
             "actor": "practitioner/h3",
             "capability": ["solum:cdr:write"],
+            "subject": "jane-1",
+            "purpose": "care_provision",
             "link_cdr": false,
             "resource": {
                 "resourceType": "Patient",
+                "id": "jane-1",
                 "name": [{"family": "Doe", "given": ["Jane"]}]
             }
         }))
@@ -1084,10 +1100,10 @@ async fn fhir_create_get_without_cdr_link() {
     let get = client()
         .get(format!("http://{addr}/v1/fhir/Patient/{id}"))
         .header(SIDECAR_TOKEN_HEADER, token)
-        .query(&[
-            ("actor", "practitioner/h3"),
-            ("capability", "solum:cdr:read"),
-        ])
+        .header("X-Solum-Actor", "practitioner/h3")
+        .header("X-Solum-Capability", "solum:cdr:read")
+        .header("X-Solum-Subject", "jane-1")
+        .header("X-Solum-Purpose", "care_provision")
         .send()
         .await
         .unwrap();
@@ -1102,12 +1118,15 @@ async fn aql_rejected_without_select() {
     let token = "aql-token";
     let (addr, _dir) =
         spawn_ephemeral_sidecar_with_ehrbase(token, format!("http://{ehr}/ehrbase")).await;
+    grant_care_provision_http(&addr.to_string(), token).await;
     let res = client()
         .post(format!("http://{addr}/v1/cdr/aql"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
             "actor": "practitioner/h3",
             "capability": ["solum:cdr:read"],
+            "subject": "patient/42",
+            "purpose": "care_provision",
             "q": "DELETE FROM EHR"
         }))
         .send()
@@ -1122,12 +1141,15 @@ async fn aql_allowlisted_ok() {
     let token = "aql-ok-token";
     let (addr, dir) =
         spawn_ephemeral_sidecar_with_ehrbase(token, format!("http://{ehr}/ehrbase")).await;
+    grant_care_provision_http(&addr.to_string(), token).await;
     let res = client()
         .post(format!("http://{addr}/v1/cdr/aql"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
             "actor": "practitioner/h3",
             "capability": ["solum:cdr:read"],
+            "subject": "patient/42",
+            "purpose": "care_provision",
             "q": "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c"
         }))
         .send()
@@ -1142,12 +1164,14 @@ async fn aql_allowlisted_ok() {
 async fn subject_link_round_trip() {
     let token = "subject-link-token";
     let (addr, dir) = spawn_ephemeral_sidecar(token).await;
+    grant_care_provision_for(&addr.to_string(), token, "subj-42").await;
     let put = client()
         .post(format!("http://{addr}/v1/cdr/subject-link"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
             "actor": "practitioner/h3",
             "capability": ["solum:cdr:write"],
+            "purpose": "care_provision",
             "solum_subject_id": "subj-42",
             "ferrum_drs_id": "drs.example/abc",
             "phenopacket_id": "ppkt-1"
@@ -1159,10 +1183,10 @@ async fn subject_link_round_trip() {
     let get = client()
         .get(format!("http://{addr}/v1/cdr/subject-link/subj-42"))
         .header(SIDECAR_TOKEN_HEADER, token)
-        .query(&[
-            ("actor", "practitioner/h3"),
-            ("capability", "solum:cdr:read"),
-        ])
+        .header("X-Solum-Actor", "practitioner/h3")
+        .header("X-Solum-Capability", "solum:cdr:read")
+        .header("X-Solum-Subject", "subj-42")
+        .header("X-Solum-Purpose", "care_provision")
         .send()
         .await
         .unwrap();
@@ -1177,12 +1201,15 @@ async fn subject_link_round_trip() {
 async fn fhir_patient_auto_subject_link() {
     let token = "patient-bridge-token";
     let (addr, dir) = spawn_ephemeral_sidecar(token).await;
+    grant_care_provision_for(&addr.to_string(), token, "bridge-patient-1").await;
     let create = client()
         .post(format!("http://{addr}/v1/fhir/Patient"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
             "actor": "practitioner/h3",
             "capability": ["solum:cdr:write"],
+            "subject": "bridge-patient-1",
+            "purpose": "care_provision",
             "link_cdr": false,
             "resource": {
                 "resourceType": "Patient",
@@ -1204,10 +1231,10 @@ async fn fhir_patient_auto_subject_link() {
             "http://{addr}/v1/cdr/subject-link/bridge-patient-1"
         ))
         .header(SIDECAR_TOKEN_HEADER, token)
-        .query(&[
-            ("actor", "practitioner/h3"),
-            ("capability", "solum:cdr:read"),
-        ])
+        .header("X-Solum-Actor", "practitioner/h3")
+        .header("X-Solum-Capability", "solum:cdr:read")
+        .header("X-Solum-Subject", "bridge-patient-1")
+        .header("X-Solum-Purpose", "care_provision")
         .send()
         .await
         .unwrap();
@@ -1220,12 +1247,15 @@ async fn fhir_patient_auto_subject_link() {
 async fn dual_write_ok_without_cdr() {
     let token = "dual-ok-token";
     let (addr, dir) = spawn_ephemeral_sidecar(token).await;
+    grant_care_provision_for(&addr.to_string(), token, "dw-1").await;
     let res = client()
         .post(format!("http://{addr}/v1/migrate/dual-write"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
             "actor": "practitioner/h3",
             "capability": ["solum:cdr:write"],
+            "subject": "dw-1",
+            "purpose": "care_provision",
             "link_cdr": false,
             "source": "legacy-his",
             "resource": {
@@ -1249,12 +1279,15 @@ async fn dual_write_dead_letters_on_cdr_failure() {
     let token = "dual-dl-token";
     let (addr, dir) =
         spawn_ephemeral_sidecar_with_ehrbase(token, "http://127.0.0.1:1/ehrbase".into()).await;
+    grant_care_provision_for(&addr.to_string(), token, "c-fail").await;
     let res = client()
         .post(format!("http://{addr}/v1/migrate/dual-write"))
         .header(SIDECAR_TOKEN_HEADER, token)
         .json(&serde_json::json!({
             "actor": "practitioner/h3",
             "capability": ["solum:cdr:write"],
+            "subject": "c-fail",
+            "purpose": "care_provision",
             "link_cdr": true,
             "source": "legacy-his",
             "resource": {

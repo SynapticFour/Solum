@@ -59,7 +59,13 @@ pub struct AuditRecord {
 }
 
 fn to_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 0xf) as usize] as char);
+    }
+    out
 }
 
 fn compute_hash(seq: u64, prev_hash: &str, event: &AuditEvent) -> Result<String, AuditStoreError> {
@@ -73,6 +79,34 @@ fn compute_hash(seq: u64, prev_hash: &str, event: &AuditEvent) -> Result<String,
     hasher.update(prev_hash.as_bytes());
     hasher.update(event_json.as_bytes());
     Ok(to_hex(&hasher.finalize()))
+}
+
+fn verify_records(records: &[AuditRecord]) -> Result<(), AuditStoreError> {
+    let mut expected_prev = GENESIS_HASH.to_string();
+    for (idx, record) in records.iter().enumerate() {
+        let expected_seq = idx as u64 + 1;
+        if record.seq != expected_seq {
+            return Err(AuditStoreError::ChainBroken {
+                seq: record.seq,
+                reason: format!("expected seq {expected_seq}, found {}", record.seq),
+            });
+        }
+        if record.prev_hash != expected_prev {
+            return Err(AuditStoreError::ChainBroken {
+                seq: record.seq,
+                reason: "prev_hash does not match preceding record".into(),
+            });
+        }
+        let recomputed = compute_hash(record.seq, &record.prev_hash, &record.event)?;
+        if recomputed != record.hash {
+            return Err(AuditStoreError::ChainBroken {
+                seq: record.seq,
+                reason: "stored hash does not match recomputed hash — record was altered".into(),
+            });
+        }
+        expected_prev = record.hash.clone();
+    }
+    Ok(())
 }
 
 /// Append-only, hash-chained audit log backed by a single file.
@@ -94,6 +128,7 @@ impl FileAuditStore {
         let path = path.as_ref().to_path_buf();
         let (last_seq, last_hash) = if path.exists() {
             let records = Self::read_records(&path)?;
+            verify_records(&records)?;
             match records.last() {
                 Some(r) => (r.seq, r.hash.clone()),
                 None => (0, GENESIS_HASH.to_string()),
@@ -180,34 +215,11 @@ impl FileAuditStore {
     /// Replay the full chain from disk and confirm no record was altered,
     /// reordered, or deleted since it was appended. This is the "log
     /// review" capability Annex II expects an operator to be able to run.
+    ///
+    /// [`Self::open`] already runs this check; calling it again re-reads the file.
     pub fn verify_chain(&self) -> Result<(), AuditStoreError> {
         let records = self.read_all()?;
-        let mut expected_prev = GENESIS_HASH.to_string();
-        for (idx, record) in records.iter().enumerate() {
-            let expected_seq = idx as u64 + 1;
-            if record.seq != expected_seq {
-                return Err(AuditStoreError::ChainBroken {
-                    seq: record.seq,
-                    reason: format!("expected seq {expected_seq}, found {}", record.seq),
-                });
-            }
-            if record.prev_hash != expected_prev {
-                return Err(AuditStoreError::ChainBroken {
-                    seq: record.seq,
-                    reason: "prev_hash does not match preceding record".into(),
-                });
-            }
-            let recomputed = compute_hash(record.seq, &record.prev_hash, &record.event)?;
-            if recomputed != record.hash {
-                return Err(AuditStoreError::ChainBroken {
-                    seq: record.seq,
-                    reason: "stored hash does not match recomputed hash — record was altered"
-                        .into(),
-                });
-            }
-            expected_prev = record.hash.clone();
-        }
-        Ok(())
+        verify_records(&records)
     }
 
     /// Export the full chain as a HELIOS-oriented JSON envelope. The chain
@@ -296,10 +308,7 @@ mod tests {
         let tampered = contents.replacen("practitioner/123", "practitioner/999", 1);
         std::fs::write(&path, tampered).unwrap();
 
-        let store = FileAuditStore::open(&path).unwrap();
-        let err = store
-            .verify_chain()
-            .expect_err("tampering must be detected");
+        let err = FileAuditStore::open(&path).expect_err("tampering must be detected on open");
         assert!(matches!(err, AuditStoreError::ChainBroken { .. }));
     }
 
@@ -318,10 +327,7 @@ mod tests {
         let tampered = format!("{}\n{}\n", lines[0], lines[2]);
         std::fs::write(&path, tampered).unwrap();
 
-        let store = FileAuditStore::open(&path).unwrap();
-        let err = store
-            .verify_chain()
-            .expect_err("deleted record must be detected");
+        let err = FileAuditStore::open(&path).expect_err("deleted record must be detected on open");
         assert!(matches!(err, AuditStoreError::ChainBroken { .. }));
     }
 

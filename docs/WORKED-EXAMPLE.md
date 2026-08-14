@@ -10,7 +10,7 @@
 | We prove | We do **not** claim |
 |----------|---------------------|
 | Reproducible CustomerHeld keygen → consent grant → Crypt4GH encrypt/decrypt → audit verify | EHDS / MDR / TI certification |
-| Fail-closed crypto when `--capability` is omitted (`authorization.denied`) | Live HELIOS signing (export envelope only — [helios.md](helios.md)) |
+| Fail-closed crypto when `--capability` is omitted (`access.denied`) | Live HELIOS signing (export envelope only — [helios.md](helios.md)) |
 | Consent-gated encrypt/decrypt after revoke (`consent.denied`) | Live HELIOS signing beyond export envelope |
 | Consent revoke updates status to `revoked` | ISiK / gematik readiness (see [DE-FHIR-GAP.md](DE-FHIR-GAP.md)) |
 | Hash-chained audit export is verifiable (`audit verify` → `ok`) | That legacy library `&str` crypto paths check consent (deprecated; CLI/`*_as` only) |
@@ -33,7 +33,7 @@ Pointer: `artifacts/latest` → last run.
 3. `consent grant` (+ `solum:consent:grant`) → status `granted`
 4. `crypto encrypt` (`patient_summary`, `--subject` / `--purpose`)
 5. `crypto decrypt` → byte-identical round-trip
-6. **Deny A:** encrypt **without** `--capability` → non-zero exit + `authorization.denied`
+6. **Deny A:** encrypt **without** `--capability` → non-zero exit + `access.denied`
 7. `consent revoke` → status `revoked`
 8. **Deny B:** decrypt after revoke → non-zero exit + `consent.denied`
 9. `audit export` + `audit verify`
@@ -45,7 +45,7 @@ Pointer: `artifacts/latest` → last run.
 | `consent.granted` | After step 3 |
 | `data.encrypt` | Successful encrypt |
 | `data.decrypt` | Happy-path decrypt only (post-revoke decrypt does not succeed) |
-| `authorization.denied` | Deny A |
+| `access.denied` | Deny A |
 | `consent.revoked` | After step 7 |
 | `consent.denied` | Deny B |
 

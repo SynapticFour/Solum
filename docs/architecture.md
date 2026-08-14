@@ -5,12 +5,10 @@
                     │            solum-core               │
                     │  startup validation · orchestration │
                     └───────────────┬─────────────────────┘
-     ┌──────────────┬────────────┬───────────┬────────────┬─────────────┬──────────────┐
-     ▼              ▼            ▼           ▼            ▼             ▼
-solum-profiles  solum-crypto  solum-fhir  solum-openehr  solum-audit  solum-consent
-(TOML juris-    (ferrum-core  (stage 1)   (EHRbase       (hash-chained (grant/revoke,
- diction         git pin)                  Track B        file log,     purpose
- profiles)                                 client/façade) HELIOS export) binding)
+     ┌──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
+     ▼          ▼          ▼          ▼          ▼          ▼          ▼          ▼
+solum-profiles  crypto   fhir     openehr    audit    consent   identity  auth-verify
+                                             sidecar (HTTP) wraps Deployment `*_as`
 ```
 
 Solum is a **compliance layer** (Track A default): policy, interchange, evidence. Optional **Track B** fronts EHRbase as an openEHR CDR for partner APIs — not a Synaptic Four hospital EHR UI. See [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md), [adr/0002-cdr-engine-ehrbase.md](adr/0002-cdr-engine-ehrbase.md).
@@ -58,6 +56,9 @@ Chosen for consistency with Ferrum-core and direct reuse of existing Rust buildi
 | `solum-openehr` | openEHR / EHRbase client (Track B) |
 | `solum-audit` | Audit events; `FileAuditStore` persists a hash-chained, tamper-evident log + HELIOS-oriented JSON export |
 | `solum-consent` | Grant/revoke consent per `(subject, purpose)`; purpose validated against the active profile; full history persisted |
+| `solum-identity` | `SolumActor`, capability constants, fail-closed `require_capability` |
+| `solum-auth-verify` | JWT/JWKS verification for sidecar org-IAM |
+| `solum-sidecar` | HTTP façade over `Deployment` `*_as` (Track A + optional Track B CDR) |
 
 `solum-core::Deployment` bundles a validated profile with its `FileAuditStore` and `ConsentStore` so consent decisions and their audit trail cannot drift apart — see its rustdoc in `crates/core/src/lib.rs`.
 

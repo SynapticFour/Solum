@@ -86,6 +86,8 @@ pub enum OpenEhrError {
 pub struct EhrbaseClient {
     base: String,
     http: reqwest::Client,
+    user: Option<String>,
+    password: Option<String>,
 }
 
 impl EhrbaseClient {
@@ -94,10 +96,35 @@ impl EhrbaseClient {
         if base.is_empty() {
             return Err(OpenEhrError::TrackBDisabled);
         }
+        let user = std::env::var("SOLUM_EHRBASE_USER")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let password = std::env::var("SOLUM_EHRBASE_PASSWORD").ok();
         let http = reqwest::Client::builder()
             .user_agent(format!("solum-openehr/{STAGE}"))
             .build()?;
-        Ok(Self { base, http })
+        Ok(Self {
+            base,
+            http,
+            user,
+            password,
+        })
+    }
+
+    fn get(&self, url: &str) -> reqwest::RequestBuilder {
+        self.with_auth(self.http.get(url))
+    }
+
+    fn post(&self, url: &str) -> reqwest::RequestBuilder {
+        self.with_auth(self.http.post(url))
+    }
+
+    fn with_auth(&self, rb: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        match (&self.user, &self.password) {
+            (Some(u), Some(p)) => rb.basic_auth(u, Some(p.as_str())),
+            _ => rb,
+        }
     }
 
     fn openehr_url(&self, path: &str) -> String {
@@ -109,7 +136,6 @@ impl EhrbaseClient {
     pub async fn upload_template_opt(&self, opt_xml: &str) -> Result<(), OpenEhrError> {
         let url = self.openehr_url("definition/template/adl1.4");
         let res = self
-            .http
             .post(&url)
             // EHRbase 2.34 rejects Accept: application/json with 406 on OPT upload.
             .header("Content-Type", "application/xml")
@@ -149,7 +175,6 @@ impl EhrbaseClient {
             "is_queryable": true
         });
         let res = self
-            .http
             .post(&url)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
@@ -196,7 +221,6 @@ impl EhrbaseClient {
             urlencoding_path(template_id)
         ));
         let res = self
-            .http
             .get(&url)
             .header("Accept", "application/json")
             .send()
@@ -222,7 +246,6 @@ impl EhrbaseClient {
             ))
         );
         let res = self
-            .http
             .get(&url)
             .header("Accept", "application/json")
             .send()
@@ -246,7 +269,6 @@ impl EhrbaseClient {
     ) -> Result<CompositionCommit, OpenEhrError> {
         let url = self.openehr_url(&format!("ehr/{ehr_id}/composition"));
         let res = self
-            .http
             .post(&url)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
@@ -297,7 +319,6 @@ impl EhrbaseClient {
             urlencoding_query(template_id)
         );
         let res = self
-            .http
             .post(&url)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
@@ -338,7 +359,6 @@ impl EhrbaseClient {
             urlencoding_path(composition_uid)
         ));
         let res = self
-            .http
             .get(&url)
             .header("Accept", "application/json")
             .send()
@@ -361,7 +381,6 @@ impl EhrbaseClient {
         }
         let url = self.openehr_url("query/aql");
         let res = self
-            .http
             .post(&url)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
@@ -380,29 +399,52 @@ impl EhrbaseClient {
     }
 }
 
-/// H3.1 AQL allowlist: read-only SELECT over EHR/COMPOSITION; reject mutating SQL-ish tokens.
+/// H3.1 AQL allowlist: read-only SELECT over EHR/COMPOSITION; reject mutating tokens as words.
 pub fn aql_allowed(aql: &str) -> bool {
     let trimmed = aql.trim();
     if trimmed.is_empty() || trimmed.len() > 8_192 {
         return false;
     }
     let upper = trimmed.to_ascii_uppercase();
-    if !upper.contains("SELECT") {
+    if !upper.starts_with("SELECT") {
         return false;
     }
     if !upper.contains("COMPOSITION") && !upper.contains("EHR") {
         return false;
     }
-    const FORBIDDEN: &[&str] = &[
-        "DELETE", "DROP", "INSERT", "UPDATE", "TRUNCATE", "ALTER", "CREATE ", "GRANT", "REVOKE",
-        "EXECUTE", "CALL ", ";", "--",
+    let stripped = strip_quoted(&upper);
+    if stripped.contains(';') || stripped.contains("--") {
+        return false;
+    }
+    const FORBIDDEN_WORDS: &[&str] = &[
+        "DELETE", "DROP", "INSERT", "UPDATE", "TRUNCATE", "ALTER", "CREATE", "GRANT", "REVOKE",
+        "EXECUTE", "CALL",
     ];
-    for token in FORBIDDEN {
-        if upper.contains(token) {
+    for word in stripped.split(|c: char| !c.is_ascii_alphanumeric() && c != '_') {
+        if FORBIDDEN_WORDS.contains(&word) {
             return false;
         }
     }
     true
+}
+
+fn strip_quoted(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\'' || c == '"' {
+            let quote = c;
+            for d in chars.by_ref() {
+                if d == quote {
+                    break;
+                }
+            }
+            out.push(' ');
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -489,6 +531,10 @@ mod tests {
             "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c"
         ));
         assert!(!aql_allowed("DELETE FROM EHR"));
+        assert!(
+            aql_allowed("SELECT c FROM EHR e CONTAINS COMPOSITION c WHERE c/name/value = 'Grant'"),
+            "GRANT as a substring of a string/word must not false-reject"
+        );
     }
 
     #[test]

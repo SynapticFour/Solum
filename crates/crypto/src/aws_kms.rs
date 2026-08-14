@@ -24,8 +24,7 @@ use aws_sdk_kms::Client as KmsClient;
 use crypt4gh::keys::get_public_key_from_private_key;
 use crypt4gh::Keys;
 
-use crate::{Crypt4ghKeyProvider, CryptoError, KeyRef};
-use zeroize::ZeroizeOnDrop;
+use crate::{Crypt4ghKeyProvider, CryptoError, HeldKeypair, KeyRef};
 
 /// Re-export for `tests/aws_kms.rs` (`mock_client!(aws_sdk_kms, …)` / SDK types).
 /// Gated with this module behind `aws-kms`; not available in default builds.
@@ -95,7 +94,9 @@ impl WrappedSeedFile {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600)).map_err(|e| {
+                CryptoError::Provider(format!("failed to chmod 0600 {}: {e}", path.display()))
+            })?;
         }
         Ok(())
     }
@@ -190,13 +191,6 @@ pub fn client_from_env() -> Result<KmsClient, CryptoError> {
         .credentials_provider(creds)
         .build();
     Ok(KmsClient::from_conf(conf))
-}
-
-#[derive(Clone, ZeroizeOnDrop)]
-struct HeldKeypair {
-    #[zeroize(skip)]
-    pubkey: Vec<u8>,
-    privkey: Vec<u8>,
 }
 
 /// Crypt4GH key provider whose private seeds are stored KMS-wrapped at rest
@@ -315,11 +309,7 @@ impl Crypt4ghKeyProvider for AwsKmsKeyProvider {
             .keys
             .get(&key_ref.id)
             .ok_or_else(|| CryptoError::UnknownKeyRef(key_ref.id.clone()))?;
-        Ok(vec![Keys {
-            method: 0,
-            privkey: kp.privkey.clone(),
-            recipient_pubkey: kp.pubkey.clone(),
-        }])
+        Ok(vec![kp.crypt4gh_keys()])
     }
 }
 

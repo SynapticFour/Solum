@@ -22,7 +22,7 @@ One-shot operator pass (Track A + structural FHIR + Kenya checks; optional HL7 J
 | # | Allowed claim (short) | Demo / proof | Artifact / signal | Forbidden next to it |
 |---|----------------------|--------------|-------------------|----------------------|
 | A1 | CustomerHeld keygen → consent → Crypt4GH encrypt/decrypt → hash-chained audit verify | [WORKED-EXAMPLE.md](WORKED-EXAMPLE.md) · `./examples/compliance-worked-example/run.sh` · `verify.sh` §8 | `examples/compliance-worked-example/artifacts/run-*/` (`helios-export.json`, audit chain `ok`) | EHDS / MDR / TI certification |
-| A2 | Crypto without `--capability` fails closed (`authorization.denied`) | Same worked example Deny A | Audit event `authorization.denied` | Wildcard / hierarchy scopes |
+| A2 | Crypto without `--capability` fails closed (`access.denied`) | Same worked example Deny A | Audit event `access.denied` | Wildcard / hierarchy scopes |
 | A3 | Decrypt after revoke fails closed (`consent.denied`) | Same worked example Deny B | Audit event `consent.denied` | Legacy `&str` library path checks consent |
 | A4 | Mode A standalone happy-path smoke | `./examples/standalone/run.sh` · `verify.sh` §7 | Temp workdir; audit verify `ok` | Production deployment proof |
 | A5 | Ferrum Crypt4GH interop (Mode B) | `verify.sh` §7 / §7b · `examples/ferrum-companion` | Script exit 0 | Ferrum product identity / genomic SoR |

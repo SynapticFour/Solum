@@ -134,12 +134,48 @@ pub trait Crypt4ghKeyProvider {
     fn private_keys(&self, key_ref: &KeyRef) -> Result<Vec<Keys>, CryptoError>;
 }
 
+/// Operator / CustomerHeld key material on disk (JSON).
+///
+/// Shared by the `solum` CLI (`crypto keygen`) and `solum-sidecar` (`--keys-dir`)
+/// so the layout cannot drift.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeypairFile {
+    pub key_ref: String,
+    pub pubkey: Vec<u8>,
+    pub privkey: Vec<u8>,
+}
+
+/// Honesty note for CustomerHeld `--keypair` / `--keys-dir` evaluation paths.
+pub const CUSTOMER_HELD_KEY_NOTE: &str = "\
+Using CustomerHeld key material from operator-supplied files.
+Solum does not mint these keys during encrypt; protect keypair files
+as you would other secrets (0600 on Unix recommended).";
+
+/// Warning for gated ephemeral test keys (CLI `--ephemeral` / sidecar `--ephemeral`).
+pub const EPHEMERAL_KEY_WARNING: &str = "\
+Using EphemeralTestKeyProvider — keys are NOT persisted across runs
+and are NOT suitable for real patient data or paid evaluations.
+Requires SOLUM_ALLOW_EPHEMERAL=1 and a profile that allows ephemeral_test
+(e.g. config/profiles/dev-local.toml). Pilot profiles (eu-ehds, kenya-dpa)
+refuse EphemeralTest custody at startup.
+Keys exist only in process memory for this run; restarting loses them. Demo-only — not an HSM.";
+
 #[derive(Clone, ZeroizeOnDrop)]
-struct HeldKeypair {
+pub(crate) struct HeldKeypair {
     #[zeroize(skip)]
-    pubkey: Vec<u8>,
+    pub(crate) pubkey: Vec<u8>,
     /// 32-byte Crypt4GH private key seed (age-compatible layout as used by crypt4gh-rust).
-    privkey: Vec<u8>,
+    pub(crate) privkey: Vec<u8>,
+}
+
+impl HeldKeypair {
+    pub(crate) fn crypt4gh_keys(&self) -> Keys {
+        Keys {
+            method: 0,
+            privkey: self.privkey.clone(),
+            recipient_pubkey: self.pubkey.clone(),
+        }
+    }
 }
 
 /// Customer-held key registry: keypairs are **registered by the customer**,
@@ -190,11 +226,7 @@ impl Crypt4ghKeyProvider for CustomerHeldKeyProvider {
             .keys
             .get(&key_ref.id)
             .ok_or_else(|| CryptoError::UnknownKeyRef(key_ref.id.clone()))?;
-        Ok(vec![Keys {
-            method: 0,
-            privkey: kp.privkey.clone(),
-            recipient_pubkey: kp.pubkey.clone(),
-        }])
+        Ok(vec![kp.crypt4gh_keys()])
     }
 }
 
@@ -247,11 +279,7 @@ impl Crypt4ghKeyProvider for EphemeralTestKeyProvider {
             .keys
             .get(&key_ref.id)
             .ok_or_else(|| CryptoError::UnknownKeyRef(key_ref.id.clone()))?;
-        Ok(vec![Keys {
-            method: 0,
-            privkey: kp.privkey.clone(),
-            recipient_pubkey: kp.pubkey.clone(),
-        }])
+        Ok(vec![kp.crypt4gh_keys()])
     }
 }
 
@@ -283,8 +311,9 @@ impl<'a> FieldCategoryGate<'a> {
     }
 }
 
-/// Smoketest that `ferrum-core` symbols resolve at link time.
-pub fn ferrum_core_type_name() -> &'static str {
+/// Smoketest that `ferrum-core` symbols resolve at link time (tests only).
+#[cfg(test)]
+fn ferrum_core_type_name() -> &'static str {
     std::any::type_name::<ferrum_core::FerrumError>()
 }
 
@@ -359,7 +388,7 @@ pub fn decrypt_field(
 fn encrypt_crypt4gh(recipient_pubkey: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
     let mut keys = HashSet::new();
     keys.insert(recipient_keys_from_pubkey(recipient_pubkey));
-    let mut reader = Cursor::new(plaintext.to_vec());
+    let mut reader = Cursor::new(plaintext);
     let mut writer = Vec::new();
     encrypt(&keys, &mut reader, &mut writer, 0, None)
         .map_err(|e| CryptoError::Encrypt(e.to_string()))?;
@@ -367,7 +396,7 @@ fn encrypt_crypt4gh(recipient_pubkey: &[u8], plaintext: &[u8]) -> Result<Vec<u8>
 }
 
 fn decrypt_crypt4gh(keys: &[Keys], ciphertext: &[u8]) -> Result<Vec<u8>, CryptoError> {
-    let mut reader = Cursor::new(ciphertext.to_vec());
+    let mut reader = Cursor::new(ciphertext);
     let mut writer = Vec::new();
     decrypt(keys, &mut reader, &mut writer, 0, None, &None)
         .map_err(|e| CryptoError::Decrypt(e.to_string()))?;

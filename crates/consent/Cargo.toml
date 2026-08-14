@@ -9,13 +9,11 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
-anyhow.workspace = true
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 solum-profiles.workspace = true
 thiserror.workspace = true
-tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]

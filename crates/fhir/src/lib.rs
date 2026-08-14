@@ -16,18 +16,38 @@ pub use patient_summary::{
     PATIENT_SUMMARY_CATEGORY,
 };
 
+/// IPS-aligned resource types allowed on the H3.1 façade and H3.2 importer.
+pub const ALLOWED_FHIR_RESOURCE_TYPES: &[&str] = &[
+    "Bundle",
+    "Composition",
+    "Patient",
+    "AllergyIntolerance",
+    "MedicationStatement",
+    "Condition",
+];
+
+/// Whether `resource_type` is in [`ALLOWED_FHIR_RESOURCE_TYPES`].
+pub fn fhir_resource_type_allowed(resource_type: &str) -> bool {
+    ALLOWED_FHIR_RESOURCE_TYPES.contains(&resource_type)
+}
+
 /// Stage marker for roadmap / capability reporting.
 ///
 /// `1-patient-summary` = IPS-oriented Patient Summary model + Bundle export +
 /// Crypt4GH encrypt/decrypt helpers. Full IPS IG conformance remains open.
 pub const STAGE: &str = "1-patient-summary";
 
-/// Optional FHIR base URL handle for a future client binding.
+/// Optional FHIR base URL handle (config only — no HTTP client in this crate).
 #[derive(Debug, Default, Clone)]
+#[deprecated(
+    since = "0.1.0",
+    note = "config handle only; interchange lives in PatientSummary / sidecar FhirStore"
+)]
 pub struct FhirAdapter {
     pub base_url: Option<String>,
 }
 
+#[allow(deprecated)]
 impl FhirAdapter {
     pub fn new() -> Self {
         Self::default()
@@ -45,6 +65,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(deprecated)]
     fn adapter_constructs_and_stage_reports_patient_summary() {
         let a = FhirAdapter::with_base_url("https://fhir.example.org/r4");
         assert!(a.base_url.is_some());

@@ -34,13 +34,16 @@ Solum does **not** re-document GA4GH. For Beacon, DRS, Passports, Crypt4GH, and 
 ```
 Solum/
   crates/
-    core/       # product orchestration + `solum` CLI
-    profiles/   # jurisdiction TOML profiles + startup validation
-    fhir/       # FHIR adapter (stage 1)
-    openehr/    # openEHR adapter (stage 2 scaffold)
-    audit/      # audit events; persistent hash-chained log, HELIOS export prepared
-    crypto/     # encryption / key custody; pins ferrum-core
-    consent/    # consent & access-rights engine (grant/revoke, purpose binding)
+    core/         # product orchestration + `solum` CLI
+    sidecar/      # HTTP façade for non-Rust HMIS/EHR integrators
+    identity/     # SolumActor, CAP_*, require_capability
+    auth-verify/  # JWT/JWKS verification (org-IAM)
+    profiles/     # jurisdiction TOML profiles + startup validation
+    fhir/         # FHIR adapter (stage 1)
+    openehr/      # openEHR / EHRbase client (Track B, stage 3.1 FHIR+AQL)
+    audit/        # audit events; persistent hash-chained log, HELIOS export prepared
+    crypto/       # encryption / key custody; pins ferrum-core
+    consent/      # consent & access-rights engine (grant/revoke, purpose binding)
   config/profiles/
   docs/
 ```

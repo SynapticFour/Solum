@@ -11,27 +11,14 @@ use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use solum_core::crypto::{
     generate_operator_keypair, Crypt4ghKeyProvider, CustomerHeldKeyProvider, EncryptedField,
-    EphemeralTestKeyProvider, KeyCustody, KeyRef,
+    EphemeralTestKeyProvider, KeyCustody, KeyRef, KeypairFile, CUSTOMER_HELD_KEY_NOTE,
+    EPHEMERAL_KEY_WARNING,
 };
+use solum_core::profiles::TransferMechanism;
 use solum_core::{
-    example_eu_runtime, query_consent_status, start_with_profile, ActorSource, Deployment,
-    SolumActor, SolumError,
+    apply_runtime_env_overrides, example_eu_runtime, query_consent_status, start_with_profile,
+    Deployment, SolumActor, SolumError,
 };
-
-const EPHEMERAL_KEY_WARNING: &str = "\
-⚠ Using EphemeralTestKeyProvider — keys are NOT persisted across runs
-and are NOT suitable for real patient data or paid evaluations.
-Requires SOLUM_ALLOW_EPHEMERAL=1 and a profile that allows ephemeral_test
-(e.g. config/profiles/dev-local.toml). Pilot profiles (eu-ehds, kenya-dpa)
-refuse EphemeralTest custody at startup.
-The demo sidecar (*.ephemeral-keypair.json) contains raw private key
-bytes in plaintext; 0600 permissions on Unix, no equivalent protection
-on Windows.";
-
-const CUSTOMER_HELD_KEY_NOTE: &str = "\
-Using CustomerHeld key material from --keypair (operator-supplied file).
-Solum does not mint these keys during encrypt; protect the keypair file
-as you would other secrets (0600 on Unix recommended).";
 
 #[cfg_attr(not(feature = "aws-kms"), allow(dead_code))]
 const AWS_KMS_KEY_NOTE: &str = "\
@@ -67,6 +54,11 @@ enum Commands {
     Audit {
         #[command(subcommand)]
         command: AuditCmd,
+    },
+    /// Cross-border transfer checks against the active jurisdiction profile.
+    Transfer {
+        #[command(subcommand)]
+        command: TransferCmd,
     },
     /// H3.2 migration helpers (fhir-import inventory + dual-write dead-letter).
     Migrate {
@@ -132,6 +124,17 @@ enum ConsentCmd {
         subject: String,
         #[arg(long)]
         purpose: String,
+    },
+    /// Print grant/revoke history for one subject.
+    History {
+        #[arg(long)]
+        profile: PathBuf,
+        #[arg(long)]
+        audit: PathBuf,
+        #[arg(long)]
+        consent_store: PathBuf,
+        #[arg(long)]
+        subject: String,
     },
 }
 
@@ -255,6 +258,27 @@ enum AuditCmd {
 }
 
 #[derive(Debug, Subcommand)]
+enum TransferCmd {
+    /// Validate a transfer mechanism + destination and emit `residency.transfer_attempt`.
+    Check {
+        #[arg(long)]
+        profile: PathBuf,
+        #[arg(long)]
+        audit: PathBuf,
+        #[arg(long)]
+        consent_store: PathBuf,
+        #[arg(long)]
+        mechanism: String,
+        #[arg(long)]
+        destination: String,
+        #[arg(long)]
+        actor: String,
+        #[arg(long = "capability", action = clap::ArgAction::Append)]
+        capability: Vec<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 enum MigrateCmd {
     /// Parse a FHIR Bundle/resource file and print idempotent import inventory (H3.2).
     /// Does not call EHRbase by itself — feed listed ids through sidecar `/v1/fhir/*`.
@@ -291,18 +315,6 @@ enum FhirCmd {
     },
 }
 
-/// Operator / CustomerHeld key material on disk (JSON).
-///
-/// Same layout as the legacy demo ephemeral sidecar so existing fixtures remain
-/// readable; custody mode is determined by CLI flags + runtime config, not the
-/// file extension.
-#[derive(Debug, Serialize, Deserialize)]
-struct KeypairFile {
-    key_ref: String,
-    pubkey: Vec<u8>,
-    privkey: Vec<u8>,
-}
-
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match run(cli) {
@@ -317,6 +329,7 @@ fn run(cli: Cli) -> Result<(), ExitCode> {
         Commands::Consent { command } => cmd_consent(command),
         Commands::Crypto { command } => cmd_crypto(command),
         Commands::Audit { command } => cmd_audit(command),
+        Commands::Transfer { command } => cmd_transfer(command),
         Commands::Migrate { command } => cmd_migrate(command),
         Commands::Fhir { command } => cmd_fhir(command),
     }
@@ -324,9 +337,7 @@ fn run(cli: Cli) -> Result<(), ExitCode> {
 
 fn runtime_config(custody: KeyCustody) -> solum_core::profiles::RuntimeConfig {
     let mut runtime = example_eu_runtime();
-    if let Ok(region) = env::var("SOLUM_STORAGE_REGION") {
-        runtime.storage_region = region;
-    }
+    apply_runtime_env_overrides(&mut runtime);
     runtime.key_management.provider = match &custody {
         KeyCustody::CustomerHeld => Some("customer-held-file".into()),
         KeyCustody::EphemeralTest => Some("ephemeral-test".into()),
@@ -419,12 +430,7 @@ fn open_deployment_with_provider<P: Crypt4ghKeyProvider>(
 /// actor (e.g. `"practitioner/7"`), so audit trails stay comparable. Omit
 /// `--capability` → empty scopes → fail-closed denial (option A).
 fn cli_actor(subject_id: String, capabilities: Vec<String>) -> SolumActor {
-    SolumActor {
-        subject_id,
-        display: None,
-        source: ActorSource::LocalDev,
-        scopes: capabilities,
-    }
+    SolumActor::standalone(subject_id, capabilities)
 }
 
 fn cmd_consent(command: ConsentCmd) -> Result<(), ExitCode> {
@@ -496,6 +502,23 @@ fn cmd_consent(command: ConsentCmd) -> Result<(), ExitCode> {
             println!("{status}");
             Ok(())
         }
+        ConsentCmd::History {
+            profile,
+            audit,
+            consent_store,
+            subject,
+        } => {
+            let deployment = open_deployment(
+                &profile,
+                &audit,
+                &consent_store,
+                CustomerHeldKeyProvider::new(),
+                KeyCustody::CustomerHeld,
+            )?;
+            let records = deployment.consent_history(&subject).map_err(fail)?;
+            print_json(&records)?;
+            Ok(())
+        }
     }
 }
 
@@ -518,7 +541,7 @@ fn customer_provider_from_file(
     let key_ref = KeyRef::new(file.key_ref);
     let mut keys = CustomerHeldKeyProvider::new();
     keys.register_customer_keypair(key_ref.clone(), file.pubkey, file.privkey)
-        .map_err(|e| fail(SolumError::Message(e.to_string())))?;
+        .map_err(fail)?;
     Ok((keys, key_ref))
 }
 
@@ -969,13 +992,28 @@ fn cmd_crypto_decrypt_wrapped(
 fn cmd_audit(command: AuditCmd) -> Result<(), ExitCode> {
     match command {
         AuditCmd::Export { audit, out } => {
-            let store = solum_core::audit::FileAuditStore::open(&audit)
-                .map_err(|e| fail(format!("audit store: {e}")))?;
-            let json = store
-                .export_helios_json()
-                .map_err(|e| fail(format!("audit export: {e}")))?;
+            let store = solum_core::audit::FileAuditStore::open(&audit).map_err(fail)?;
+            let json = store.export_helios_json().map_err(fail)?;
             fs::write(&out, json)
                 .map_err(|e| fail(format!("failed to write --out {}: {e}", out.display())))?;
+            // Re-open via Deployment so the export itself is an auditable `data.export`.
+            // Uses the same audit path; a dummy CustomerHeld provider is enough (no crypto).
+            if let Ok(profile) = env::var("SOLUM_PROFILE") {
+                let consent = env::var("SOLUM_CONSENT_STORE").unwrap_or_default();
+                if !consent.is_empty() {
+                    let mut deployment = open_deployment(
+                        Path::new(&profile),
+                        &audit,
+                        Path::new(&consent),
+                        CustomerHeldKeyProvider::new(),
+                        KeyCustody::CustomerHeld,
+                    )?;
+                    let actor = cli_actor("cli:audit-export".into(), vec![]);
+                    deployment
+                        .record_data_export_as(&actor, serde_json::Map::new())
+                        .map_err(fail)?;
+                }
+            }
             Ok(())
         }
         AuditCmd::Verify { audit } => {
@@ -991,6 +1029,46 @@ fn cmd_audit(command: AuditCmd) -> Result<(), ExitCode> {
                     Err(ExitCode::FAILURE)
                 }
             }
+        }
+    }
+}
+
+fn parse_transfer_mechanism(s: &str) -> Result<TransferMechanism, ExitCode> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "hdab_mediated" => Ok(TransferMechanism::HdabMediated),
+        "safeguards_based" => Ok(TransferMechanism::SafeguardsBased),
+        "statutory_exception" => Ok(TransferMechanism::StatutoryException),
+        other => Err(fail_usage(format!(
+            "unknown transfer mechanism '{other}' (hdab_mediated|safeguards_based|statutory_exception)"
+        ))),
+    }
+}
+
+fn cmd_transfer(command: TransferCmd) -> Result<(), ExitCode> {
+    match command {
+        TransferCmd::Check {
+            profile,
+            audit,
+            consent_store,
+            mechanism,
+            destination,
+            actor,
+            capability,
+        } => {
+            let mechanism = parse_transfer_mechanism(&mechanism)?;
+            let mut deployment = open_deployment(
+                &profile,
+                &audit,
+                &consent_store,
+                CustomerHeldKeyProvider::new(),
+                KeyCustody::CustomerHeld,
+            )?;
+            let actor = cli_actor(actor, capability);
+            deployment
+                .check_transfer_as(&mechanism, &destination, &actor)
+                .map_err(fail)?;
+            println!("ok");
+            Ok(())
         }
     }
 }

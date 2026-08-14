@@ -4,6 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use serde_json::Value;
+use solum_fhir::fhir_resource_type_allowed;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -18,39 +19,29 @@ pub enum MigrateError {
 
 /// Extract allowlisted FHIR resources from a Bundle or single resource JSON file.
 pub fn extract_fhir_resources(doc: &Value) -> Result<Vec<Value>, MigrateError> {
-    const ALLOWED: &[&str] = &[
-        "Bundle",
-        "Composition",
-        "Patient",
-        "AllergyIntolerance",
-        "MedicationStatement",
-        "Condition",
-    ];
     let rtype = doc
         .get("resourceType")
         .and_then(|v| v.as_str())
         .ok_or_else(|| MigrateError::Message("missing resourceType".into()))?;
     if rtype == "Bundle" {
-        let entries = doc
-            .get("entry")
-            .and_then(|v| v.as_array())
-            .cloned()
-            .unwrap_or_default();
+        let entries = doc.get("entry").and_then(|v| v.as_array());
         let mut out = Vec::new();
-        for e in entries {
-            if let Some(res) = e.get("resource") {
-                let rt = res
-                    .get("resourceType")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                if ALLOWED.contains(&rt) && rt != "Bundle" {
-                    out.push(res.clone());
+        if let Some(entries) = entries {
+            for e in entries {
+                if let Some(res) = e.get("resource") {
+                    let rt = res
+                        .get("resourceType")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    if fhir_resource_type_allowed(rt) && rt != "Bundle" {
+                        out.push(res.clone());
+                    }
                 }
             }
         }
         return Ok(out);
     }
-    if ALLOWED.contains(&rtype) {
+    if fhir_resource_type_allowed(rtype) {
         return Ok(vec![doc.clone()]);
     }
     Err(MigrateError::Message(format!(
@@ -82,6 +73,7 @@ pub fn append_dead_letter(path: impl AsRef<Path>, record: &Value) -> Result<(), 
         .append(true)
         .open(path)?;
     writeln!(f, "{}", serde_json::to_string(record)?)?;
+    f.sync_all()?;
     Ok(())
 }
 

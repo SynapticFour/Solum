@@ -109,8 +109,7 @@ impl VerifiedClaims {
 
     /// Claim values at `path` (ADS-style), for org-IAM CAP mapping.
     pub fn claim_values(&self, path: &str) -> Vec<String> {
-        let value = serde_json::Value::Object(self.claims.clone());
-        solum_identity::claim_values_from_json(&value, path)
+        solum_identity::claim_values_from_map(&self.claims, path)
     }
 }
 
