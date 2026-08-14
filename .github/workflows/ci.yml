@@ -36,6 +36,8 @@ jobs:
       - name: Test
         run: cargo test --workspace
       - name: Profile startup refusal (eu-ehds)
+        env:
+          SOLUM_STORAGE_REGION: EU
         run: |
           set -euo pipefail
           cargo run -p solum-core --quiet -- check --profile config/profiles/eu-ehds.toml
@@ -43,6 +45,35 @@ jobs:
             echo "::error::expected non-zero exit for contradictory storage region"
             exit 1
           fi
+          if env -u SOLUM_STORAGE_REGION cargo run -p solum-core --quiet -- check --profile config/profiles/eu-ehds.toml; then
+            echo "::error::expected non-zero exit when SOLUM_STORAGE_REGION is unset on eu-ehds"
+            exit 1
+          fi
+
+  feature-paths:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@1.91.1
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: feature-paths
+      - name: Install libsodium
+        run: sudo apt-get update && sudo apt-get install -y libsodium-dev pkg-config
+      - name: ferrum-storage-backend tests
+        run: cargo test -p solum-core --features ferrum-storage-backend --lib
+      - name: vendored crypt4gh fork tests
+        run: cargo test --manifest-path third_party/crypt4gh/Cargo.toml
+      - uses: dtolnay/rust-toolchain@1.94.1
+      - name: aws-kms mocked tests
+        env:
+          RUSTUP_TOOLCHAIN: "1.94.1"
+        run: |
+          cargo test -p solum-crypto --features aws-kms --test aws_kms
+          cargo check -p solum-core --features aws-kms
+          cargo check -p solum-sidecar --features aws-kms
 
   supply-chain:
     if: github.actor != 'dependabot[bot]'

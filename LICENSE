@@ -1,4 +1,7 @@
 Business Source License 1.1
+
+Parameters
+
 Licensor: Synaptic Four, Germany
 Licensed Work: Solum — clinical-data compliance layer (EHDS / jurisdiction profiles)
 The Licensed Work is (c) 2026 Synaptic Four
@@ -8,18 +11,12 @@ Institutions operating Solum solely for internal research (not as a
 commercial service to third parties) are also granted free use.
 Change Date: Four years from the release date of each version.
 Change License: Apache License, Version 2.0
+
 For information about alternative licensing arrangements:
 https://github.com/SynapticFour/Solum
 
-Business Source License 1.1
-Parameters
-Licensor: Synaptic Four
-Licensed Work: Solum
-Additional Use Grant: Non-commercial research and academic use permitted.
-Change Date: Four years from each version's release date.
-Change License: Apache-2.0
-
 License text follows:
+
 The Business Source License (this document, or the "License") is not an
 Open Source license. However, the Licensor has made the Licensed Work
 available under the License, and intends to make the Licensed Work

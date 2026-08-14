@@ -32,7 +32,7 @@ Across Synaptic Four Rust products you should expect:
 - BUSL-1.1 open-core parameters (where applicable) with research Additional Use Grant
 - `cargo fmt` / `clippy -D warnings` / workspace tests
 - `.pre-commit-config.yaml` (fmt + clippy + basic hygiene)
-- Org CI: `ci.yml`, `quality-gate.yml`, `secret-scan.yml`, `dependency-review.yml`, `codeql.yml`
+- Org CI: `ci.yml`, `secret-scan.yml`, `dependency-review.yml`, `codeql.yml` (no `quality-gate.yml` in this repo)
 - **No Dependabot** (dependency updates are deliberate / reviewed)
 - Contact: [contact@synapticfour.com](mailto:contact@synapticfour.com) · [synapticfour.com](https://synapticfour.com)
 
@@ -46,10 +46,7 @@ Across Synaptic Four Rust products you should expect:
 - [Partner EHR API](customer/PARTNER-EHR-API.md)
 - [HELIOS ingest recipe (upstream)](https://github.com/SynapticFour/HELIOS/blob/main/docs/solum-ingest.md)
 - [Migration strangler](MIGRATION-STRANGLER.md) · [cut-over checklist](MIGRATION-CUTOVER-CHECKLIST.md)
-- counsel package (private)
-- counsel package (private) (profile = provisional; counsel still required)
-- counsel package (private) (**not** counsel — engineering prior art)
-- counsel package (private)
+- Kenya counsel package is **private** (not in this public tree). The in-tree Kenya profile remains evaluation-only until that review lands.
 - Portfolio [coordinated roadmap](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/COORDINATED-PORTFOLIO-ROADMAP.md)
 - [Ferrum relationship](ferrum.md)
 - [HELIOS relationship](helios.md)

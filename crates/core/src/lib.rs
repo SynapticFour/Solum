@@ -7,7 +7,12 @@
 
 #![forbid(unsafe_code)]
 
+mod jsonl;
 mod migrate;
+pub use jsonl::{
+    jsonl_max_bytes, rotate_jsonl_if_needed, rotate_jsonl_if_needed_with_max,
+    DEFAULT_JSONL_MAX_BYTES,
+};
 pub use migrate::{
     append_dead_letter, dead_letter_row, extract_fhir_resources, load_fhir_json,
     resource_idempotency_key, MigrateError,
@@ -117,6 +122,62 @@ pub fn apply_runtime_env_overrides(runtime: &mut RuntimeConfig) {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(DEFAULT_RUNTIME_AUDIT_RETENTION_DAYS);
+}
+
+/// Pilot profiles (`eu-ehds`, `kenya-dpa`, …) require an explicit
+/// `SOLUM_STORAGE_REGION`. The profile's first allowed region is **not**
+/// treated as a silent residency claim. `dev-local` (client-asserted caps)
+/// skips this so demos work on a laptop.
+///
+/// This is still operator attestation, not a proof the host is in that
+/// region. When `AWS_REGION` / `AWS_DEFAULT_REGION` is set and clearly
+/// contradicts an EU/EEA declaration, startup refuses.
+pub fn require_operator_region_attestation(
+    profile: &JurisdictionProfile,
+) -> Result<(), SolumError> {
+    if profile.auth.allow_client_asserted_capabilities {
+        return Ok(());
+    }
+    let declared = match std::env::var("SOLUM_STORAGE_REGION") {
+        Ok(s) if !s.trim().is_empty() => s.trim().to_string(),
+        _ => {
+            return Err(SolumError::Message(format!(
+                "pilot profile '{}' requires SOLUM_STORAGE_REGION as an operator residency \
+                 attestation (the profile default is not inferred). Example: SOLUM_STORAGE_REGION=EU",
+                profile.meta.profile
+            )));
+        }
+    };
+    refuse_aws_region_contradiction(&declared)
+}
+
+/// If the process has an AWS region env and the operator attested EU/EEA,
+/// refuse obvious non-EU AWS regions (us-/ap-/sa-/ca-/me-/af-/il-/mx-).
+pub fn refuse_aws_region_contradiction(declared: &str) -> Result<(), SolumError> {
+    let aws = std::env::var("AWS_REGION").or_else(|_| std::env::var("AWS_DEFAULT_REGION"));
+    let Ok(aws) = aws else {
+        return Ok(());
+    };
+    let aws = aws.trim().to_ascii_lowercase();
+    if aws.is_empty() {
+        return Ok(());
+    }
+    let declared_u = declared.trim().to_ascii_uppercase();
+    let clearly_non_eu = aws.starts_with("us-")
+        || aws.starts_with("ap-")
+        || aws.starts_with("sa-")
+        || aws.starts_with("ca-")
+        || aws.starts_with("me-")
+        || aws.starts_with("af-")
+        || aws.starts_with("il-")
+        || aws.starts_with("mx-");
+    if (declared_u == "EU" || declared_u == "EEA") && clearly_non_eu {
+        return Err(SolumError::Message(format!(
+            "SOLUM_STORAGE_REGION={declared} contradicts AWS_REGION={aws}; \
+             EU/EEA attestation cannot run against a non-EU AWS region"
+        )));
+    }
+    Ok(())
 }
 
 /// A validated jurisdiction profile bundled with its persistent audit store,
@@ -881,12 +942,14 @@ impl<P: Crypt4ghKeyProvider> Deployment<P> {
         })
     }
 
-    /// Record an audit-log export (`data.export`).
+    /// Record an audit-log export (`data.export`). Requires
+    /// [`solum_identity::CAP_AUDIT_EXPORT`].
     pub fn record_data_export_as(
         &mut self,
         actor: &SolumActor,
         details: serde_json::Map<String, serde_json::Value>,
     ) -> Result<(), SolumError> {
+        self.authorize_or_deny(actor, solum_identity::CAP_AUDIT_EXPORT, "audit_export")?;
         self.append_audit_event(solum_audit::AuditEvent {
             event_type: solum_audit::events::DATA_EXPORT.into(),
             timestamp: Utc::now(),
@@ -972,6 +1035,19 @@ mod tests {
     fn starts_with_conforming_eu_config() {
         let runtime = example_eu_runtime();
         start_with_profile(eu_profile_path(), &runtime).expect("conforming config must start");
+    }
+
+    #[test]
+    fn eu_mandatory_events_have_product_write_sites() {
+        let profile = solum_profiles::load_profile(eu_profile_path()).expect("eu-ehds");
+        for event in &profile.audit.mandatory_events {
+            assert!(
+                solum_audit::events::PRODUCT_EMITTED
+                    .iter()
+                    .any(|e| e == event),
+                "profile mandatory event '{event}' has no product write site"
+            );
+        }
     }
 
     #[test]

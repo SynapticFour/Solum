@@ -97,7 +97,11 @@ Consent is managed as grant / revoke decisions per **(subject, purpose)**, with 
 
 ### Role / capability checks (GTM‑1)
 
-On the structured-actor path (actor identity that carries **scopes / capabilities**), Solum checks **before** grant, revoke, encrypt, or decrypt whether the actor’s scopes contain the exact capability required for that operation. ([BASELINE.md](../BASELINE.md); [BASELINE.md](../BASELINE.md))
+On the structured-actor path (actor identity that carries **scopes / capabilities**), Solum checks **before** grant, revoke, encrypt, or decrypt whether the actor’s scopes contain the exact capability required for that operation. ([BASELINE.md](../BASELINE.md))
+
+**Sidecar pilots (`eu-ehds`, `kenya-dpa`):** those scopes come from org-IAM (Bearer JWT groups). Client-supplied `capability[]` is not an authorization source. `dev-local` demos may still send `capability[]`.
+
+Track B reads (FHIR GET, composition GET, AQL) additionally require that the **object** belongs to the consented subject.
 
 **Capability-based, fail-closed — practical meaning for operators:**
 
@@ -120,7 +124,7 @@ Solum persists a **durable, hash-chained, tamper-evident** audit log for deploym
 
 **What this is not:** live HELIOS CLI/API signing inside Solum. Export envelopes are prepared; **live HELIOS signing is deferred and not productized** — do not claim it in evaluations. ([helios.md](../helios.md); [roadmap.md](../roadmap.md))
 
-**Operational limit:** Stage 1 assumes a **single writer** to the durable audit file. Multi-writer backends are Stage‑2 / out of this baseline. ([BASELINE.md](../BASELINE.md))
+**Operational limit:** Stage 1 assumes a **single writer** to the durable audit file. Multi-writer backends are Stage‑2 / out of this baseline. The hash chain **refuses** further appends if the live file would exceed `SOLUM_AUDIT_MAX_BYTES` (default 512 MiB) — archive the sealed file; Solum will not silently rotate evidence. Façade JSONL (FHIR / subject-link / dead-letter) **does** rotate at `SOLUM_JSONL_MAX_BYTES` (default 256 MiB). Those façade files are Crypt4GH envelopes; the EHRbase database itself is **not** encrypted by Solum. ([BASELINE.md](../BASELINE.md))
 
 ---
 
@@ -131,11 +135,11 @@ Policies are **data files** (TOML), not hard-coded country branches. At startup 
 | Profile | Status |
 |---------|--------|
 | EU EHDS–oriented profile (`eu-ehds`) | **Present** — production-track orientation for Stage 1 (Annex II–oriented controls). Still not a legal compliance certificate. |
-| Kenya DPA / Digital Health Act profile | **Present as PROVISIONAL-PRODUCTION-CANDIDATE** after a **non-counsel** Vorprüfung — loadable but **not** production SoR / **not** ODPC-certified. Real Kenya counsel still required. Empty `permitted_destinations` → every concrete cross-border destination check **fails closed** until TIA + approval fill the list. ([profiles.md](../profiles.md); [BASELINE.md](../BASELINE.md)) |
+| Kenya DPA / Digital Health Act profile | **Present as EVALUATION-ONLY** after a **non-counsel** Vorprüfung — loadable but **not** a production candidate / **not** production SoR / **not** ODPC-certified. Real Kenya counsel still required. Empty `permitted_destinations` → every concrete cross-border destination check **fails closed** until TIA + approval fill the list. ([profiles.md](../profiles.md); [BASELINE.md](../BASELINE.md)) |
 | Nigeria NDPA–oriented | **DRAFT scaffold only** under `config/profiles/planned/` — not auto-loaded; not counsel-reviewed |
 | South Africa POPIA–oriented | **DRAFT scaffold only** under `config/profiles/planned/` — not auto-loaded; not counsel-reviewed |
 
-EU and African markets are equal core markets in product strategy; profile availability is staged as data. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §2)
+EU is the shipping core; Kenya is evaluation-only; Nigeria/South Africa are draft scaffolds. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §2)
 
 ---
 
@@ -153,13 +157,13 @@ The following are **accepted or open limitations** of the current baseline, rest
 
 5. **Best-effort zeroize-on-drop only** for key material in customer-held or AWS-KMS-backed providers (not a TEE / memory-dump proof). ([BASELINE.md](../BASELINE.md))
 
-6. **Kenya profile is provisional, not production-closed.** Non-counsel Vorprüfung applied; qualified counsel still required before live SoR. ([BASELINE.md](../BASELINE.md); [profiles.md](../profiles.md))
+6. **Kenya profile is EVALUATION-ONLY, not production-closed.** Non-counsel Vorprüfung applied; qualified counsel still required before live SoR. ([BASELINE.md](../BASELINE.md); [profiles.md](../profiles.md))
 
 7. **Kenya transfer destinations list is empty by design.** Listed transfer *mechanisms* are pathways only — `validate_transfer` rejects every concrete destination until counsel/TIA populate `permitted_destinations`. ([BASELINE.md](../BASELINE.md))
 
 8. **AWS KMS path caveats:** EncryptionContext on new wraps; optional feature (CLI/sidecar); mocked tests only in CI; not HSM; seed unwrapped into process memory. ([BASELINE.md](../BASELINE.md))
 
-9. **Optional object-storage backend** (Ferrum LocalStorage path) pulls a transitive cloud SDK even when only local storage is used; that feature stays default-off. CI coverage for the feature path is limited relative to the default build. ([BASELINE.md](../BASELINE.md))
+9. **Optional object-storage backend** (Ferrum LocalStorage path) pulls a transitive cloud SDK even when only local storage is used; that feature stays default-off. CI `feature-paths` now runs `ferrum-storage-backend` lib tests, vendored crypt4gh tests, and mocked `aws-kms` (rustc 1.94.1). ([BASELINE.md](../BASELINE.md))
 
 10. **Standalone JWT/JWKS verification** is an independent implementation that can drift from Ferrum’s private verification behaviour; no live identity-broker test in CI (offline fixtures only). Passport-claim mapping for actors is implemented but not fully tested the way the JWT path is. ([BASELINE.md](../BASELINE.md))
 
@@ -167,7 +171,13 @@ The following are **accepted or open limitations** of the current baseline, rest
 
 12. **Single-writer audit store; no multi-instance audit backend** in Stage 1. ([BASELINE.md](../BASELINE.md))
 
-13. **Binary install via GitHub Release is prepared but only after a verified SemVer `v*` tag.** Until then, install from source (see [DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md) §1 and [RELEASING.md](../../RELEASING.md)).
+13. **Binary install via GitHub Release is prepared but only after a verified SemVer `v*` tag.** The Release workflow can be dry-run via `workflow_dispatch` (`create_release=false`) and now builds `solum-sidecar` as well as `solum`. Until a `v*` tag exists, install from source (see [DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md) §1 and [RELEASING.md](../../RELEASING.md)).
+
+14. **Sidecar HTTP is loopback-only.** Non-loopback bind is refused except `dev-local` with explicit `SOLUM_ALLOW_PLAINTEXT_HTTP=1` (Docker eval). Terminate TLS at a reverse proxy. ([THREAT_MODEL.md](../THREAT_MODEL.md))
+
+15. **Residency is operator attestation.** Pilot CLI/sidecar require `SOLUM_STORAGE_REGION`. EU/EEA attestation refuses a contradictory `AWS_REGION`. This does not prove the host is in that region.
+
+16. **EHRbase at-rest encryption is the operator’s CDR**, not Solum. Solum encrypts the FHIR/subject/dead-letter façade JSONL with Crypt4GH.
 
 ---
 

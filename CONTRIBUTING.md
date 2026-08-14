@@ -67,7 +67,10 @@ cargo update -p ferrum-core
 
 ## Pull requests
 
-1. One logical change per PR.
+**Do not push commits directly to `main`.** Open a pull request; CI (`fmt`, `clippy -D warnings`, tests) must pass; at least one review from CODEOWNERS.
+
+1. One logical change per PR. Prefer commits that a reviewer can read in one sitting; do not dump unrelated crates into a single commit.
 2. MDCG question completed (required checklist).
 3. Update docs when changing the profile TOML schema.
 4. CI must pass (`fmt`, `clippy -D warnings`, tests).
+5. Do not self-merge. Until a named second maintainer exists, wait for CODEOWNERS review — process is not a substitute for a second human.

@@ -34,6 +34,9 @@ pub struct JurisdictionProfile {
     /// Cross-border / secondary-use transfer rules (additive; default = none permitted).
     #[serde(default)]
     pub transfer: TransferPolicy,
+    /// HTTP sidecar auth posture. Default is fail-closed (no client-asserted CAP_*).
+    #[serde(default)]
+    pub auth: AuthPolicy,
     /// Optional Annex / regulation references for documentation and audits.
     #[serde(default)]
     pub regulatory: RegulatoryRefs,
@@ -146,6 +149,18 @@ pub struct TransferPolicy {
     pub requires_serving_copy: bool,
 }
 
+/// Sidecar / HTTP authorization posture for this jurisdiction profile.
+///
+/// Default (missing `[auth]`) is fail-closed: the sidecar must use org-IAM;
+/// body `capability[]` is rejected as an authorization source.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct AuthPolicy {
+    /// When true, the sidecar may accept client-supplied `capability[]`
+    /// (dev-local evaluations only). Pilot profiles must leave this false.
+    #[serde(default)]
+    pub allow_client_asserted_capabilities: bool,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RegulatoryRefs {
     /// e.g. EHDS Annex II section identifiers.
@@ -166,8 +181,10 @@ pub struct RuntimeConfig {
     /// Consent workflow implemented by the deployment.
     pub consent_workflow: ConsentWorkflow,
     /// Declared audit-log retention in days. Must be ≥ the profile floor
-    /// (`retention.audit_log_retention_days`). Append-only stores do not rotate;
-    /// a value below the floor is a startup refusal (declaration with teeth).
+    /// (`retention.audit_log_retention_days`). The hash-chained audit file does
+    /// not rotate (overflow → refuse append via `SOLUM_AUDIT_MAX_BYTES`).
+    /// Façade JSONL (FHIR / subject-link / dead-letter) rotates at
+    /// `SOLUM_JSONL_MAX_BYTES`. A value below the floor is a startup refusal.
     pub audit_retention_days: u32,
 }
 
@@ -393,6 +410,12 @@ mod tests {
         assert_eq!(p.schema_version, PROFILE_SCHEMA_VERSION);
         assert!(p.storage.allowed_regions.iter().any(|r| r == "EU"));
         assert!(!p.encryption.required_field_categories.is_empty());
+        assert!(p
+            .encryption
+            .required_field_categories
+            .iter()
+            .any(|c| c == "fhir_resource"));
+        assert!(!p.auth.allow_client_asserted_capabilities);
         assert!(!p.audit.mandatory_events.is_empty());
         assert!(!p.regulatory.annex_requirements.is_empty());
     }

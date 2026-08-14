@@ -105,12 +105,18 @@ impl From<&str> for SolumActor {
 /// diesem Schritt (offener Punkt, siehe SECURITY-OVERVIEW / profiles docs).
 pub const CAP_CONSENT_GRANT: &str = "solum:consent:grant";
 pub const CAP_CONSENT_REVOKE: &str = "solum:consent:revoke";
+/// Read consent status (sidecar GET /v1/consent/status). Not implied by grant/revoke.
+pub const CAP_CONSENT_READ: &str = "solum:consent:read";
 pub const CAP_CRYPTO_ENCRYPT: &str = "solum:crypto:encrypt";
 pub const CAP_CRYPTO_DECRYPT: &str = "solum:crypto:decrypt";
 /// H3.0 Track B — create EHR / commit composition / upload template via façade.
 pub const CAP_CDR_WRITE: &str = "solum:cdr:write";
 /// H3.0 Track B — read composition (and related CDR GET) via façade.
 pub const CAP_CDR_READ: &str = "solum:cdr:read";
+/// Export the hash-chained audit log (contains subject/purpose metadata).
+pub const CAP_AUDIT_EXPORT: &str = "solum:audit:export";
+/// Verify the audit hash chain (integrity check; still an authenticated op).
+pub const CAP_AUDIT_VERIFY: &str = "solum:audit:verify";
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AuthorizationError {

@@ -33,6 +33,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "== standalone (Mode A): workdir $WORKDIR =="
+export SOLUM_STORAGE_REGION="${SOLUM_STORAGE_REGION:-EU}"
 echo "# Simulated EHR extract for patient/42 — not real PHI" > "$PLAIN_IN"
 echo "patient_summary placeholder for care_provision" >> "$PLAIN_IN"
 

@@ -57,7 +57,7 @@ else
 fi
 
 echo "== 6. CLI smoke test =="
-cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml
+SOLUM_STORAGE_REGION=EU cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml
 if SOLUM_STORAGE_REGION=us-east-1 cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml; then
   echo "FAIL: non-EU storage region should have been refused"
   exit 1

@@ -24,4 +24,4 @@ Justification (required; one short paragraph):
 
 - [ ] `cargo test --workspace`
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings`
-- [ ] Manual: `cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml`
+- [ ] Manual: `SOLUM_STORAGE_REGION=EU cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml`

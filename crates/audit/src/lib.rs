@@ -34,6 +34,40 @@ pub mod events {
     pub const RESIDENCY_TRANSFER_ATTEMPT: &str = "residency.transfer_attempt";
     pub const DATA_ENCRYPT: &str = "data.encrypt";
     pub const DATA_DECRYPT: &str = "data.decrypt";
+
+    pub const CDR_TEMPLATE_UPLOADED: &str = "cdr.template.uploaded";
+    pub const CDR_EHR_CREATED: &str = "cdr.ehr.created";
+    pub const CDR_COMPOSITION_COMMITTED: &str = "cdr.composition.committed";
+    pub const CDR_AQL_EXECUTED: &str = "cdr.aql.executed";
+    pub const CDR_FHIR_CREATED: &str = "cdr.fhir.created";
+    pub const CDR_SUBJECT_LINK_UPSERTED: &str = "cdr.subject_link.upserted";
+    pub const CDR_DUAL_WRITE_OK: &str = "cdr.dual_write.ok";
+    pub const CDR_DUAL_WRITE_DEAD_LETTERED: &str = "cdr.dual_write.dead_lettered";
+
+    /// Event types the product actually writes (startup checklists must be a subset).
+    pub const PRODUCT_EMITTED: &[&str] = &[
+        ACCESS_GRANTED,
+        ACCESS_DENIED,
+        DATA_READ,
+        DATA_EXPORT,
+        DATA_RECEIVE_EEHRXF,
+        CONSENT_GRANTED,
+        CONSENT_REVOKED,
+        CONSENT_DENIED,
+        IDENTITY_AUTHENTICATED,
+        KEY_USE,
+        RESIDENCY_TRANSFER_ATTEMPT,
+        DATA_ENCRYPT,
+        DATA_DECRYPT,
+        CDR_TEMPLATE_UPLOADED,
+        CDR_EHR_CREATED,
+        CDR_COMPOSITION_COMMITTED,
+        CDR_AQL_EXECUTED,
+        CDR_FHIR_CREATED,
+        CDR_SUBJECT_LINK_UPSERTED,
+        CDR_DUAL_WRITE_OK,
+        CDR_DUAL_WRITE_DEAD_LETTERED,
+    ];
 }
 
 /// A single auditable event required by jurisdiction profiles.

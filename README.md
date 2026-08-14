@@ -4,7 +4,7 @@
 [![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue.svg)](LICENSE)
 [![Rust 1.91.1](https://img.shields.io/badge/rust-1.91.1-orange.svg)](rust-toolchain.toml)
 
-**Clinical-data compliance layer** for EU EHDS and African data-protection regimes.
+**Clinical-data compliance layer** for EU EHDS, with evaluation profiles for other jurisdictions.
 
 Built by **[Synaptic Four](https://synapticfour.com)**. Ferrum for genomic data · **Solum for clinical data** · shared sovereignty philosophy — separate brand, repository, and regulatory boundary.
 
@@ -25,7 +25,7 @@ Local interactive proofs: [Solum-Demo](https://github.com/SynapticFour/Solum-Dem
 | Interop focus | [GA4GH](https://github.com/SynapticFour/Ferrum) (see Ferrum docs) | FHIR (stage 1), openEHR (stage 2) |
 | Crypto | Crypt4GH for genomic DRS objects; customer-held keys | **Same Crypt4GH envelope** for clinical field categories + customer-held keys (`crates/crypto`); see [docs/CRYPTO.md](docs/CRYPTO.md) |
 
-Working title **Solum** — final brand name may change. Markets: **EU and Africa as equal cores**, modelled as jurisdiction profile data (not hard-coded special cases).
+Working name **Solum**. **Shipping core:** EU EHDS (`eu-ehds.toml`). **Evaluation:** Kenya DPA (`kenya-dpa.toml`) — not counsel-reviewed, not a production candidate. **Draft scaffolds only:** Nigeria NDPA and South Africa POPIA under `config/profiles/planned/`. Egypt is not in this tree.
 
 Solum does **not** re-document GA4GH. For Beacon, DRS, Passports, Crypt4GH, and genomic EHDS notes, read [Ferrum](https://github.com/SynapticFour/Ferrum) and [Ferrum COMPLIANCE](https://github.com/SynapticFour/Ferrum/blob/main/docs/COMPLIANCE.md).
 
@@ -54,7 +54,7 @@ Solum/
 
 ```bash
 cargo test --workspace
-cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml
+SOLUM_STORAGE_REGION=EU cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml
 
 # Must fail (non-zero): profile requires EU/EEA residency
 SOLUM_STORAGE_REGION=us-east-1 cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml
@@ -71,8 +71,9 @@ PROFILE=config/profiles/eu-ehds.toml
 AUDIT=/tmp/solum-demo/audit.jsonl
 CONSENT=/tmp/solum-demo/consent.jsonl
 mkdir -p /tmp/solum-demo
+export SOLUM_STORAGE_REGION=EU
 
-# 1. Profile / runtime conformance (unchanged)
+# 1. Profile / runtime conformance (operator must attest region)
 cargo run -p solum-core -- check --profile "$PROFILE"
 
 # 2–4. Consent
@@ -121,7 +122,7 @@ cargo run -p solum-core -- audit verify --audit "$AUDIT"
 
 ## Jurisdiction profiles
 
-Initial profile: [`config/profiles/eu-ehds.toml`](config/profiles/eu-ehds.toml) (EHDS Annex II–oriented). Further profiles (Kenya, Nigeria, South Africa, …) are data files — no code change required. Startup **refuses** to run when runtime storage, key custody, audit, or consent contradicts the active profile.
+Initial profile: [`config/profiles/eu-ehds.toml`](config/profiles/eu-ehds.toml) (EHDS Annex II–oriented). Kenya is an **evaluation** profile (not production). Nigeria / South Africa are draft scaffolds — not auto-loaded. Startup **refuses** to run when runtime storage, key custody, audit, or consent contradicts the active profile.
 
 ## Regulatory boundary (MDCG)
 

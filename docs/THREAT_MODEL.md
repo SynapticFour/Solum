@@ -50,7 +50,7 @@ Solum is a **clinical-data compliance layer**: jurisdiction profiles, fail-close
 | Boundary | Notes |
 |----------|-------|
 | Operator | Configures profiles, keys, IdP groups → capabilities |
-| Sidecar process | **Plaintext briefly in memory** on encrypt/decrypt (documented; not TEE) |
+| Sidecar process | **Plaintext briefly in memory** on encrypt/decrypt (documented; not TEE). HTTP **loopback only**; TLS is the operator reverse proxy. |
 | Ferrum companion | Shared Crypt4GH envelope family; consent revoke can 403 DRS/WES when wired |
 | AWS KMS (optional) | Protects seed at rest; unwrap still lands seed in process memory |
 
@@ -60,10 +60,10 @@ Solum is a **clinical-data compliance layer**: jurisdiction profiles, fail-close
 
 | Adversary | Goal | Posture |
 |-----------|------|---------|
-| External attacker | Bypass authz / read clinical fields | Fail-closed authz; TLS; no anonymous write |
+| External attacker | Bypass authz / read clinical fields | Fail-closed authz; **loopback-only HTTP** (TLS at the reverse proxy); no anonymous write |
 | Auth’d user without purpose/consent | Access out-of-purpose data | Consent gates; Deny B paths |
 | Insider with host access | Dump keys / DB | CustomerHeld + host controls; IR |
-| Profile misconfiguration | Soft-open residency/consent | Pilot profiles must be reviewed; Kenya PRODUCTION requires counsel |
+| Profile misconfiguration | Soft-open residency/consent | Pilot profiles require `SOLUM_STORAGE_REGION` attestation; Kenya is EVALUATION-ONLY until counsel |
 | Supply-chain compromise | Malicious crate | cargo-deny (CI target); dependency-review |
 | Audit tampering | Hide access | Hash-chain export; operator must protect store |
 
@@ -83,7 +83,7 @@ Solum is a **clinical-data compliance layer**: jurisdiction profiles, fail-close
 
 | STRIDE | Examples | Mitigations | Residual |
 |--------|----------|-------------|----------|
-| Spoofing | Fake OIDC / CAP mapping | Org-IAM when enabled; capability checks | Mis-mapped groups |
+| Spoofing | Fake OIDC / CAP mapping | **Org-IAM required** on pilot profiles; `capability[]` only on `dev-local`; issuer+audience checked | Mis-mapped groups |
 | Tampering | Edit consent JSONL / audit | Permissions; hash chain | Host admin |
 | Repudiation | Deny clinical access | Audit events; HELIOS-oriented export | Export not live-signed inside Solum |
 | Info disclosure | Ciphertext without key; logs | Crypt4GH; field crypto | Plaintext in process; log content policy |
@@ -109,7 +109,7 @@ When EHRbase / openEHR persistence is enabled:
 2. Authn/authz on; capabilities mapped intentionally.
 3. Consent revoke tested against Ferrum when co-deployed.
 4. Audit export produced and stored off-box.
-5. Jurisdiction profile status understood (e.g. Kenya **provisional** until counsel).
+5. Jurisdiction profile status understood (Kenya **EVALUATION-ONLY** until counsel).
 6. IR contact path documented.
 
 ---

@@ -1,6 +1,8 @@
 [graph]
 targets            = []
 exclude-unpublished = true
+all-features       = false
+exclude-dev        = true
 
 [advisories]
 yanked       = "warn"

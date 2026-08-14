@@ -208,6 +208,11 @@ impl AwsKmsKeyProvider {
         Self::default()
     }
 
+    /// Deterministic first registered key (sorted id) for store-at-rest envelopes.
+    pub fn first_key_ref(&self) -> Option<KeyRef> {
+        self.keys.keys().min().cloned().map(KeyRef::new)
+    }
+
     /// Encrypt a 32-byte Crypt4GH private-key seed under a symmetric KMS key
     /// for durable storage (provisioning helper — not the encrypt/decrypt hot path).
     ///

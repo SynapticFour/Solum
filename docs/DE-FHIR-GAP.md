@@ -14,7 +14,7 @@
 | Composition | IPS LOINC `60591-5` + three sections | DE document types / ISiK document profiles differ | `fail` |
 | Allergies / Meds / Problems | Display-text entries | Bound value sets / ISiK observation & medication profiles | `fail` |
 | Consent / crypto / audit | Solum CLI + sidecar (Track A) | Orthogonal to FHIR IG; DE sites still need policy/evidence | `pass` (Solum moat) |
-| Exchange auth | Sidecar shared secret / optional org-IAM | TI identity (SMC-B, OIDC Fachdienst, …) | `n/a` (out of Stage-1 scope) |
+| Exchange auth | Sidecar shared secret + **org-IAM required** on pilot profiles | TI identity (SMC-B, OIDC Fachdienst, …) | `n/a` (out of Stage-1 scope) |
 | openEHR Track B | EHRbase façade | Separate from TI FHIR; useful for CDR pilots | `n/a` to TI claim |
 
 Public starting points (operator research; URLs evolve):

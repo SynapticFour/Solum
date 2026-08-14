@@ -16,8 +16,8 @@ use solum_core::crypto::{
 };
 use solum_core::profiles::TransferMechanism;
 use solum_core::{
-    apply_runtime_env_overrides, example_eu_runtime, query_consent_status, start_with_profile,
-    Deployment, SolumActor, SolumError,
+    apply_runtime_env_overrides, example_eu_runtime, query_consent_status,
+    require_operator_region_attestation, start_with_profile, Deployment, SolumActor, SolumError,
 };
 
 #[cfg_attr(not(feature = "aws-kms"), allow(dead_code))]
@@ -378,6 +378,12 @@ fn require_ephemeral_gate() -> Result<(), ExitCode> {
     ))
 }
 
+fn attest_pilot_profile(profile: &Path) -> Result<(), ExitCode> {
+    let p = solum_core::profiles::load_profile(profile).map_err(fail)?;
+    require_operator_region_attestation(&p).map_err(fail)?;
+    Ok(())
+}
+
 fn cmd_check(profile: PathBuf) -> Result<(), ExitCode> {
     // Check uses CustomerHeld runtime (matches pilot profiles). Override custody
     // via SOLUM_KEY_CUSTODY=ephemeral_test only when exercising the refuse path.
@@ -386,6 +392,7 @@ fn cmd_check(profile: PathBuf) -> Result<(), ExitCode> {
         Ok(v) if v.eq_ignore_ascii_case("operator_held") => KeyCustody::OperatorHeld,
         _ => KeyCustody::CustomerHeld,
     };
+    attest_pilot_profile(&profile)?;
     let runtime = runtime_config(custody);
     match start_with_profile(&profile, &runtime) {
         Ok(p) => {
@@ -421,6 +428,7 @@ fn open_deployment_with_provider<P: Crypt4ghKeyProvider>(
     if let Some(p) = provider_override {
         runtime.key_management.provider = Some(p.into());
     }
+    attest_pilot_profile(profile)?;
     Deployment::open(profile, &runtime, audit, consent_store, keys).map_err(fail)
 }
 
@@ -1008,7 +1016,10 @@ fn cmd_audit(command: AuditCmd) -> Result<(), ExitCode> {
                         CustomerHeldKeyProvider::new(),
                         KeyCustody::CustomerHeld,
                     )?;
-                    let actor = cli_actor("cli:audit-export".into(), vec![]);
+                    let actor = cli_actor(
+                        "cli:audit-export".into(),
+                        vec![solum_identity::CAP_AUDIT_EXPORT.into()],
+                    );
                     deployment
                         .record_data_export_as(&actor, serde_json::Map::new())
                         .map_err(fail)?;

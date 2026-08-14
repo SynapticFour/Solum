@@ -16,7 +16,9 @@ fn dev_profile() -> PathBuf {
 }
 
 fn solum() -> assert_cmd::Command {
-    cargo_bin_cmd!("solum")
+    let mut cmd = cargo_bin_cmd!("solum");
+    cmd.env("SOLUM_STORAGE_REGION", "EU");
+    cmd
 }
 
 fn write_keypair(dir: &Path, key_ref: &str) -> PathBuf {
@@ -535,10 +537,25 @@ fn crypto_encrypt_rejects_unknown_category_without_panic() {
 fn check_still_works() {
     // Sanity: existing verify.sh entrypoint remains valid under clap.
     let status = Command::new(assert_cmd::cargo::cargo_bin!("solum"))
+        .env("SOLUM_STORAGE_REGION", "EU")
         .args(["check", "--profile", eu_profile().to_str().unwrap()])
         .status()
         .unwrap();
     assert!(status.success());
+}
+
+#[test]
+fn check_eu_requires_storage_region_env() {
+    let assert = cargo_bin_cmd!("solum")
+        .env_remove("SOLUM_STORAGE_REGION")
+        .args(["check", "--profile", eu_profile().to_str().unwrap()])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert!(
+        stderr.contains("SOLUM_STORAGE_REGION") || stderr.contains("attestation"),
+        "expected residency attestation refusal, got: {stderr}"
+    );
 }
 
 #[test]

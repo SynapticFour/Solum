@@ -8,6 +8,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create a GitHub Release from this run (false = dry-run artifacts only)"
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -28,13 +34,29 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
+            crate: solum-core
+            bin: solum
             asset: solum-x86_64-unknown-linux-gnu
           - target: aarch64-apple-darwin
             os: macos-latest
+            crate: solum-core
+            bin: solum
             asset: solum-aarch64-apple-darwin
           - target: x86_64-apple-darwin
             os: macos-latest
+            crate: solum-core
+            bin: solum
             asset: solum-x86_64-apple-darwin
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            crate: solum-sidecar
+            bin: solum-sidecar
+            asset: solum-sidecar-x86_64-unknown-linux-gnu
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            crate: solum-sidecar
+            bin: solum-sidecar
+            asset: solum-sidecar-aarch64-apple-darwin
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -47,7 +69,7 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
-          key: release-${{ matrix.target }}
+          key: release-${{ matrix.target }}-${{ matrix.crate }}
 
       - name: Install libsodium (Linux)
         if: runner.os == 'Linux'
@@ -57,21 +79,21 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install libsodium
 
-      - name: Build solum CLI
-        run: cargo build --release -p solum-core --target ${{ matrix.target }}
+      - name: Build binary
+        run: cargo build --release -p ${{ matrix.crate }} --target ${{ matrix.target }}
 
       - name: Package
         shell: bash
         run: |
           set -euo pipefail
-          BIN="target/${{ matrix.target }}/release/solum"
+          BIN="target/${{ matrix.target }}/release/${{ matrix.bin }}"
           test -x "$BIN"
           if [[ "${{ runner.os }}" != "Windows" ]]; then
             strip "$BIN" || true
           fi
           mkdir -p dist
-          cp "$BIN" "dist/solum"
-          tar -czvf "${{ matrix.asset }}.tar.gz" -C dist solum
+          cp "$BIN" "dist/${{ matrix.bin }}"
+          tar -czvf "${{ matrix.asset }}.tar.gz" -C dist "${{ matrix.bin }}"
           shasum -a 256 "${{ matrix.asset }}.tar.gz" > "${{ matrix.asset }}.tar.gz.sha256"
 
       - name: Upload artifact
@@ -83,6 +105,7 @@ jobs:
             ${{ matrix.asset }}.tar.gz.sha256
 
   github-release:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.create_release == 'true'
     needs: [build-binaries, sbom]
     runs-on: ubuntu-latest
     steps:
@@ -95,7 +118,7 @@ jobs:
         with:
           path: release-assets
           merge-multiple: true
-          pattern: solum-*
+          pattern: 'solum-*'
 
       - name: Download SBOM
         uses: actions/download-artifact@v4
@@ -108,10 +131,11 @@ jobs:
         with:
           generate_release_notes: true
           body: |
-            Stage-1 Solum CLI binaries for supervised evaluation.
+            Stage-1 Solum CLI and sidecar binaries for supervised evaluation.
 
-            **Install:** extract the archive for your platform and place `solum` on a controlled `PATH`.
-            **Keys:** use CustomerHeld `--keypair` files for evaluations — see [DEPLOYMENT-RUNBOOK.md](docs/customer/DEPLOYMENT-RUNBOOK.md).
+            **Install:** extract the archive for your platform and place `solum` / `solum-sidecar` on a controlled `PATH`.
+            **Sidecar:** plaintext HTTP is loopback-only; terminate TLS at a reverse proxy. Pilot profiles require org-IAM and `SOLUM_STORAGE_REGION`.
+            **Keys:** use CustomerHeld `--keypair` / `--keys-dir` files for evaluations — see [DEPLOYMENT-RUNBOOK.md](docs/customer/DEPLOYMENT-RUNBOOK.md).
             **HELIOS:** audit export + external `helios solum-audit` / CLIN-ACCESS-001 ingest is productized — Solum does not embed HELIOS keys; see [helios.md](docs/helios.md) and HELIOS `docs/solum-ingest.md`.
             **SBOM:** `solum-sbom.cdx.json` (CycloneDX) is attached to this release.
           files: |

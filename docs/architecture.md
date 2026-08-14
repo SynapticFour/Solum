@@ -35,7 +35,7 @@ Solum does **not** claim cryptographic zero-knowledge for every operation. FHIR 
 
 ### Residency and profile enforcement
 
-Declaration without enforcement is documentation, not a guarantee. `solum-profiles::validate_startup` compares the active jurisdiction profile to runtime storage region, key custody, mandatory audit events, and consent workflow. On contradiction the process **refuses to start**.
+Declaration without enforcement is documentation, not a guarantee. `solum-profiles::validate_startup` compares the active jurisdiction profile to runtime storage region, key custody, mandatory audit events, and consent workflow. On contradiction the process **refuses to start**. Pilot CLI/sidecar additionally require an explicit `SOLUM_STORAGE_REGION` (operator attestation; EU/EEA refuses a contradictory `AWS_REGION`). This is not a cryptographic proof the host is in that region.
 
 ### Ferrum-core pinned, not duplicated
 
@@ -49,7 +49,7 @@ Chosen for consistency with Ferrum-core and direct reuse of existing Rust buildi
 
 | Crate | Role |
 |-------|------|
-| `solum-core` | Product orchestration + `solum` CLI (`check`) |
+| `solum-core` | Product orchestration + `solum` CLI (`check`, `consent`, `crypto`, `audit`, `fhir`) |
 | `solum-profiles` | Load/validate jurisdiction TOML profiles |
 | `solum-crypto` | Crypt4GH field encryption + key custody; pins `ferrum-core` |
 | `solum-fhir` | FHIR adapter (stage 1 focus) |

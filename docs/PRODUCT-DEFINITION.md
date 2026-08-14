@@ -19,10 +19,12 @@ Both share a sovereignty philosophy (customer-held control, open standards, no l
 
 ## 2. Markets
 
-**EU and African markets are equal core markets** — not “EU first, Africa later.”
+**EU EHDS is the shipping core.** Other jurisdictions are staged as profile data, not as equal production cores.
 
 - **EU:** Smaller and mid-size health providers (practices, small clinics, labs, pharmacies) that must meet EHDS-related obligations without a large internal compliance/IT organisation. Legal frame: Regulation (EU) 2025/327. Operators must track applicable dates for certification, enforcement, and mandatory primary-use interoperability (EEHRxF) themselves; Solum aims to support technical readiness, not declare legal compliance.
-- **Africa:** Jurisdictions with GDPR-like data-protection laws that increasingly need to interoperate with EU organisations (including adequacy-related negotiations in several countries). There is **no single African GDPR equivalent** — Nigeria, Kenya, South Africa, Egypt and others share principles but differ in registration thresholds, oversight duties, and timelines. Solum models that as **data** (jurisdiction profiles), not hard-coded special cases.
+- **Kenya:** Evaluation profile (`kenya-dpa.toml`) after a non-counsel engineering review. **Not** a production candidate, **not** ODPC-certified, **not** for live patient system-of-record until qualified Kenya counsel confirms.
+- **Nigeria / South Africa:** Draft scaffolds under `config/profiles/planned/` — not auto-loaded, not counsel-reviewed.
+- **Egypt:** Mentioned in older strategy notes; **no profile file exists** in this repository.
 
 ## 3. Regulatory boundary (MDCG) — non-negotiable
 
@@ -60,7 +62,7 @@ Declarative TOML under [`config/profiles/`](../config/profiles/) (Ferrum Lab Kit
 | Profile file | Intent |
 |--------------|--------|
 | `eu-ehds.toml` | **Present** — EU EHDS Annex II orientation, EEHRxF preparation |
-| `kenya-dpa.toml` | **Present** — PROVISIONAL-PRODUCTION-CANDIDATE (non-counsel Vorprüfung; real counsel still required) |
+| `kenya-dpa.toml` | **Present** — EVALUATION-ONLY (non-counsel Vorprüfung; real counsel still required; **not** a production candidate) |
 | `nigeria-ndpa.toml` | Planned — Nigeria NDPA-oriented controls |
 | `south-africa-popia.toml` | Planned — POPIA-oriented controls |
 

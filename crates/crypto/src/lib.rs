@@ -211,6 +211,11 @@ impl CustomerHeldKeyProvider {
         );
         Ok(())
     }
+
+    /// Deterministic first registered key (sorted id) for store-at-rest envelopes.
+    pub fn first_key_ref(&self) -> Option<KeyRef> {
+        self.keys.keys().min().cloned().map(KeyRef::new)
+    }
 }
 
 impl Crypt4ghKeyProvider for CustomerHeldKeyProvider {

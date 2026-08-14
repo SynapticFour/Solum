@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Date** | 2026-08-11 |
-| **Verified commit** | `e17630af7aed577ed3d6a68448f2db114a3f8ceb` |
+| **Date** | 2026-08-15 (hardening; pin SHA after the next commit) |
+| **Verified commit** | *(uncommitted remediations — re-pin to HEAD SHA after commit)* |
 | **Tag** | *(no new freeze tag in this refresh; prior: `stage1-baseline-sidecar-custody-2026-08-01`)* |
 | **Supersedes (doc honesty)** | Custody baseline `3742851` / tag `stage1-baseline-sidecar-custody-2026-08-01`; also corrects post-tag drift (H3 Track B, H2.4 KMS wiring, proof path) |
 
@@ -11,14 +11,14 @@
 
 This document freezes descriptions of the Solum workspace that passed local verification on the verified commit. Descriptions are taken from crate docs, profile TOML, and `docs/` — not aspirational product copy.
 
-Push-triggered workflows: **CI** and **Secret Scan** (CodeQL weekly-only).
+Push-triggered workflows: **CI**, **Secret Scan**, **CodeQL** (also on pull_request), **Dependency Review** (fail-closed).
 
 ## Workspace crates
 
 | Crate | Status | Tests | Description (from crate docs / CLI / examples) |
 |-------|--------|-------|------------------------------------------------|
 | `solum-core` | implementiert | lib: **17** (+1 feature-gated: **18** statt 17 mit `ferrum-storage-backend`); `tests/cli.rs`: **11**; `tests/ferrum_auth_smoke.rs`: **1**; `tests/solum_actor_auth.rs`: **2** | Product orchestration: wires jurisdiction profiles, crypto posture, audit, and clinical interchange adapters (FHIR first; openEHR staged); `Deployment` owns consent + Crypt4GH field encrypt/decrypt with matching audit events. Additive `*_as` methods accept [`SolumActor`](../crates/identity/src/lib.rs) and delegate to the unchanged `&str` APIs. `Deployment::*_as`-Methoden erzwingen Capability-Checks (`CAP_CONSENT_GRANT` / `CAP_CONSENT_REVOKE` / `CAP_CRYPTO_ENCRYPT` / `CAP_CRYPTO_DECRYPT`), fail-closed (`access.denied`). **Crypto `*_as` additionally requires an active consent grant** for `(subject, purpose)` covering the field category (`consent.denied` on miss/revoke). Legacy-`&str`-Methoden bleiben bewusst ungeprüft (capability **and** consent). CLI/sidecar crypto require `--subject` / `--purpose` (or JSON equivalents). Die CLI ruft ausschließlich die capability-geprüften `*_as`-Methoden auf (`--actor` + `--capability`, mehrfach wiederholbar). Fail-closed: `--capability` weglassen → leere Scopes → Verweigerung. Legacy-`&str`-APIs bleiben nur noch für Library-Integratoren erreichbar, nicht mehr über die CLI. Optional feature `ferrum-storage-backend`: `Deployment::with_storage` / `encrypt_field_and_store` / `read_and_decrypt_field` against Ferrum `LocalStorage` (async, kein `block_on` in der Library — Runtime bleibt beim Aufrufer); Default-Build bleibt ferrum-storage-frei. The `solum` CLI is a real tool: `consent grant` / `revoke` / `status`, `crypto keygen` / `encrypt` / `decrypt`, `audit export` / `verify` — integration-tested via `assert_cmd` (inkl. Deny-Test ohne `--capability`). **Phase C:** neuer Subcommand `crypto keygen` schreibt Operator-Keypair-JSON via `generate_operator_keypair()` und registriert Material für `CustomerHeldKeyProvider` (Unix **0600** via `chmod_owner_rw`, gleiches Muster wie die Ephemeral-Sidecar-Datei). `crypto encrypt` / `decrypt` verlangen standardmäßig `--keypair` (CustomerHeld); `--ephemeral` nur mit doppeltem Gate (`SOLUM_ALLOW_EPHEMERAL=1` **und** Profil mit `ephemeral_test`-Custody, z.B. `config/profiles/dev-local.toml`). EU-/Kenya-Profile lehnen `EphemeralTest`-Custody strukturell ab (Wiederverwendung von `validate_startup` aus Sprint 1). |
-| `solum-sidecar` | implementiert | lib+bin: **0** unit; `tests/http.rs`: **27** | HTTP-Sidecar für Nicht-Rust-HMIS/EHR-Integratoren: wrappt Deployments capability-geprüfte `*_as`-Methoden 1:1 über REST (axum). Zwei Zugriffsschichten: Shared-Secret-Header (`X-Solum-Sidecar-Token`) mit constant-time compare, dann GTM-1-Capability-Check (H2.2 optional org-IAM: Bearer JWT groups → CAP_*). Default-Bind `127.0.0.1`. **CustomerHeld-Schlüsselverwaltung ist jetzt der Default-Pfad** (`--keys-dir`, lädt `solum crypto keygen`-JSON-Dateien, fail-closed: unlesbare/ungültige Dateien und doppelte `key_ref`-Werte brechen den Start ab, kein stilles Überspringen). `--ephemeral` bleibt hinter demselben Doppel-Gate wie die CLI (`SOLUM_ALLOW_EPHEMERAL=1` + Profil mit `ephemeral_test`-Custody). `SidecarKeys`-Enum dispatcht zwischen beiden Modi über das bestehende `Crypt4ghKeyProvider`-Trait, kein neues Custody-Modell. Ephemeral `key_exists`-Check verhindert stillschweigendes Schlüssel-Überschreiben bei `key_ref`-Wiederverwendung innerhalb einer Laufzeit (CustomerHeld generiert nie automatisch). |
+| `solum-sidecar` | implementiert | lib units + `tests/http.rs` (IDOR, org-IAM, Crypt4GH JSONL, listen policy, residency attestation) | HTTP-Sidecar für Nicht-Rust-HMIS/EHR-Integratoren. **Org-IAM Pflicht** auf Pilot-Profilen (issuer+audience). Body `capability[]` nur `dev-local`. FHIR/Subject/Dead-letter Crypt4GH-JSONL. HTTP loopback-only (`SOLUM_ALLOW_PLAINTEXT_HTTP` nur dev-local). Pilot: `SOLUM_STORAGE_REGION` Pflicht. |
 | `solum-identity` | implementiert | lib: **9** | Structured actor identity adapter (`SolumActor`/`ActorSource`: FerrumPassport/Standalone/LocalDev); persisted `actor: String` format unchanged, `SolumActor` maps onto it via `to_audit_string()`. `CAP_*` Konstanten, `AuthorizationError`, `require_capability()` (fail-closed, exact-match gegen `SolumActor.scopes`). |
 | `solum-auth-verify` | implementiert | lib: **8** | Standalone JWT/JWKS-Verifikation (jsonwebtoken RS256/ES256), unabhängig von privaten ferrum-core-Decode-Pfaden (keine öffentliche verify()-API in ferrum-core vorgefunden — dokumentierter Sprint-5-Rechercheergebnis); `VerifyConfig::for_ferrum_passport()` / `for_standalone_oidc()`; optionales Feature `http` für `JwksVerifier::from_url` (default aus, Offline-Pfad `from_jwks_json` zieht kein reqwest); `VerifiedClaims::into_solum_actor()` nutzt `solum-identity::ActorSource` ohne Duplikat-Enum. |
 | `solum-profiles` | implementiert | lib: 12 | Jurisdiction profile loader and startup conformance checks; TOML under `config/profiles/` (inkl. `dev-local.toml` für gated ephemeral demos); mismatches refuse to start; additive `TransferPolicy` + `validate_transfer` for cross-border / secondary-use requests (restrictive-by-default). |
@@ -78,7 +78,7 @@ From [`.gitleaks.toml`](../.gitleaks.toml) (`private-key` rule allowlist, `condi
 
 ### Kenya profile — provisional (counsel still required)
 
-`kenya-dpa.toml` is loadable as **PROVISIONAL-PRODUCTION-CANDIDATE** after a **non-counsel** Vorprüfung (an internal non-counsel Vorprüfung). **Not** production SoR / **not** ODPC-certified. Real counsel via external counsel review remains mandatory before PRODUCTION.
+`kenya-dpa.toml` is loadable as **EVALUATION-ONLY** after a **non-counsel** Vorprüfung. **Not** a production candidate / **not** production SoR / **not** ODPC-certified. Real counsel via external counsel review remains mandatory before PRODUCTION.
 
 Honesty after Vorprüfung:
 
@@ -158,18 +158,21 @@ Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFI
 | GitHub Release binaries before first verified `v*` tag | Workflow prepared (`.github/workflows/release.yml`); until a SemVer tag succeeds, install from source |
 | Ferrum-Storage / Auth-Verify nur als Referenzbeispiel, nicht im Produktpfad verdrahtet | `solum-example-ferrum-companion` + optional `ferrum-storage-backend` / standalone `solum-auth-verify` — reference/library surfaces, not a turnkey product path |
 | Sprint 6 aus `docs/INTEGRATION-ROADMAP.md` (Turnkey-Modus) | `docs/INTEGRATION-ROADMAP.md` — Sprint 1–5 only are inside this baseline |
-| JWKS-TTL-Refresh für `from_url` (aktuell einmaliger Fetch pro Verifier-Instanz) | Sprint-5 scope; offline `from_jwks_json` path is covered; URL fetch is one-shot |
+| JWKS-TTL-Refresh für `from_url` (aktuell einmaliger Fetch pro Verifier-Instanz) | **Done** — stale URL refresh failure is fail-closed (503) |
 | CLI-/Deployment-Wiring für `solum-auth-verify` (aktuell nur die Verify-Crate selbst, keine Integration in Deployment/CLI) | **H2.2:** sidecar org-IAM wires `solum-auth-verify` + group→CAP mapping; CLI still uses `--capability` |
 | S3/OpenDAL-Backends (nur LocalStorage in Sprint 4 verdrahtet) | Sprint-4 scope; Ferrum `ObjectStorage` trait is broader |
 | CLI-Wiring für Storage (bewusst nicht Teil von Sprint 4) | Sprint-4 constraint; storage remains library/`Deployment` feature path |
-| CI-Abdeckung für `ferrum-storage-backend`-Feature-Pfad | Local/`verify.sh` §7b only — see “Bewusst akzeptierte Risiken” |
+| CI-Abdeckung für `ferrum-storage-backend`-Feature-Pfad | **CI `feature-paths` job** + `verify.sh` §7b |
+| Kenya production-ready legal closure | **EVALUATION-ONLY**; counsel still required — see “Bewusst akzeptierte Risiken” |
+| EHRbase / CDR database encryption-at-rest | Operator CDR — Solum encrypts façade JSONL only |
+| Cryptographic proof of storage region | `SOLUM_STORAGE_REGION` is operator attestation (required on pilots); not a geolocation proof |
+| Named second maintainer / bus-factor 1 | CONTRIBUTING forbids direct pushes to `main`; CODEOWNERS is a team alias until a second human exists |
 | Patient Summary encrypt/decrypt über `Deployment` (mit `FileAuditStore`) | **Done** — `encrypt_patient_summary_as` / `decrypt_patient_summary_as` |
 | FHIR / IHE EEHRxF priority-category depth beyond minimal Patient Summary (labs, discharge, imaging, prescriptions) | `docs/roadmap.md` stage 2 |
 | SaaS operating model | `docs/roadmap.md` stage 2; `docs/architecture.md` / PRODUCT-DEFINITION — on-premise first |
 | Live HELIOS CLI/API signing integration | `docs/helios.md` — **deferred / not productized**; export envelope only |
 | Multi-writer durable audit backend | `crates/audit/src/store.rs` — single-writer assumption for stage 1; multi-writer called stage-2 scope |
 | Clinical interpretation / diagnosis / therapy support | Out of scope both stages — `docs/roadmap.md`, CONTRIBUTING MDCG boundary |
-| Kenya production-ready legal closure | Provisional profile inside baseline; counsel still required — see “Bewusst akzeptierte Risiken” |
 | Nigeria / South Africa production profiles | DRAFT scaffolds under `config/profiles/planned/` only — not auto-loaded |
 | Wire Patient Summary encrypt/decrypt into `Deployment` / typed FHIR CLI surface | **Done** — `encrypt_patient_summary_as` / `decrypt_patient_summary_as`; `solum fhir export-ips` |
 | Migrationspfad / Deprecation für die Legacy-`&str`-Methoden (Library) | **`#[deprecated]` landed**; removal still open — CLI already on `*_as` |
