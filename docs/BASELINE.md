@@ -58,6 +58,14 @@ From [`deny.toml`](../deny.toml) `[advisories].ignore` and [LICENSE-COMPATIBILIT
 - **Reason (deny.toml):** Same rsa advisory via two jsonwebtoken paths: (1) transitive jsonwebtoken ← ferrum-core (RSA-signed JWT verification); (2) direct jsonwebtoken dependency of solum-auth-verify (rust_crypto feature, RS256 path). Not via solum-crypto's own Crypt4GH field encryption. No new risk — one advisory ID, two reference sources. No upstream fix available yet. Tracked upstream in Ferrum; revisit when ferrum-core migrates away from RSA-based JWT or a patched rsa crate ships. See LICENSE-COMPATIBILITY.md / this entry for the accepted-risk record.
 - **Revisit when:** `ferrum-core` migrates away from RSA-based JWT, or a patched `rsa` crate ships — then drop the ignore and re-run `cargo deny check advisories`.
 
+### RUSTSEC-2026-0104 (`rustls-webpki` / CRL parse panic)
+
+From [`deny.toml`](../deny.toml) `[advisories].ignore` and [LICENSE-COMPATIBILITY.md](../LICENSE-COMPATIBILITY.md):
+
+- **ID:** RUSTSEC-2026-0104
+- **Reason (deny.toml):** CRL-parse panic in `rustls-webpki` 0.101.7 via `rustls` 0.21.12 ← `aws-smithy-http-client` (AWS SDK KMS/S3/STS used by `solum-crypto` and `ferrum-storage`). Workspace already has patched `rustls-webpki` 0.103.13 on the `rustls` 0.23 path; `rustls` 0.21 cannot take 0.103. Not reachable until a CRL is parsed, and only on the AWS TLS stack.
+- **Revisit when:** `aws-smithy-http-client` / `aws-sdk-*` drop `rustls` 0.21 — then drop the ignore and re-run `cargo deny check advisories`.
+
 ### Gitleaks allowlist — Crypt4GH PEM armor headers
 
 From [`.gitleaks.toml`](../.gitleaks.toml) (`private-key` rule allowlist, `condition = "AND"`):
