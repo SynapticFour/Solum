@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CONTRIBUTING: no direct pushes to `main`; focused commits; no self-merge.
 - CodeQL on pull_request; dependency-review is fail-closed.
 - `deny.toml` default graph: `all-features = false`, `exclude-dev = true`.
-- CI `feature-paths` job: `ferrum-storage-backend`, vendored crypt4gh tests, mocked `aws-kms`.
+- CI `feature-paths` job: `ferrum-storage-backend` and mocked `aws-kms` on rustc 1.94.1 (AWS SDK MSRV); vendored crypt4gh on 1.91.1.
 - Release workflow: `workflow_dispatch` dry-run; builds `solum-sidecar` alongside `solum`.
 
 ### Fixed

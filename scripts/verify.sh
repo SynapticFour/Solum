@@ -79,10 +79,14 @@ echo "ok: default workspace tree has no ferrum-storage"
 cargo run -p solum-example-ferrum-companion
 echo "ok: both reference deployments passed"
 
-echo "== 7b. Ferrum-storage backend (feature-gated) =="
-cargo test -p solum-core --features ferrum-storage-backend --lib
-cargo run -p solum-example-ferrum-companion --features storage-backend
-echo "ok: ferrum-storage-backend feature path passed"
+echo "== 7b. Ferrum-storage backend (feature-gated; rustc >= 1.94.1) =="
+if rustc +1.94.1 -vV >/dev/null 2>&1; then
+  RUSTUP_TOOLCHAIN=1.94.1 cargo test -p solum-core --features ferrum-storage-backend --lib
+  RUSTUP_TOOLCHAIN=1.94.1 cargo run -p solum-example-ferrum-companion --features storage-backend
+  echo "ok: ferrum-storage-backend feature path passed"
+else
+  echo "SKIP: rustc 1.94.1 not installed (ferrum-storage pulls aws-sdk which needs it)"
+fi
 
 echo "== 7c. AWS KMS feature (mocked; rustc >= 1.94.1) =="
 if rustc +1.94.1 -vV >/dev/null 2>&1; then

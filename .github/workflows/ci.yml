@@ -62,11 +62,14 @@ jobs:
           key: feature-paths
       - name: Install libsodium
         run: sudo apt-get update && sudo apt-get install -y libsodium-dev pkg-config
-      - name: ferrum-storage-backend tests
-        run: cargo test -p solum-core --features ferrum-storage-backend --lib
       - name: vendored crypt4gh fork tests
         run: cargo test --manifest-path third_party/crypt4gh/Cargo.toml
+      # ferrum-storage and aws-kms pull aws-sdk-* which require rustc ≥ 1.94.1
       - uses: dtolnay/rust-toolchain@1.94.1
+      - name: ferrum-storage-backend tests
+        env:
+          RUSTUP_TOOLCHAIN: "1.94.1"
+        run: cargo test -p solum-core --features ferrum-storage-backend --lib
       - name: aws-kms mocked tests
         env:
           RUSTUP_TOOLCHAIN: "1.94.1"
