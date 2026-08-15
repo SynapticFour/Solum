@@ -14,7 +14,7 @@ Hospital IT, HMIS integrators, data-protection officers who need fail-closed pur
 
 ```bash
 git clone https://github.com/SynapticFour/Solum.git && cd Solum
-cargo test --workspace
+make prove
 ```
 
 Interactive proof: [Solum-Demo](https://github.com/SynapticFour/Solum-Demo) `make up && make smoke-ci`.

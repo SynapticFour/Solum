@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`make prove`** — workspace tests without Docker (same command as CI). `make verify` remains the maintainer gate.
+
 ### Security
 
 - **Sidecar AuthZ** — pilot profiles (`eu-ehds`, `kenya-dpa`) require org-IAM (issuer + audience). Body `capability[]` is not an authorization source except `dev-local`. Ferrum `GET /v1/consent/status` on those profiles needs a Bearer JWT mapped to `solum:consent:read` (token alone is 403).
