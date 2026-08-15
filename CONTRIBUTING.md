@@ -61,7 +61,7 @@ cargo update -p ferrum-core
 ./scripts/verify.sh
 ```
 
-(Updates `crates/crypto/Cargo.toml`, `FERRUM_GIT_REV` in `crates/crypto/src/lib.rs`, and `config/ci/ferrum-revision.txt`.)
+(Updates `crates/crypto/Cargo.toml`, `crates/core/Cargo.toml`, `examples/ferrum-companion/Cargo.toml`, `FERRUM_GIT_REV` in `crates/crypto/src/lib.rs`, and `config/ci/ferrum-revision.txt`.)
 
 **Dependencies:** do not enable Dependabot. Bump crates deliberately and review license impact (`deny.toml` / [LICENSE-COMPATIBILITY.md](LICENSE-COMPATIBILITY.md)).
 

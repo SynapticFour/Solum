@@ -12,7 +12,7 @@ Built by **[Synaptic Four](https://synapticfour.com)**. Ferrum for genomic data 
 
 ## Synaptic Four portfolio
 
-Solum is the clinical compliance sibling to [Ferrum](https://github.com/SynapticFour/Ferrum). Related projects and ownership boundaries: **[docs/ECOSYSTEM.md](docs/ECOSYSTEM.md)**. For the GA4GH five-repo stack, see [Ferrum’s ecosystem map](https://github.com/SynapticFour/Ferrum/blob/main/docs/ECOSYSTEM.md).
+Solum is the clinical compliance sibling to [Ferrum](https://github.com/SynapticFour/Ferrum). **Who it is for:** [docs/IDENTITY.md](docs/IDENTITY.md). Related projects: **[docs/ECOSYSTEM.md](docs/ECOSYSTEM.md)**.
 
 Solum’s **default (Track A)** is a compliance layer: policy, interchange (FHIR / openEHR), and evidence — wherever clinical data already lives. An **optional Track B** can front an openEHR CDR (EHRbase) for partner persistence APIs; that is **not** a Synaptic Four hospital EHR UI. See [PRODUCT-DEFINITION.md](docs/PRODUCT-DEFINITION.md) and [H3-EHRBASE-SPIKE.md](docs/H3-EHRBASE-SPIKE.md).
 

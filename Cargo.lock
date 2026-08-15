@@ -1626,6 +1626,7 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 [[package]]
 name = "ferrum-core"
 version = "0.2.0"
+source = "git+https://github.com/SynapticFour/Ferrum.git?rev=6444469ac488af9dd6f62f584b99be87ff2d7180#6444469ac488af9dd6f62f584b99be87ff2d7180"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1660,6 +1661,7 @@ dependencies = [
 [[package]]
 name = "ferrum-storage"
 version = "0.2.0"
+source = "git+https://github.com/SynapticFour/Ferrum.git?rev=6444469ac488af9dd6f62f584b99be87ff2d7180#6444469ac488af9dd6f62f584b99be87ff2d7180"
 dependencies = [
  "anyhow",
  "async-trait",

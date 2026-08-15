@@ -32,7 +32,7 @@ crypt4gh = "0.4.1"
 zeroize = { version = "1.8", features = ["derive"] }
 
 # Pin must stay in sync with config/ci/ferrum-revision.txt (full git SHA).
-ferrum-core = { git = "https://github.com/SynapticFour/Ferrum.git", rev = "27a6a8e9a719fd1a171da28b20462a777f95cf65" }
+ferrum-core = { git = "https://github.com/SynapticFour/Ferrum.git", rev = "6444469ac488af9dd6f62f584b99be87ff2d7180" }
 
 # Feature-gated AWS KMS client (symmetric Encrypt/Decrypt of 32-byte seeds).
 # test-util: only pulled when aws-kms is enabled (for smithy mocks in tests/aws_kms.rs).

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Bump the Ferrum git pin (ferrum-core) — same pattern as Ferrum Lab Kit.
-# Updates: crates/crypto/Cargo.toml, crates/crypto/src/lib.rs, config/ci/ferrum-revision.txt
+# Updates: crates/crypto/Cargo.toml, crates/core/Cargo.toml, examples/ferrum-companion/Cargo.toml,
+#          crates/crypto/src/lib.rs (FERRUM_GIT_REV), config/ci/ferrum-revision.txt
 #
 # Usage:
 #   ./scripts/bump-ferrum.sh              # use origin/main tip
@@ -79,7 +80,9 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
 fi
 
 perl -i -pe "s/rev = \"[0-9a-f]{40}\"/rev = \"$FERRUM_REV\"/" \
-  "$ROOT/crates/crypto/Cargo.toml"
+  "$ROOT/crates/crypto/Cargo.toml" \
+  "$ROOT/crates/core/Cargo.toml" \
+  "$ROOT/examples/ferrum-companion/Cargo.toml"
 
 perl -i -pe "s/pub const FERRUM_GIT_REV: &str = \"[0-9a-f]{40}\"/pub const FERRUM_GIT_REV: &str = \"$FERRUM_REV\"/" \
   "$ROOT/crates/crypto/src/lib.rs"
@@ -94,6 +97,8 @@ mv "$TMP" "$ROOT/config/ci/ferrum-revision.txt"
 
 echo "Updated:"
 echo "  - crates/crypto/Cargo.toml"
+echo "  - crates/core/Cargo.toml (ferrum-storage optional pin)"
+echo "  - examples/ferrum-companion/Cargo.toml"
 echo "  - crates/crypto/src/lib.rs (FERRUM_GIT_REV)"
 echo "  - config/ci/ferrum-revision.txt"
 echo ""

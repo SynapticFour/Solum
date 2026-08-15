@@ -142,7 +142,7 @@ async fn storage_round_trip() -> Result<(), String> {
 
 /// Smoke: construct and query `AuthClaims` (no JWT verification — Sprint 5).
 ///
-/// Inspected API at ferrum-core pin `27a6a8e9…`: `AuthClaims` is a public
+/// Inspected API at ferrum-core pin `6444469a…` (Ferrum v0.3.0): `AuthClaims` is a public
 /// enum (`Jwt` / `Passport`) with `Debug`+`Clone` but **no** `Serialize`/
 /// `Deserialize`. Fixture construction uses the `Jwt` variant fields
 /// directly (same shape Ferrum tests use in `auth.rs`).

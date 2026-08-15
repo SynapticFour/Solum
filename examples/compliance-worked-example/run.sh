@@ -3,7 +3,7 @@
 #
 # Proves (reproducibly):
 #   - CustomerHeld keygen + consent grant → encrypt/decrypt round-trip
-#   - Deny A: crypto without --capability fails closed + authorization.denied
+#   - Deny A: crypto without --capability fails closed + access.denied
 #   - Consent revoke updates status
 #   - Deny B: decrypt after revoke fails closed + consent.denied
 #   - Hash-chained audit export + verify
@@ -118,12 +118,12 @@ test ! -f "$RUN_DIR/should-not-exist.crypt4gh.json" || {
 }
 grep -E -q 'lacks required capability|solum:crypto:encrypt|authorization' "$DENY_A_ERR" \
   || { echo "FAIL: Deny A stderr missing capability denial"; cat "$DENY_A_ERR"; exit 1; }
-if grep -q '"event_type":"authorization.denied"' "$AUDIT" \
-  || grep -q '"event_type": "authorization.denied"' "$AUDIT"; then
-  echo "ok: Deny A failed closed + authorization.denied in audit"
+if grep -q '"event_type":"access.denied"' "$AUDIT" \
+  || grep -q '"event_type": "access.denied"' "$AUDIT"; then
+  echo "ok: Deny A failed closed + access.denied in audit"
 else
-  # JSON may pretty-print; also accept event_type on its own line patterns via python
-  python3 - "$AUDIT" <<'PY' || { echo "FAIL: no authorization.denied in audit"; exit 1; }
+  # JSONL is nested under "event"; FileAuditStore may pretty-print.
+  python3 - "$AUDIT" <<'PY' || { echo "FAIL: no access.denied in audit"; exit 1; }
 import json, sys
 path = sys.argv[1]
 found = False
@@ -133,14 +133,13 @@ with open(path) as f:
         if not line:
             continue
         ev = json.loads(line)
-        # FileAuditStore may nest under "event"
         et = ev.get("event_type") or (ev.get("event") or {}).get("event_type")
-        if et == "authorization.denied":
+        if et == "access.denied":
             found = True
             break
 sys.exit(0 if found else 1)
 PY
-  echo "ok: Deny A failed closed + authorization.denied in audit"
+  echo "ok: Deny A failed closed + access.denied in audit"
 fi
 
 echo "-- 7. consent revoke =="
