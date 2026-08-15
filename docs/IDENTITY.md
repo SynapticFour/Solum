@@ -1,6 +1,6 @@
 # Who Solum is for
 
-Solum is a **clinical compliance layer**: consent, audit chain, FHIR/openEHR interchange, customer-held Crypt4GH for clinical fields.
+Solum is a **clinical compliance layer**: consent, audit chain, FHIR/openEHR interchange, customer-held Crypt4GH for clinical fields. It **extends** a GA4GH research stack into clinical data — it does not replace Ferrum, an EHR, or a medical device.
 
 It is a complete product without Ferrum. The Ferrum git pin is for shared crypto/types and an optional companion example — not a runtime requirement to enforce consent on a hospital system.
 

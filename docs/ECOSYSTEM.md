@@ -2,7 +2,7 @@
 
 **You are here:** [Solum](https://github.com/SynapticFour/Solum) — clinical-data compliance layer (FHIR / openEHR, jurisdiction profiles, evidence hooks).
 
-Solum shares Synaptic Four’s sovereignty philosophy with Ferrum but is a **separate brand, repository, and regulatory perimeter**. For the five-repo **GA4GH stack** (identity, gateway, lab deploy, demo, conformance), see Ferrum’s mirrored map: [Ferrum docs/ECOSYSTEM.md](https://github.com/SynapticFour/Ferrum/blob/main/docs/ECOSYSTEM.md).
+Solum shares Synaptic Four’s sovereignty philosophy with Ferrum but is a **separate product, brand, and regulatory perimeter**. Portfolio map (four products, not a bundle SKU): [Ferrum docs/PORTFOLIO.md](https://github.com/SynapticFour/Ferrum/blob/main/docs/PORTFOLIO.md).
 
 ## Related repositories
 
@@ -13,7 +13,7 @@ Solum shares Synaptic Four’s sovereignty philosophy with Ferrum but is a **sep
 | [Ferrum-Lab-Kit](https://github.com/SynapticFour/Ferrum-Lab-Kit) | Ferrum deploy/profile on-ramp | BUSL-1.1 | Same profile/pin patterns; not a Solum dependency |
 | [HELIOS](https://github.com/SynapticFour/HELIOS) | Signed, reproducible evidence tooling | Apache-2.0 | Solum prepares audit export for HELIOS-class evidence |
 | [Solum-Demo](https://github.com/SynapticFour/Solum-Demo) | Interactive + smokes: Stage-1 authz/audit/consent; optional H3 Track B | — | Stage-1 from pinned tag; H3 builds local `../Solum` — see Demo [COVERAGE](https://github.com/SynapticFour/Solum-Demo/blob/main/docs/COVERAGE.md) / `make smoke-all` |
-| [SynapticFour-Showcase](https://github.com/SynapticFour/SynapticFour-Showcase) | Multi-repo evidence-chain integrator | Apache-2.0 | Orchestrates Ferrum + HELIOS + BRA + Solum stages — see Showcase coordinated roadmap |
+| [SynapticFour-Showcase](https://github.com/SynapticFour/SynapticFour-Showcase) | Evidence pack / outreach — not a product | Apache-2.0 | Pins + scripts; not a SKU |
 
 ## Ownership boundaries
 
