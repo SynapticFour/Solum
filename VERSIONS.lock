@@ -1,0 +1,11 @@
+# Solum — optional join pins (git tags). Not compile-time crates except Ferrum.
+#
+# WHO UPDATES: when cutting a Solum tag, or when Ferrum / ga4gh-infra / BRA tags move.
+# WHO READS: operators, Solum-Demo PINNED_VERSIONS, Showcase Solum-tag.
+
+FERRUM_REF=v0.3.0
+FERRUM_SHA=6444469ac488af9dd6f62f584b99be87ff2d7180
+GA4GH_INFRA_REF=ga4gh-infra-v0.2.3
+GA4GH_INFRA_SHA=613bd14932b57e30cfdca7b413841fe5b07a80fd
+BRA_REF=v0.2.0
+BRA_SHA=7272a6e3c29a6b32392c8489dfadfeff7b4d0255

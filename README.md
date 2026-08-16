@@ -153,8 +153,4 @@ Dependency updates are **manual / reviewed**. Dependabot is not used (Synaptic F
 
 ---
 
-<div align="center">
-Clinical-data compliance layer · companion to Ferrum · Synaptic Four
-<br />
-© 2026 Synaptic Four · Licensed under BUSL-1.1 · Free for non-commercial research under the Additional Use Grant
-</div>
+**Synaptic Four** · [contact@synapticfour.com](mailto:contact@synapticfour.com) · [synapticfour.com](https://synapticfour.com) · BUSL-1.1 (paid; free for non-commercial research)

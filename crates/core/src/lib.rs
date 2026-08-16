@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BUSL-1.1
 //! Solum product core: wires jurisdiction profiles, crypto posture, audit, and
 //! clinical interchange adapters (FHIR first; openEHR staged).
 //!

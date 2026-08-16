@@ -1,6 +1,6 @@
 # Contributing to Solum
 
-Solum is licensed under the **Business Source License 1.1** (BUSL-1.1), with parameters and grant text aligned to [Ferrum](https://github.com/SynapticFour/Ferrum) (product name and repo URL adapted); see [LICENSE](LICENSE).
+Solum is licensed under the **Business Source License 1.1** (BUSL-1.1), with parameters and grant text aligned to [Ferrum](https://github.com/SynapticFour/Ferrum) (product name and repo URL adapted); see [LICENSE](LICENSE). New first-party Rust files should start with `// SPDX-License-Identifier: BUSL-1.1`.
 
 ---
 

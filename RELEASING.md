@@ -18,6 +18,10 @@ git tag -a vX.Y.Z -m "vX.Y.Z"
 git push origin vX.Y.Z   # only when you intend to publish
 ```
 
+## Release train (portfolio)
+
+When **Ferrum** is tagged: bump `FERRUM_REF` in [VERSIONS.lock](VERSIONS.lock) and `config/ci/ferrum-revision.txt` the same week if the crypto pin moves. Showcase `Solum-tag` and Solum-Demo `Solum-ref` follow **this** repo’s SemVer tag. See [Ferrum PORTFOLIO.md](https://github.com/SynapticFour/Ferrum/blob/main/docs/PORTFOLIO.md).
+
 The `Release` workflow builds `solum` and `solum-sidecar` for:
 
 | Asset | Platform |
