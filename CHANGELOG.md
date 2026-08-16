@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Hospital IdP pack (M3)** — `--idp-profile` (`keycloak-hospital`, `entra`, `smart-backend`) fills org-IAM from `config/idp-profiles/`. Consent/audit bind `standalone:<sub>` (clinic OIDC / SMART Backend Services, not App Launch, not Ferrum Passports). Docs: [AUTH-HOSPITAL.md](docs/AUTH-HOSPITAL.md). Compose: `docker-compose.keycloak-hospital.yml`.
+- **KIS Patient adapter** — `solum_fhir::to_kis_patient_adapter` (identifier/name/birthDate, optional KVID-10, tag `kis-patient-v0`, no IG `meta.profile`). Not ISiK/TI. [examples/de-adapter/README.md](examples/de-adapter/README.md).
 - **`make prove`** — workspace tests without Docker (same command as CI). `make verify` remains the maintainer gate.
 
 ### Security

@@ -665,6 +665,22 @@ async fn build_state_ephemeral_requires_allow_env() {
 // --- H2.2 org-IAM ---
 
 fn mint_rsa_jwks_and_token(groups: &[&str]) -> (PathBuf, String, tempfile::TempDir) {
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    mint_rsa_jwks_and_token_claims(serde_json::json!({
+        "sub": "practitioner/org-iam",
+        "iss": TEST_OIDC_ISSUER,
+        "aud": TEST_OIDC_AUD,
+        "exp": t + 3600,
+        "groups": groups,
+    }))
+}
+
+fn mint_rsa_jwks_and_token_claims(
+    claims: serde_json::Value,
+) -> (PathBuf, String, tempfile::TempDir) {
     use base64::Engine;
     use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
     use rand::rngs::OsRng;
@@ -673,7 +689,6 @@ fn mint_rsa_jwks_and_token(groups: &[&str]) -> (PathBuf, String, tempfile::TempD
     use rsa::{RsaPrivateKey, RsaPublicKey};
     use serde_json::json;
     use sha2::{Digest, Sha256};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     let dir = tempdir().unwrap();
     let mut rng = OsRng;
@@ -698,24 +713,9 @@ fn mint_rsa_jwks_and_token(groups: &[&str]) -> (PathBuf, String, tempfile::TempD
     let jwks_path = dir.path().join("jwks.json");
     std::fs::write(&jwks_path, jwks.to_string()).unwrap();
 
-    let t = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
     let mut header = Header::new(Algorithm::RS256);
     header.kid = Some(kid);
-    let token = encode(
-        &header,
-        &json!({
-            "sub": "practitioner/org-iam",
-            "iss": TEST_OIDC_ISSUER,
-            "aud": TEST_OIDC_AUD,
-            "exp": t + 3600,
-            "groups": groups,
-        }),
-        &encoding,
-    )
-    .unwrap();
+    let token = encode(&header, &claims, &encoding).unwrap();
     (jwks_path, token, dir)
 }
 
@@ -786,6 +786,50 @@ async fn org_iam_grant_with_mapped_group() {
     assert!(
         audit.contains("identity.authenticated"),
         "org-IAM success must emit identity.authenticated: {audit}"
+    );
+    assert!(
+        audit.contains("standalone:practitioner/org-iam"),
+        "consent/audit must bind the IdP sub, not a Ferrum Passport: {audit}"
+    );
+}
+
+#[tokio::test]
+async fn org_iam_keycloak_hospital_realm_roles() {
+    let mapping = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../config/org-iam/keycloak-hospital.toml");
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let (jwks, jwt, _keydir) = mint_rsa_jwks_and_token_claims(serde_json::json!({
+        "sub": "practitioner/org-iam",
+        "iss": TEST_OIDC_ISSUER,
+        "aud": TEST_OIDC_AUD,
+        "exp": t + 3600,
+        "realm_access": { "roles": ["solum-consent-ops"] },
+    }));
+    let token = "org-iam-keycloak-hospital";
+    let (addr, dir) = spawn_org_iam_sidecar(token, jwks, mapping).await;
+    let url = format!("http://{addr}/v1/consent/grant");
+    let res = client()
+        .post(&url)
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .header("Authorization", format!("Bearer {jwt}"))
+        .json(&serde_json::json!({
+            "subject": "patient/42",
+            "purpose": "care_provision",
+            "actor": "ignored-for-caps",
+            "capability": [],
+            "scope": ["patient_summary"]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201, "body={}", res.text().await.unwrap());
+    let audit = std::fs::read_to_string(dir.path().join("audit.jsonl")).unwrap();
+    assert!(
+        audit.contains("standalone:practitioner/org-iam"),
+        "Keycloak hospital tokens bind the clinician sub, not a Ferrum Passport: {audit}"
     );
 }
 

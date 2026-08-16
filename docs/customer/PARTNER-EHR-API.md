@@ -2,9 +2,9 @@
 
 Solum provides **APIs**, not a hospital EHR UI. Partners (or site IT) build clinical UX against these surfaces while Solum owns compliance, audit, and optional openEHR persistence.
 
-**Auth:** every route requires `X-Solum-Sidecar-Token`.
+**Auth:** every route requires `X-Solum-Sidecar-Token`. Hospital IdP packs (Keycloak, Entra, SMART Backend Services — **not** App Launch): [AUTH-HOSPITAL.md](../AUTH-HOSPITAL.md). Actors persist as `standalone:<sub>`, not Ferrum Passports.
 
-- **Pilot profiles (`eu-ehds`, `kenya-dpa`):** org-IAM Bearer JWT is required (`iss` + `aud`). Body `capability[]` is ignored. Privileged GETs need the matching CAP from JWT groups.
+- **Pilot profiles (`eu-ehds`, `kenya-dpa`):** org-IAM Bearer JWT is required (`iss` + `aud`). Body `capability[]` is ignored. Privileged GETs need the matching CAP from JWT groups (or `realm_access.roles` on the Keycloak hospital pack).
 - **`dev-local` only:** JSON `capability[]` / `X-Solum-Capability` may mint scopes.
 - Track B reads are bound to the consented subject (FHIR resource, EHR id, or quoted AQL subject). Cross-subject GET → 403.
 - There is **no** `solum:*` wildcard. List exact CAP strings below.
@@ -42,7 +42,7 @@ Allowlisted: `Bundle`, `Composition`, `Patient`, `AllergyIntolerance`, `Medicati
 
 `POST /v1/fhir/Patient` also upserts subject-link (`solum_subject_id = Patient.id`). FHIR→CDR is **co-create** with the pinned OPT — see [H3-CLINICAL-MODELLING.md](../H3-CLINICAL-MODELLING.md).
 
-IPS document shape can be produced with the `solum-fhir` library (`to_fhir_bundle`) and POSTed as `Bundle`.
+IPS document shape can be produced with the `solum-fhir` library (`to_fhir_bundle`) and POSTed as `Bundle`. For exchange with an existing KIS, `to_kis_patient_adapter` maps Patient identifier/name/birthDate (optional KVID-10; **not** ISiK-validated). IHE/MII remain **profiles on resources you already have**, not a Solum EHR. See [examples/de-adapter/README.md](../../examples/de-adapter/README.md).
 
 ## Subject bridge (H3.3)
 

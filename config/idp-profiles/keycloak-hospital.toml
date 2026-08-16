@@ -1,0 +1,8 @@
+# Hospital IdP — Keycloak (realms) or Entra. Not a GA4GH Passport issuer.
+# Sidecar: --idp-profile keycloak-hospital  (fills --org-iam-config if unset)
+name = "keycloak-hospital"
+issuer_contains = "/realms/"
+groups_claim = "realm_access.roles"
+audience = "solum-api"
+flow = "oidc"
+org_iam = "config/org-iam/keycloak-hospital.toml"

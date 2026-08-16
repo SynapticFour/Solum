@@ -1,0 +1,26 @@
+# Keycloak for hospital OIDC (Solum Mode A). Not a GA4GH Passport issuer.
+# Solum talks OIDC only. Hospital SAML, if any, terminates on Keycloak.
+#
+# Start (dev): docker compose -f docker-compose.keycloak-hospital.yml up -d
+# Then create a realm, client audience solum-api, and realm roles from
+# config/org-iam/keycloak-hospital.toml. See docs/AUTH-HOSPITAL.md.
+#
+# Sidecar (repo root):
+#   --idp-profile keycloak-hospital
+#   --oidc-issuer http://localhost:8080/realms/hospital
+#   --jwks-url http://localhost:8080/realms/hospital/protocol/openid-connect/certs
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev"]
+    ports:
+      - "8080:8080"
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+    volumes:
+      - keycloak_hospital_data:/opt/keycloak/data
+
+volumes:
+  keycloak_hospital_data:

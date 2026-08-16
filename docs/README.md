@@ -39,7 +39,8 @@ Shared philosophy: customer-held keys, residency enforcement, auditable access �
 | [H3-WORKED-EVIDENCE.md](H3-WORKED-EVIDENCE.md) | Track B EHRbase smoke evidence packaging (Solum-Demo `make smoke-h3`) |
 | [FHIR-VALIDATION.md](FHIR-VALIDATION.md) | IPS-oriented Bundle export vs FHIR Validator |
 | [DE-FHIR-GAP.md](DE-FHIR-GAP.md) | German reference (ISiK / gematik) gap dossier — **not** a TI claim |
-| [DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md) | Optional DE adapter — **pilot-gated**, do not start without Go |
+| [DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md) | Narrow KIS adapter on main; full ISiK IG still **pilot-gated** |
+| [AUTH-HOSPITAL.md](AUTH-HOSPITAL.md) | Klinik-OIDC / SMART Backend Services (not App Launch, not Passports) |
 
 ## Do not duplicate Ferrum docs
 

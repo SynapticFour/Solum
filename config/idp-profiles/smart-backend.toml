@@ -1,0 +1,8 @@
+# SMART Backend Services (system-to-system). sub is the client_id.
+# Not SMART App Launch (no EHR iframe, no launch/patient).
+name = "smart-backend"
+issuer_contains = ""
+groups_claim = "groups"
+audience = "solum-api"
+flow = "smart-backend"
+org_iam = "config/org-iam/smart-backend.toml"

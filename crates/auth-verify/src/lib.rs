@@ -67,7 +67,8 @@ impl VerifyConfig {
         }
     }
 
-    /// Standalone / SMART-on-FHIR-shaped OIDC: issuer + audience required.
+    /// Standalone / hospital OIDC: issuer + audience required.
+    /// Clinician tokens and SMART Backend Services use the same knobs.
     pub fn for_standalone_oidc(issuer: impl Into<String>, audience: impl Into<String>) -> Self {
         Self {
             allowed_algorithms: vec![Algorithm::RS256, Algorithm::ES256],
@@ -76,6 +77,15 @@ impl VerifyConfig {
             expected_issuer: Some(issuer.into()),
             actor_source: ActorSource::Standalone,
         }
+    }
+
+    /// SMART Backend Services (system-to-system). `sub` is the client_id.
+    /// Not SMART App Launch. Same verify knobs as [`Self::for_standalone_oidc`].
+    pub fn for_smart_backend_services(
+        issuer: impl Into<String>,
+        audience: impl Into<String>,
+    ) -> Self {
+        Self::for_standalone_oidc(issuer, audience)
     }
 }
 
@@ -628,6 +638,62 @@ mod tests {
         assert_eq!(
             claims.into_solum_actor().to_audit_string(),
             "standalone:practitioner/7"
+        );
+    }
+
+    #[test]
+    fn entra_hospital_token_binds_standalone_actor() {
+        let key = mint_rsa_material();
+        let t = now_secs();
+        let cfg = VerifyConfig::for_standalone_oidc(
+            "https://login.microsoftonline.com/tenant/v2.0",
+            "api://solum",
+        );
+        let verifier = JwksVerifier::from_jwks_json(&key.jwks_json, cfg).unwrap();
+        let token = sign_rs256(
+            &key,
+            json!({
+                "sub": "arzt-42",
+                "iss": "https://login.microsoftonline.com/tenant/v2.0",
+                "aud": "api://solum",
+                "exp": t + 3600,
+                "groups": ["solum-consent-ops"],
+            }),
+        );
+        let claims = verifier.verify(&token).expect("entra token");
+        assert_eq!(claims.actor_source, ActorSource::Standalone);
+        assert_eq!(claims.groups, vec!["solum-consent-ops".to_string()]);
+        assert_eq!(
+            claims.into_solum_actor().to_audit_string(),
+            "standalone:arzt-42"
+        );
+    }
+
+    #[test]
+    fn smart_backend_services_uses_client_id_as_sub() {
+        let key = mint_rsa_material();
+        let t = now_secs();
+        let cfg = VerifyConfig::for_smart_backend_services(
+            "https://fhir.kis.example/oauth2",
+            "solum-api",
+        );
+        let verifier = JwksVerifier::from_jwks_json(&key.jwks_json, cfg).unwrap();
+        let token = sign_rs256(
+            &key,
+            json!({
+                "sub": "kis-bulk-client",
+                "iss": "https://fhir.kis.example/oauth2",
+                "aud": "solum-api",
+                "exp": t + 3600,
+                "groups": ["solum-crypto-ops"],
+            }),
+        );
+        let claims = verifier.verify(&token).expect("smart backend token");
+        assert_eq!(claims.actor_source, ActorSource::Standalone);
+        assert!(!claims.scopes.iter().any(|s| s.contains("launch")));
+        assert_eq!(
+            claims.into_solum_actor().to_audit_string(),
+            "standalone:kis-bulk-client"
         );
     }
 }

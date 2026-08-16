@@ -17,6 +17,8 @@ git clone https://github.com/SynapticFour/Solum.git && cd Solum
 make prove
 ```
 
+Hospital identity without Ferrum: Keycloak, Entra, or SMART Backend Services (not App Launch). Consent and audit bind `standalone:<sub>`. Operator pack: [AUTH-HOSPITAL.md](AUTH-HOSPITAL.md).
+
 Interactive proof: [Solum-Demo](https://github.com/SynapticFour/Solum-Demo) `make up && make smoke-ci`.
 
 ## Optional composition

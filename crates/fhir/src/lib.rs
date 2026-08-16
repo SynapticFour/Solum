@@ -8,8 +8,13 @@
 
 #![forbid(unsafe_code)]
 
+mod kis_patient_adapter;
 mod patient_summary;
 
+pub use kis_patient_adapter::{
+    to_kis_patient_adapter, DE_KVID10_SYSTEM, KIS_ADAPTER_TAG_CODE, KIS_ADAPTER_TAG_SYSTEM,
+    SOLUM_LOCAL_PATIENT_SYSTEM,
+};
 pub use patient_summary::{
     decrypt_patient_summary, encrypt_patient_summary, to_fhir_bundle, AllergyEntry, FhirError,
     HumanName, Identifier, MedicationEntry, PatientInfo, PatientSummary, ProblemEntry,

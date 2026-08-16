@@ -68,4 +68,4 @@ Master map (every allowed claim → command): [CLAIMS-PROOF-TRAIL.md](CLAIMS-PRO
 | Track B EHRbase evidence | [H3-WORKED-EVIDENCE.md](H3-WORKED-EVIDENCE.md) · Solum-Demo `make smoke-h3` |
 | FHIR IPS structural / validator | [FHIR-VALIDATION.md](FHIR-VALIDATION.md) |
 | DE reference gap dossier | [DE-FHIR-GAP.md](DE-FHIR-GAP.md) |
-| DE adapter spike (gated) | [DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md) |
+| DE adapter spike (full ISiK IG gated) | [DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md) · [examples/de-adapter/](../examples/de-adapter/) |

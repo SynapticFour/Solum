@@ -1,0 +1,18 @@
+# SMART Backend Services client (KIS → Solum). Map a group or client role to CAP_*.
+claim_path = "groups"
+
+[[map]]
+claim_value = "solum-consent-ops"
+capabilities = ["solum:consent:grant", "solum:consent:revoke", "solum:consent:read"]
+
+[[map]]
+claim_value = "solum-crypto-ops"
+capabilities = ["solum:crypto:encrypt", "solum:crypto:decrypt"]
+
+[[map]]
+claim_value = "solum-cdr-ops"
+capabilities = ["solum:cdr:write", "solum:cdr:read"]
+
+[[map]]
+claim_value = "solum-audit-ops"
+capabilities = ["solum:audit:export", "solum:audit:verify"]

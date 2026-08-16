@@ -675,7 +675,7 @@ async fn load_org_iam(config: &SidecarConfig) -> Result<Option<OrgIamRuntime>, S
     tracing::info!(
         claim_path = %mapping.claim_path,
         entries = mapping.entries.len(),
-        "org-IAM enabled (H2.2): Bearer JWT groups → CAP_*"
+        "org-IAM enabled: hospital OIDC (iss+aud) groups → CAP_*; not Ferrum Passports"
     );
     Ok(Some(OrgIamRuntime {
         mapping,

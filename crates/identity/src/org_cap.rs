@@ -64,10 +64,6 @@ impl OrgCapMapping {
 ///
 /// Supports top-level keys and dotted paths (`realm_access.roles`). Values may
 /// be a string or an array of strings.
-/// Extract string claim values from a JWT claims object (ADS-style path).
-///
-/// Supports top-level keys and dotted paths (`realm_access.roles`). Values may
-/// be a string or an array of strings.
 pub fn claim_values_from_json(claims: &serde_json::Value, path: &str) -> Vec<String> {
     match claims.as_object() {
         Some(map) => claim_values_from_map(map, path),

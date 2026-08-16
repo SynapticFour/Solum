@@ -1,0 +1,8 @@
+# Microsoft Entra ID / Azure AD for hospital clinicians.
+# Groups must be emitted on the access token. Not SMART App Launch.
+name = "entra"
+issuer_contains = "login.microsoftonline.com"
+groups_claim = "groups"
+audience = "api://solum"
+flow = "oidc"
+org_iam = "config/org-iam/entra.toml"

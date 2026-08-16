@@ -67,13 +67,14 @@ Chosen for consistency with Ferrum-core and direct reuse of existing Rust buildi
 Arbeitsteilung zwischen Ferrums struktureller FHIR-Validierung und Solums Jurisdiktions-Compliance (Sprint 3 — siehe [INTEGRATION-ROADMAP.md](INTEGRATION-ROADMAP.md)). Dieser Abschnitt beschreibt eine **Absicht und Grenze**, keine getestete Integration: Solum ruft `ferrum-mii-connect` heute **nicht** auf.
 
 - **`ferrum-mii-connect`** (Ferrum-Repo, nicht in diesem Workspace) prüft strukturelle FHIR-Konformität gegen die deutschen MII-Kerndatensatz-Profile (17 Module: Person, Encounter, Consent, Diagnose, Labor, Medikation, Onkologie, Pathologie, molekulare Berichte, Bildgebung, ICU, Biobank, Research Study u.a.). Ferrum positioniert das explizit als *"technical conformance, not legal advice about regulatory compliance"* — also **keine** rechtliche Compliance-Aussage.
-- **`solum-fhir`** bleibt davon unabhängig nutzbar: IPS-orientierte Patient Summary, EHDS-fokussiert. Standalone-Betrieb (Mode A) hat **keine** Abhängigkeit von `ferrum-mii-connect`.
+- **`solum-fhir`** bleibt davon unabhängig nutzbar: IPS-orientierte Patient Summary plus optionaler KIS-Patient-Adapter (kein ISiK-IG). IHE/MII sind **Profile auf Ressourcen, die schon existieren** — Solum ist kein IHE-Affinity-Domain und kein MII-Forschung-EHR. Standalone-Betrieb (Mode A) hat **keine** Abhängigkeit von `ferrum-mii-connect`.
 - **Ferrum-Companion-Modus (Mode B):** Wenn ein Feld bereits durch `ferrum-mii-connect` strukturell validiert wurde, kann Solum das über einen einfachen String-Verweis (`PatientSummary.mii_validation_ref`) referenzieren, statt eine zweite FHIR-Validierung parallel zu bauen. Arbeitsteilung: **Ferrum = Struktur-Konformität**, **Solum = Jurisdiktions-Compliance** (Verschlüsselungskategorie, Consent-Zweck, Audit). Der Verweis ist bewusst kein typisiertes Report-Objekt — die konkrete Report-API von `ferrum-mii-connect` ist hier nicht angenommen.
 - **Nicht-Ziel dieses Sprints:** Live-Aufruf von `ferrum-mii-connect`, Übernahme von Report-Formaten, oder eine Solum-eigene MII-Profil-Engine.
 
 ## Related
 
 - [Product definition](PRODUCT-DEFINITION.md)
+- [Hospital identity](AUTH-HOSPITAL.md)
 - [Roadmap](roadmap.md)
 - [Profiles](profiles.md)
 - [HELIOS](helios.md)

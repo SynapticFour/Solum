@@ -5,7 +5,7 @@
 //! that allows `ephemeral_test`.
 
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::Parser;
@@ -87,6 +87,11 @@ struct Cli {
     #[arg(long = "oidc-audience", env = "SOLUM_ORG_IAM_AUDIENCE")]
     oidc_audience: Option<String>,
 
+    /// Hospital IdP pack: entra | keycloak-hospital | smart-backend.
+    /// Fills --org-iam-config (and default audience) from config/idp-profiles/ when unset.
+    #[arg(long = "idp-profile", env = "SOLUM_IDP_PROFILE")]
+    idp_profile: Option<String>,
+
     /// EHRbase base URL including `/ehrbase` context (H3.0 Track B). Opt-in.
     #[arg(long = "ehrbase-url", env = "SOLUM_EHRBASE_URL")]
     ehrbase_url: Option<String>,
@@ -119,6 +124,25 @@ async fn main() -> ExitCode {
 
     let cli = Cli::parse();
 
+    let idp = match cli.idp_profile.as_deref() {
+        Some(name) => match solum_identity::IdpProfile::load_named(Path::new("config"), name) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                eprintln!("solum-sidecar: {e}");
+                return ExitCode::from(2);
+            }
+        },
+        None => None,
+    };
+    let org_iam_config = cli
+        .org_iam_config
+        .or_else(|| idp.as_ref().map(|p| p.org_iam_path()));
+    let oidc_audience = cli.oidc_audience.or_else(|| {
+        idp.as_ref()
+            .map(|p| p.audience.clone())
+            .filter(|s| !s.is_empty())
+    });
+
     let config = SidecarConfig {
         bind: cli.bind,
         profile: cli.profile,
@@ -128,11 +152,11 @@ async fn main() -> ExitCode {
         keys_dir: cli.keys_dir,
         ephemeral: cli.ephemeral,
         wrapped_keys_dir: cli.wrapped_keys_dir,
-        org_iam_config: cli.org_iam_config,
+        org_iam_config,
         jwks_url: cli.jwks_url,
         jwks_file: cli.jwks_file,
         oidc_issuer: cli.oidc_issuer,
-        oidc_audience: cli.oidc_audience,
+        oidc_audience,
         ehrbase_url: cli.ehrbase_url,
         cdr_template_opt: cli.cdr_template_opt,
         fhir_store: cli.fhir_store,

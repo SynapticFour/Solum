@@ -158,7 +158,19 @@ curl -sS "$BASE/v1/consent/status?subject=patient%2F42&purpose=care_provision" \
 
 ### Org IAM (H2.2) — required on pilot profiles
 
-`--org-iam-config` plus `--jwks-url` or `--jwks-file`, `--oidc-issuer`, and `--oidc-audience` are **required** to start `eu-ehds` / `kenya-dpa`. Mutating and privileged GET routes ignore body `capability[]` and require `Authorization: Bearer <jwt>`. Groups (or another `claim_path`) map to Solum CAP strings via TOML (`config/org-iam/pilot-groups.toml`). Sidecar token remains required. CLI keeps `--capability` for offline ops.
+`--org-iam-config` plus `--jwks-url` or `--jwks-file`, `--oidc-issuer`, and `--oidc-audience` are **required** to start `eu-ehds` / `kenya-dpa`. Mutating and privileged GET routes ignore body `capability[]` and require `Authorization: Bearer <jwt>`. Groups (or another `claim_path`, e.g. Keycloak `realm_access.roles`) map to Solum CAP strings via TOML. Sidecar token remains required. CLI keeps `--capability` for offline ops.
+
+Hospital packs (`--idp-profile entra | keycloak-hospital | smart-backend`) fill `--org-iam-config` and the default audience from `config/idp-profiles/` when those flags are unset. Consent/audit bind `standalone:<sub>` — **not** Ferrum Passports, **not** SMART App Launch. See [AUTH-HOSPITAL.md](../AUTH-HOSPITAL.md).
+
+```bash
+solum-sidecar \
+  --idp-profile keycloak-hospital \
+  --jwks-url http://localhost:8080/realms/hospital/protocol/openid-connect/certs \
+  --oidc-issuer http://localhost:8080/realms/hospital \
+  ...
+```
+
+Or the explicit mapping file:
 
 ```bash
 solum-sidecar \

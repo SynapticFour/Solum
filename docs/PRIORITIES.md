@@ -1,8 +1,9 @@
 # Priorities (living — after P0–P3 engineering pass 2026-08-11)
 
 Claims we make must stay backed by [CLAIMS-PROOF-TRAIL.md](CLAIMS-PROOF-TRAIL.md).
-Do **not** start ISiK/TI adapter work without an explicit pilot Go
-([DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md)).
+Do **not** start a full ISiK/TI IG mapper without an explicit pilot Go
+([DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md)). The unprofiled KIS Patient adapter
+is already on `main`.
 
 ## Closed in this pass
 
@@ -37,7 +38,7 @@ Do **not** start ISiK/TI adapter work without an explicit pilot Go
 | MedicationRequest path (vs MedicationStatement-only) | Open | IPS allows either; Statement-only remains stage-1 choice |
 | Provisional MII extension URL | Open | Passthrough only |
 | Live Prefer / Cut-over on partner store | Open | Dry rehearsal exists; live import needs Demo `smoke-h3` + site |
-| DE / ISiK adapter | **Gated** | Pilot Go required |
+| DE / ISiK IG mapper | **Gated** | Narrow KIS adapter shipped; full IG still needs pilot Go |
 | EEHRxF categories beyond Patient Summary | Stage 2 | labs / discharge / imaging / Rx |
 
 ### P0 ongoing hygiene

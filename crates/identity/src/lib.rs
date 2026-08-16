@@ -34,8 +34,10 @@
 
 #![forbid(unsafe_code)]
 
+mod idp_profile;
 mod org_cap;
 
+pub use idp_profile::{detect_idp_profile, IdpProfile, KNOWN_IDP_PROFILES};
 pub use org_cap::{claim_values_from_json, claim_values_from_map, OrgCapMapEntry, OrgCapMapping};
 
 use thiserror::Error;
@@ -58,8 +60,9 @@ pub struct SolumActor {
 }
 
 impl SolumActor {
-    /// Mode A / SMART-on-FHIR-shaped construction — no live token verification
-    /// (Sprint 5). Analogous to the Sprint-1 AuthClaims construction smoke.
+    /// Mode A / hospital OIDC or SMART Backend Services — no Ferrum Passport.
+    /// Live JWKS verification lives in `solum-auth-verify` (`for_standalone_oidc` /
+    /// `for_smart_backend_services`).
     pub fn standalone(subject_id: impl Into<String>, scopes: Vec<String>) -> Self {
         Self {
             subject_id: subject_id.into(),

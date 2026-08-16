@@ -10,7 +10,7 @@
 | Layer | Solum today | Typical DE reference | Status |
 |-------|-------------|----------------------|--------|
 | Document shape | IPS-oriented FHIR R4 **document Bundle** (`solum-fhir`) | Often ISiK / KBV / epa **profiled** resources; not raw UV IPS | `fail` / mismatch by design |
-| Patient | Minimal Patient in Bundle (id, name, birthDate, identifier) | **ISiK Basis Patient** (identifier systems, gender, required elements, German extensions) | `fail` |
+| Patient | Minimal Patient in Bundle (id, name, birthDate, identifier); optional KIS adapter (`to_kis_patient_adapter`, KVID-10 system when supplied, tag `kis-patient-v0`, **no** `meta.profile`) | **ISiK Basis Patient** (identifier systems, gender, required elements, German extensions) | `partial` |
 | Composition | IPS LOINC `60591-5` + three sections | DE document types / ISiK document profiles differ | `fail` |
 | Allergies / Meds / Problems | Display-text entries | Bound value sets / ISiK observation & medication profiles | `fail` |
 | Consent / crypto / audit | Solum CLI + sidecar (Track A) | Orthogonal to FHIR IG; DE sites still need policy/evidence | `pass` (Solum moat) |
@@ -38,15 +38,16 @@ Record results under `examples/fhir-ips-export/out/` (gitignored) and summarise 
 | 2026-08-11 | Structural IPS export (`validate-fhir-ips.sh`) | **PASS** |
 | 2026-08-11 | HL7 Validator 6.10.1 + IPS 2.0.0 (pre-harden) | **FAIL** — 7 errors / 5 warnings |
 | 2026-08-11 | HL7 Validator 6.10.1 + IPS 2.0.0 (UUID/LOINC/ait-1/narrative) | **Success** — 0 errors / 0 warnings |
-| 2026-08-11 | ISiK Basis Patient vs exported Patient | Gap — see table (`fail`) |
+| 2026-08-11 | ISiK Basis Patient vs exported Patient | Gap — see table (`partial` as of 2026-08-16 KIS adapter; still not ISiK IG) |
 | — | Live gematik RU | Not run (requires operator access) |
+| 2026-08-16 | KIS Patient adapter (`to_kis_patient_adapter`) | **partial** — identifier/name/birthDate + optional KVID-10; not ISiK-validated |
 
 ## Gap → follow-up work (prioritised)
 
 | Priority | Gap | Suggested follow-up |
 |----------|-----|---------------------|
 | P0 | ~~Crypto ignores active consent after revoke~~ **Done 2026-08-11** — `*_as` crypto requires grant covering category; see [WORKED-EXAMPLE.md](WORKED-EXAMPLE.md) | Issue [#1](https://github.com/SynapticFour/Solum/issues/1) |
-| P1 | No ISiK Patient profile mapping | Pilot-gated mapper (see [DE-ADAPTER-SPIKE.md](DE-ADAPTER-SPIKE.md)) |
+| P1 | ISiK Patient profile instance (gender, DE extensions, IG `meta.profile`) | Narrow KIS adapter is on `main`; full IG mapper stays [pilot-gated](DE-ADAPTER-SPIKE.md) |
 | P1 | IPS emptyReason / terminology unbound | Align sections when DE pilot names target IG version |
 | P2 | Composition metadata for DE document exchange | Add profile-specific Composition when pilot chooses document type |
 | P2 | No TI auth integration | Remain out of Solum core; partner connector if ever required |
