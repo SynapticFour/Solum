@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | **Date** | 2026-08-15 |
-| **Verified commit** | `6b4519c98f5c1e905ab5cf3f517787021d1e2604` |
-| **Tag** | *(no new freeze tag in this refresh; prior: `stage1-baseline-sidecar-custody-2026-08-01`)* |
+| **Verified commit** | tag **v0.1.0** (`git rev-parse v0.1.0^{commit}`). Identity landing `4c599c6` plus PURPOSE-AND-DUO. |
+| **Tag** | **v0.1.0** — first SemVer cut. Stage-1 interactive smoke historically used `6b4519c` until Solum-Demo fetched this tag. |
 | **Supersedes (doc honesty)** | Custody baseline `3742851` / tag `stage1-baseline-sidecar-custody-2026-08-01`; also corrects post-tag drift (H3 Track B, H2.4 KMS wiring, proof path) |
 
 > This refresh documents **current `main` honesty** after consent-gated crypto (Deny B closed), proof-path docs, and Track B / KMS landings that outpaced the 2026-08-05 freeze text. Prefer a future annotated tag if you need a bit-for-bit evaluation pin.

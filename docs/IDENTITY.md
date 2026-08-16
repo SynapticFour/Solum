@@ -25,6 +25,7 @@ Interactive proof: [Solum-Demo](https://github.com/SynapticFour/Solum-Demo) `mak
 |------|----------------|----------|
 | Ferrum | Same subject id on genomic DRS objects | Ferrum `solum_consent` HTTP; pin ferrum-core in `config/ci/ferrum-revision.txt` |
 | BRA | Phenopacket → clinical subject | `POST /v1/cdr/subject-link` with actor, capability, purpose |
+| ga4gh-infra | Passports for research data | Different plane than Solum purpose — [PURPOSE-AND-DUO.md](PURPOSE-AND-DUO.md) |
 | HELIOS | Signed clinical evidence | `solum-audit-helios-chain-v1` export file — HELIOS does not call this sidecar |
 
 See [ECOSYSTEM.md](ECOSYSTEM.md).
