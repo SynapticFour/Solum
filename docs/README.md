@@ -13,6 +13,9 @@ Shared philosophy: customer-held keys, residency enforcement, auditable access â
 
 | Doc | Topic |
 |-----|--------|
+| [GETTING-STARTED.md](GETTING-STARTED.md) | Prove + CLI (Stage-1) |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Public entry (points at architecture.md) |
+| [FOR-EVALUATORS.md](FOR-EVALUATORS.md) | Maturity, license, tested vs not |
 | [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md) | Positioning, markets, MDCG boundary, standards, partner model (public) |
 | [architecture.md](architecture.md) | Principles, crates, startup enforcement |
 | [roadmap.md](roadmap.md) | Stage 1 vs stage 2 |

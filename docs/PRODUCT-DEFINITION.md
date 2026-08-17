@@ -15,7 +15,7 @@ This document is the in-repo product anchor for contributors and operators. It s
 
 Both share a sovereignty philosophy (customer-held control, open standards, no lock-in to proprietary interchange formats) but are **separate brands, repositories, and regulatory perimeters**.
 
-**Why Track B exists:** a pure EHDS/compliance shim is valuable early and vulnerable later as incumbents catch up. An optional openEHR-backed clinical store (APIs for others to build EHR UIs — **not** a full Synaptic Four EHR product) makes Solum a durable home for clinical data beside Ferrum genomics, with an explicit wrap → mirror → prefer → cut-over migration path. See the portfolio [coordinated roadmap](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/COORDINATED-PORTFOLIO-ROADMAP.md).
+**Why Track B exists:** a pure EHDS/compliance shim is valuable early and vulnerable later as incumbents catch up. An optional openEHR-backed clinical store (APIs for others to build EHR UIs — **not** a full Synaptic Four EHR product) makes Solum a durable home for clinical data beside Ferrum genomics, with an explicit wrap → mirror → prefer → cut-over migration path.
 
 ## 2. Markets
 
