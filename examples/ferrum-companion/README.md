@@ -11,7 +11,7 @@ This example is **Modus B** from [`docs/INTEGRATION-ROADMAP.md`](../../docs/INTE
 1. **Shared Crypt4GH format** — A “Ferrum-side” encrypt path (direct `crypt4gh` crate, same library Ferrum genomic objects use) and Solum’s `solum_crypto::encrypt_field` for `patient_summary` share one keypair. Solum can decrypt the Ferrum-path ciphertext; raw `crypt4gh` can decrypt the Solum ciphertext.
 2. **`ferrum_core::auth::AuthClaims` is usable** — constructs a Jwt-variant claims value via the re-export from `solum-crypto` (no token verification; Sprint 5).
 
-## Important API note (inspected at pin `6444469a…`, Ferrum v0.3.0)
+## Important API note (inspected at pin `f28f2780…`, Ferrum v0.3.1)
 
 `ferrum-core` does **not** expose Crypt4GH encrypt/decrypt helpers. Solum’s `crates/crypto` already uses the shared `crypt4gh` crate directly and only links `ferrum-core` for shared types. This example mirrors that split rather than inventing a parallel Ferrum crypto API.
 

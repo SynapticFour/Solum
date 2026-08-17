@@ -23,7 +23,7 @@
 //! (preset), never by auto-detecting the token.
 //!
 //! Behaviour intentionally **mirrors** Ferrum's Passport/JWKS path at pin
-//! `6444469a…` (Ferrum v0.3.0) for the knobs Sprint 5 cares about (RS256+ES256, `validate_exp`,
+//! `f28f2780…` (Ferrum v0.3.1) for the knobs Sprint 5 cares about (RS256+ES256, `validate_exp`,
 //! no audience check, default jsonwebtoken leeway, no `nbf`), but can **drift**
 //! if Ferrum changes private decode logic — there is no public compare API.
 //!
@@ -55,7 +55,7 @@ pub struct VerifyConfig {
 }
 
 impl VerifyConfig {
-    /// Mirrors researched Ferrum Passport/JWKS verify knobs at pin `6444469a…` (Ferrum v0.3.0):
+    /// Mirrors researched Ferrum Passport/JWKS verify knobs at pin `f28f2780…` (Ferrum v0.3.1):
     /// RS256+ES256, `validate_exp`, no audience check, no `nbf` (jsonwebtoken default).
     pub fn for_ferrum_passport() -> Self {
         Self {

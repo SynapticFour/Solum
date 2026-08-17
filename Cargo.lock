@@ -1592,7 +1592,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1625,8 +1625,8 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "ferrum-core"
-version = "0.2.0"
-source = "git+https://github.com/SynapticFour/Ferrum.git?rev=6444469ac488af9dd6f62f584b99be87ff2d7180#6444469ac488af9dd6f62f584b99be87ff2d7180"
+version = "0.3.1"
+source = "git+https://github.com/SynapticFour/Ferrum.git?rev=f28f27800f1d92c6a76670c760d9beb444c368d6#f28f27800f1d92c6a76670c760d9beb444c368d6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1660,8 +1660,8 @@ dependencies = [
 
 [[package]]
 name = "ferrum-storage"
-version = "0.2.0"
-source = "git+https://github.com/SynapticFour/Ferrum.git?rev=6444469ac488af9dd6f62f584b99be87ff2d7180#6444469ac488af9dd6f62f584b99be87ff2d7180"
+version = "0.3.1"
+source = "git+https://github.com/SynapticFour/Ferrum.git?rev=f28f27800f1d92c6a76670c760d9beb444c368d6#f28f27800f1d92c6a76670c760d9beb444c368d6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2781,7 +2781,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3260,7 +3260,7 @@ dependencies = [
  "once_cell",
  "socket2 0.6.5",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3605,7 +3605,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4531,7 +4531,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5248,7 +5248,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5723,11 +5723,3 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
-
-[[patch.unused]]
-name = "ferrum-core"
-version = "0.3.1"
-
-[[patch.unused]]
-name = "ferrum-storage"
-version = "0.3.1"

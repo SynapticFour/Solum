@@ -1,7 +1,7 @@
 //! Sprint-1 smoke: `ferrum_core::auth::AuthClaims` is constructible via the
 //! git-pinned re-export from `solum-crypto`.
 //!
-//! No JWT/JWKS verification (Sprint 5). API inspected at pin `6444469a…` (Ferrum v0.3.0):
+//! No JWT/JWKS verification (Sprint 5). API inspected at pin `f28f2780…` (Ferrum v0.3.1):
 //! `AuthClaims` is a public enum with `Jwt` / `Passport` variants — not serde
 //! on the enum itself, so we construct fields directly.
 

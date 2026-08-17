@@ -43,7 +43,7 @@ solum-consent.workspace = true
 # AuthClaims → SolumActor mapping; ferrum-core itself is already linked via solum-crypto.
 solum-identity = { workspace = true, features = ["ferrum-companion"] }
 # Same git pin as crates/crypto ferrum-core (config/ci/ferrum-revision.txt).
-ferrum-storage = { git = "https://github.com/SynapticFour/Ferrum.git", rev = "6444469ac488af9dd6f62f584b99be87ff2d7180", optional = true }
+ferrum-storage = { git = "https://github.com/SynapticFour/Ferrum.git", rev = "f28f27800f1d92c6a76670c760d9beb444c368d6", optional = true }
 # Only io-util for AsyncReadExt in library code; callers (tests/examples) supply the runtime.
 # aws-kms also enables rt-multi-thread / macros for CLI wrap/encrypt paths.
 tokio = { version = "1", optional = true, default-features = false, features = ["io-util"] }

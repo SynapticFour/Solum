@@ -12,7 +12,7 @@ Parameters and grant text are aligned with [Ferrum](https://github.com/SynapticF
 
 ## Written commercial license
 
-How to request one, and that there is **no combo SKU** with Ferrum / BRA / infra: [Ferrum COMMERCIAL.md](https://github.com/SynapticFour/Ferrum/blob/main/docs/COMMERCIAL.md). Email **[contact@synapticfour.com](mailto:contact@synapticfour.com)** naming **Solum**. That page is not itself a signed grant.
+How to request a written commercial license: [COMMERCIAL.md](COMMERCIAL.md). Email **[contact@synapticfour.com](mailto:contact@synapticfour.com)** naming **Solum**. That page is not itself a signed grant.
 
 ## Option B (not selected)
 

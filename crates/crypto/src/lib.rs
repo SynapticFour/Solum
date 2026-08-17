@@ -42,7 +42,7 @@ use zeroize::ZeroizeOnDrop;
 pub use crypt4gh::Keys as Crypt4ghKeys;
 
 /// Git revision pinned in `Cargo.toml` (mirror `config/ci/ferrum-revision.txt`).
-pub const FERRUM_GIT_REV: &str = "6444469ac488af9dd6f62f584b99be87ff2d7180";
+pub const FERRUM_GIT_REV: &str = "f28f27800f1d92c6a76670c760d9beb444c368d6";
 
 /// Upstream repository URL.
 pub const FERRUM_GIT_URL: &str = "https://github.com/SynapticFour/Ferrum.git";

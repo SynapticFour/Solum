@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Commercial path: [LICENSE-OPTIONS.md](docs/LICENSE-OPTIONS.md) points at Ferrum [COMMERCIAL.md](https://github.com/SynapticFour/Ferrum/blob/main/docs/COMMERCIAL.md). Solum stays a separate license; no combo SKU.
+- Commercial path: [COMMERCIAL.md](docs/COMMERCIAL.md). Solum stays a separate license; no combo SKU.
+- Ferrum git pin **v0.3.1** (`f28f2780…`) — suite 2026.08-draft. Not Ferrum `main`.
 
 ### Added
 
