@@ -21,6 +21,8 @@ Hospital identity without Ferrum: Keycloak, Entra, or SMART Backend Services (no
 
 Interactive proof: [Solum-Demo](https://github.com/SynapticFour/Solum-Demo) `make up && make smoke-ci`.
 
+Written commercial license (Solum is its own product, not a Ferrum add-on): [Ferrum COMMERCIAL.md](https://github.com/SynapticFour/Ferrum/blob/main/docs/COMMERCIAL.md).
+
 ## Optional composition
 
 | Join | What you gain | Contract |

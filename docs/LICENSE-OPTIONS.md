@@ -10,6 +10,10 @@ Parameters and grant text are aligned with [Ferrum](https://github.com/SynapticF
 - Clear commercial-licensing path for hosted or commercial deployments.
 - Research / internal-research Additional Use Grant preserved; Change License Apache-2.0 after four years.
 
+## Written commercial license
+
+How to request one, and that there is **no combo SKU** with Ferrum / BRA / infra: [Ferrum COMMERCIAL.md](https://github.com/SynapticFour/Ferrum/blob/main/docs/COMMERCIAL.md). Email **[contact@synapticfour.com](mailto:contact@synapticfour.com)** naming **Solum**. That page is not itself a signed grant.
+
 ## Option B (not selected)
 
 Pure Apache-2.0 from day one was considered for stronger OSI / clinical-tender optics. It remains a possible future Change License path (already the BUSL Change License) but is not the day-one license.

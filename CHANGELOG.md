@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Commercial path: [LICENSE-OPTIONS.md](docs/LICENSE-OPTIONS.md) points at Ferrum [COMMERCIAL.md](https://github.com/SynapticFour/Ferrum/blob/main/docs/COMMERCIAL.md). Solum stays a separate license; no combo SKU.
+
 ### Added
 
 - **Hospital IdP pack (M3)** — `--idp-profile` (`keycloak-hospital`, `entra`, `smart-backend`) fills org-IAM from `config/idp-profiles/`. Consent/audit bind `standalone:<sub>` (clinic OIDC / SMART Backend Services, not App Launch, not Ferrum Passports). Docs: [AUTH-HOSPITAL.md](docs/AUTH-HOSPITAL.md). Compose: `docker-compose.keycloak-hospital.yml`.
