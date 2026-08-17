@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Commercial path: [COMMERCIAL.md](docs/COMMERCIAL.md). Solum stays a separate license; no combo SKU.
-- Ferrum git pin **v0.3.1** (`f28f2780…`) — suite 2026.08-draft. Not Ferrum `main`.
+- Ferrum git pin **v0.3.2** (`2bd147c9…`). Not Ferrum `main`.
 
 ### Added
 

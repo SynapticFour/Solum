@@ -34,6 +34,6 @@ solum-crypto.workspace = true
 solum-profiles.workspace = true
 solum-core = { workspace = true, optional = true }
 # Same pin as crates/crypto ferrum-core / solum-core ferrum-storage-backend.
-ferrum-storage = { git = "https://github.com/SynapticFour/Ferrum.git", rev = "f28f27800f1d92c6a76670c760d9beb444c368d6", optional = true }
+ferrum-storage = { git = "https://github.com/SynapticFour/Ferrum.git", rev = "2bd147c99735866ac9cfb530f62ef984c8efce8b", optional = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
 tempfile = { workspace = true, optional = true }

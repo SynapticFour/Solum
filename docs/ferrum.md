@@ -6,7 +6,7 @@ Ferrum is the GA4GH-oriented genomic platform. Solum is a clinical **compliance 
 
 ## What Solum reuses
 
-- `ferrum-core` as a **git-pinned** dependency (same pattern as [Ferrum Lab Kit](https://github.com/SynapticFour/Ferrum-Lab-Kit)): see `crates/crypto/Cargo.toml` and `config/ci/ferrum-revision.txt`. Current pin: Ferrum **v0.3.1** (`f28f2780`). Bump with `./scripts/bump-ferrum.sh`.
+- `ferrum-core` as a **git-pinned** dependency (same pattern as [Ferrum Lab Kit](https://github.com/SynapticFour/Ferrum-Lab-Kit)): see `crates/crypto/Cargo.toml` and `config/ci/ferrum-revision.txt`. Current pin: Ferrum **v0.3.2** (`2bd147c9`). Bump with `./scripts/bump-ferrum.sh`.
 - Sovereignty ideas: customer-controlled cryptography, residency awareness, auditable access.
 - The **Crypt4GH envelope format** for clinical field categories (vendored SynapticFour `crypt4gh` fork, same as Ferrum) — see [CRYPTO.md](CRYPTO.md).
 

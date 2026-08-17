@@ -1,5 +1,5 @@
 # Git revision on https://github.com/SynapticFour/Ferrum.git
 # Must match the `ferrum-core` rev in crates/crypto/Cargo.toml.
 # Use the full commit SHA; bump in a dedicated PR (same pattern as Ferrum Lab Kit).
-# Current pin: Ferrum tag v0.3.1 (suite 2026.08-draft).
-f28f27800f1d92c6a76670c760d9beb444c368d6
+# Current pin: Ferrum tag v0.3.2 (suite join).
+2bd147c99735866ac9cfb530f62ef984c8efce8b

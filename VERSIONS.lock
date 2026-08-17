@@ -3,8 +3,8 @@
 # WHO UPDATES: when cutting a Solum tag, or when Ferrum / ga4gh-infra / BRA tags move.
 # WHO READS: operators, Solum-Demo PINNED_VERSIONS, Showcase Solum-tag.
 
-FERRUM_REF=v0.3.1
-FERRUM_SHA=f28f27800f1d92c6a76670c760d9beb444c368d6
+FERRUM_REF=v0.3.2
+FERRUM_SHA=2bd147c99735866ac9cfb530f62ef984c8efce8b
 GA4GH_INFRA_REF=ga4gh-infra-v0.2.3
 GA4GH_INFRA_SHA=613bd14932b57e30cfdca7b413841fe5b07a80fd
 BRA_REF=v0.2.0
