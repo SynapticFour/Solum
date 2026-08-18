@@ -1,23 +1,14 @@
 # Solum documentation
 
-Solum is the **clinical-data compliance layer** in the Synaptic Four portfolio (Track A default): enforce, translate, and evidence conforming processing. Optional **Track B** can front an openEHR CDR (EHRbase) for partner APIs — not a hospital EHR UI, and not a Ferrum fork. See [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md) · [H3-EHRBASE-SPIKE.md](H3-EHRBASE-SPIKE.md) · Demo [COVERAGE](https://github.com/SynapticFour/Solum-Demo/blob/main/docs/COVERAGE.md).
-
-| Product | Domain |
-|---------|--------|
-| **[Ferrum](https://github.com/SynapticFour/Ferrum)** | Genomic / -omic data, GA4GH APIs, Crypt4GH for genomic objects |
-| **Solum** | Clinical data (FHIR / openEHR), jurisdiction profiles (EU EHDS + African regimes) |
-
-Shared philosophy: customer-held keys, residency enforcement, auditable access — **separate brands, repos, and regulatory boundaries**.
+Solum is a **clinical-data compliance layer**: enforce, translate, and evidence conforming processing. Default **Track A** sits beside an existing EHR. Optional **Track B** can front an openEHR CDR (EHRbase) for partner APIs — not a hospital EHR UI. See [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md) · [H3-EHRBASE-SPIKE.md](H3-EHRBASE-SPIKE.md) · Demo [COVERAGE](https://github.com/SynapticFour/Solum-Demo/blob/main/docs/COVERAGE.md).
 
 ## Contents
 
 | Doc | Topic |
 |-----|--------|
 | [GETTING-STARTED.md](GETTING-STARTED.md) | Prove + CLI (Stage-1) |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Public entry (points at architecture.md) |
+| [architecture.md](architecture.md) | Tracks, crates, startup enforcement, honest zero-knowledge path |
 | [FOR-EVALUATORS.md](FOR-EVALUATORS.md) | Maturity, license, tested vs not |
-| [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md) | Positioning, markets, MDCG boundary, standards, partner model (public) |
-| [architecture.md](architecture.md) | Principles, crates, startup enforcement |
 | [roadmap.md](roadmap.md) | Stage 1 vs stage 2 |
 | [profiles.md](profiles.md) | Jurisdiction TOML schema and planned files |
 | [ferrum.md](ferrum.md) | What is reused vs linked from Ferrum |

@@ -40,4 +40,4 @@ Use `crypto keygen` + `--keypair` for Stage-1 evaluations. Ephemeral keys (`--ep
 
 Audit `export` writes a HELIOS-oriented envelope only — this tree does not perform live HELIOS signing. Local UI/smoke of a tagged Solum: [Solum-Demo](https://github.com/SynapticFour/Solum-Demo).
 
-Kenya is an evaluation profile, not a production candidate. Next: [ARCHITECTURE.md](ARCHITECTURE.md) · [FOR-EVALUATORS.md](FOR-EVALUATORS.md).
+Kenya is an evaluation profile, not a production candidate. Next: [architecture.md](architecture.md) · [FOR-EVALUATORS.md](FOR-EVALUATORS.md).

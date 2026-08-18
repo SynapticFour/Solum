@@ -10,9 +10,7 @@ Clinical-data compliance layer: policy, interchange (FHIR / openEHR), consent, a
 
 > This README describes technical capabilities, not legal advice. See [docs/PRODUCT-DEFINITION.md](docs/PRODUCT-DEFINITION.md). Solum does not interpret clinical data for diagnosis or therapy.
 
-## Ferrum / GA4GH suite
-
-These ten public repositories are from the same organisation and can be composed. They are not a fifth product and not a bundle SKU. Each repository keeps its own version and license. Roles, maturity, and who consumes whom: [SUITE-OVERVIEW](https://github.com/SynapticFour/Ferrum/blob/main/docs/SUITE-OVERVIEW.md).
+These public repositories are maintained by the same organisation and are designed to work together. Each repository keeps its own version and license. For details on roles, maturity, and how the components relate to one another, see [SUITE-OVERVIEW](https://github.com/SynapticFour/.github/blob/main/profile/SUITE-OVERVIEW.md).
 
 ## Quick start
 
@@ -26,7 +24,7 @@ Requires Rust 1.91.1 and libsodium. A local interactive stack is [Solum-Demo](ht
 ## Documentation
 
 - [Getting started](docs/GETTING-STARTED.md)
-- [Architecture](docs/ARCHITECTURE.md)
+- [Architecture](docs/architecture.md)
 - [For evaluators](docs/FOR-EVALUATORS.md)
 - [Product definition](docs/PRODUCT-DEFINITION.md) · [Documentation index](docs/README.md)
 
