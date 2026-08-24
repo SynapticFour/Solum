@@ -31,3 +31,5 @@ Requires Rust 1.91.1 and libsodium. A local interactive stack is [Solum-Demo](ht
 ## License
 
 Business Source License 1.1 — see [LICENSE](LICENSE).
+
+**Synaptic Four** · [contact@synapticfour.com](mailto:contact@synapticfour.com) · [synapticfour.com](https://synapticfour.com)
