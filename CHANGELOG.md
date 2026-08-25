@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **h2 0.4.16+** — cargo-deny RUSTSEC-2026-0258 (unbounded empty DATA frames). Transitive via hyper; lockfile bump only.
+- **h2 0.4.16+** — cargo-deny RUSTSEC-2026-0258 (unbounded empty DATA frames). Transitive via hyper; lockfile bump only. Remaining `h2` 0.3.27 (AWS SDK / hyper 0.14) has no patch; ignored in `deny.toml` with the same AWS-stack record as the rustls 0.21 advisories.
 
 ### Changed
 
