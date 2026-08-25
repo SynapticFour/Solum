@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **h2 0.4.16+** — cargo-deny RUSTSEC-2026-0258 (unbounded empty DATA frames). Transitive via hyper; lockfile bump only.
+
 ### Changed
 
 - Commercial path: [COMMERCIAL.md](docs/COMMERCIAL.md). Solum stays a separate license; no combo SKU.
