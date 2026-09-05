@@ -2,7 +2,7 @@
 
 **Status:** Living · 2026-08-12
 **Audience:** Operators + Synaptic Four support
-**Company plan:** Synaptic Four `synapticfour-business/security/incident-response-plan.md` (private)
+**Company plan:** private Synaptic Four incident-response plan (not in this public repository).
 **Threat model:** [THREAT_MODEL.md](THREAT_MODEL.md) · [customer/SECURITY-OVERVIEW.md](customer/SECURITY-OVERVIEW.md)
 
 ---

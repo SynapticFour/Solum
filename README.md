@@ -1,7 +1,12 @@
 # Solum
 
+Freeze status (2026-09): [STATUS.md](STATUS.md).
+
+
 [![CI](https://github.com/SynapticFour/Solum/actions/workflows/ci.yml/badge.svg)](https://github.com/SynapticFour/Solum/actions/workflows/ci.yml)
 [![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL-1.1-blue.svg)](LICENSE)
+
+GitHub may label this Other; SPDX is **BUSL-1.1**.
 [![Rust 1.91.1](https://img.shields.io/badge/rust-1.91.1-orange.svg)](rust-toolchain.toml)
 
 Clinical-data compliance layer: policy, interchange (FHIR / openEHR), consent, audit, and field encryption. Default Track A sits beside an existing EHR. Optional Track B can front EHRbase — that is not a Synaptic Four hospital EHR UI.
