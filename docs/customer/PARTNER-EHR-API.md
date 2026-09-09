@@ -61,5 +61,5 @@ Batch inventory: `solum migrate fhir-import`. Live dual-write webhook: `POST /v1
 
 - Solum does **not** interpret clinical data for diagnosis, therapy, or risk (see CONTRIBUTING / PRODUCT-DEFINITION).
 - Evidence Packs and audit exports are **not** MDR/EHDS certification.
-- External RA send pack: [H3-MDCG-SEND-CHECKLIST.md](../counsel/H3-MDCG-SEND-CHECKLIST.md).
+- Counsel send packs were removed from the public tree; they are not a public download.
 - Edge/Pi: EHRbase is hub-class only.

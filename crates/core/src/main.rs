@@ -1,6 +1,6 @@
 //! Solum CLI — jurisdiction check plus Deployment-backed consent / crypto / audit tools.
 //!
-//! Usage overview: see README.md “CLI usage”.
+//! Usage overview: see docs/GETTING-STARTED.md “CLI (evaluation / Stage-1)”.
 
 use std::env;
 use std::fs;
