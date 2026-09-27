@@ -11,6 +11,7 @@ members = [
     "crates/identity",
     "crates/auth-verify",
     "crates/sidecar",
+    "connectors",
     "examples/ferrum-companion",
     "examples/fhir-ips-export",
 ]

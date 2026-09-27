@@ -1,0 +1,12 @@
+[package]
+name = "solum-connectors"
+description = "Track A KIS connector template. Mock only — not a product for a named KIS."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+thiserror.workspace = true

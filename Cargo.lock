@@ -4056,6 +4056,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "solum-connectors"
+version = "0.1.0"
+dependencies = [
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "solum-consent"
 version = "0.1.0"
 dependencies = [
