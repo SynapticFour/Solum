@@ -7,8 +7,8 @@
 .env
 .env.*
 !.env.example
-# Local Ferrum path override (see .cargo/config.toml.example)
-.cargo/config.toml
+# Local Ferrum path override belongs in .cargo/config.toml.example.
+# .cargo/config.toml is tracked for the Xcode SDK workaround.
 # Local FHIR validator cache (HL7 validator_cli.jar — not vendored)
 .cache/
 # CLI demo key sidecars (raw private key bytes — never commit)

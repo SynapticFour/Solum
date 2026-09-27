@@ -1,0 +1,14 @@
+# Workaround: eigenständige Command Line Tools
+# (Update vom 10.9.2026) enthalten ein MacOSX27.0.sdk, das der installierte Xcode 26.6
+# nicht laden kann. Bindet den Build an das in Xcode.app mitgelieferte SDK, unabhängig
+# von der Terminal-Sitzung. Kann entfernt werden, sobald Xcode das 27.0-SDK unterstützt.
+[env]
+SDKROOT = { value = "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk", force = false }
+
+# rustc's linker does not pass SDKROOT through. Without -isysroot it still
+# links build scripts against the Command Line Tools MacOSX27.0.sdk.
+[target.aarch64-apple-darwin]
+rustflags = [
+  "-C", "link-arg=-isysroot",
+  "-C", "link-arg=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+]
