@@ -6,7 +6,9 @@ Solum is **not** a Ferrum add-on SKU. A Ferrum commercial license does **not** i
 
 ## What the Additional Use Grant already covers
 
-See `LICENSE`. Typical permitted use: non-commercial research, academic, and educational use, and internal research that is **not** offered as a paid service to third parties.
+See `LICENSE`. Typical permitted use: non-commercial research, academic, and educational use, and internal research that is **not** offered as a paid service to third parties. The licence fee stays €0.
+
+The Track A pilot price on synapticfour.com (€8,000–18,000 fixed, 60–90 days) is **our time** in a bounded engagement, not a purchase right in the software. If you do not book the pilot and you stay within the grant, you do not pay that sum. The grant does not cover embedding Solum in a product you sell. Solum is not Apache-2.0 today; Apache-2.0 is the Change License after four years.
 
 ## When you need a written commercial license
 

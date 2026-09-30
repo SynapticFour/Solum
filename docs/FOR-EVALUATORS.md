@@ -12,7 +12,7 @@ Solum does **not** interpret clinical data for diagnosis or therapy ([PRODUCT-DE
 
 ## License
 
-Business Source License 1.1. Additional Use Grant for non-commercial research and internal research use; Change License Apache-2.0 after four years. See [LICENSE](../LICENSE).
+Business Source License 1.1. Additional Use Grant for non-commercial research and internal research use; licence fee €0. Change License Apache-2.0 after four years. Solum is not Apache-2.0 today. A guided pilot fee on the website is time, not a licence. See [LICENSE](../LICENSE) and [COMMERCIAL.md](COMMERCIAL.md).
 
 ## Tested in this tree
 
