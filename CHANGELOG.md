@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Proposed tag: `v0.1.1`. The tag is not created in this change.
+
+### Security
+
+- **Internal bind (ADR 0004).** `SOLUM_ALLOW_INTERNAL_BIND=1` / `--allow-internal-bind` is off by default. It refuses to start unless the sidecar token, profile `eu-ehds` or `kenya-dpa`, and `--keys-dir` are all set. `--ephemeral` and `dev-local` stay refused. `SOLUM_ALLOW_PLAINTEXT_HTTP` stays `dev-local` only.
+- **`GET /health` and `GET /ready`.** Outside the sidecar token. Status flags only. `/ready` is 503 when the audit file is not writable.
+
 ### Fixed
 
 - **h2 0.4.16+** — cargo-deny RUSTSEC-2026-0258 (unbounded empty DATA frames). Transitive via hyper; lockfile bump only. Remaining `h2` 0.3.27 (AWS SDK / hyper 0.14) has no patch; ignored in `deny.toml` with the same AWS-stack record as the rustls 0.21 advisories.
