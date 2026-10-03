@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Proposed tag: `v0.1.1`. The tag is not created in this change.
 
+- **Broker-fronted login.** [AUTH-BROKER.md](docs/AUTH-BROKER.md) records that Solum trusts the broker issuer and JWKS, accepts `groups` such as `data-steward@demo.invalid` only when `aud` matches, and still stores `standalone:<sub>`. No visa decoder and no Passport minting.
+
 ### Security
 
 - **Internal bind (ADR 0004).** `SOLUM_ALLOW_INTERNAL_BIND=1` / `--allow-internal-bind` is off by default. It refuses to start unless the sidecar token, profile `eu-ehds` or `kenya-dpa`, and `--keys-dir` are all set. `--ephemeral` and `dev-local` stay refused. `SOLUM_ALLOW_PLAINTEXT_HTTP` stays `dev-local` only.

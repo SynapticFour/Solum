@@ -2,6 +2,8 @@
 
 Solum binds **consent and audit** to the clinician or system identity your hospital IdP already issues. It does **not** mint GA4GH Passports. Ferrum remains the research plane; this pack is for Mode A next to an existing KIS.
 
+A broker can front that hospital IdP. Solum then trusts the broker issuer and JWKS, and reads mapped `groups`. See [AUTH-BROKER.md](AUTH-BROKER.md).
+
 **Not SMART App Launch.** No EHR iframe, no `launch` / `launch/patient` session. Clinician login is ordinary OIDC. Bulk/system traffic is **SMART Backend Services** (client credentials; `sub` = client_id).
 
 ## Profiles

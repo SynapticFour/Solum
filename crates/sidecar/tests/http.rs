@@ -723,6 +723,48 @@ fn mint_rsa_jwks_and_token_claims(
     (jwks_path, token, dir)
 }
 
+fn mint_rsa_jwks_and_two_tokens(
+    first: serde_json::Value,
+    second: serde_json::Value,
+) -> (PathBuf, String, String, tempfile::TempDir) {
+    use base64::Engine;
+    use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+    use rand::rngs::OsRng;
+    use rsa::pkcs8::{EncodePrivateKey, LineEnding};
+    use rsa::traits::PublicKeyParts;
+    use rsa::{RsaPrivateKey, RsaPublicKey};
+    use serde_json::json;
+    use sha2::{Digest, Sha256};
+
+    let dir = tempdir().unwrap();
+    let mut rng = OsRng;
+    let private = RsaPrivateKey::new(&mut rng, 2048).unwrap();
+    let public = RsaPublicKey::from(&private);
+    let pem = private.to_pkcs8_pem(LineEnding::LF).unwrap().to_string();
+    let encoding = EncodingKey::from_rsa_pem(pem.as_bytes()).unwrap();
+    let n = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(public.n().to_bytes_be());
+    let e = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(public.e().to_bytes_be());
+    let kid = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(Sha256::digest(public.n().to_bytes_be()));
+    let jwks = json!({
+        "keys": [{
+            "kty": "RSA",
+            "kid": kid,
+            "use": "sig",
+            "alg": "RS256",
+            "n": n,
+            "e": e,
+        }]
+    });
+    let jwks_path = dir.path().join("jwks.json");
+    std::fs::write(&jwks_path, jwks.to_string()).unwrap();
+    let mut header = Header::new(Algorithm::RS256);
+    header.kid = Some(kid);
+    let first_token = encode(&header, &first, &encoding).unwrap();
+    let second_token = encode(&header, &second, &encoding).unwrap();
+    (jwks_path, first_token, second_token, dir)
+}
+
 #[allow(clippy::await_holding_lock)]
 async fn spawn_org_iam_sidecar(
     token: &str,
@@ -795,6 +837,76 @@ async fn org_iam_grant_with_mapped_group() {
     assert!(
         audit.contains("standalone:practitioner/org-iam"),
         "consent/audit must bind the IdP sub, not a Ferrum Passport: {audit}"
+    );
+}
+
+#[tokio::test]
+async fn org_iam_broker_group_matches_audience_and_rejects_a_different_one() {
+    let dir = tempdir().unwrap();
+    let mapping = dir.path().join("broker-groups.toml");
+    std::fs::write(
+        &mapping,
+        "claim_path = \"groups\"\n\n[[map]]\nclaim_value = \"data-steward@demo.invalid\"\ncapabilities = [\"solum:consent:grant\", \"solum:consent:revoke\", \"solum:consent:read\"]\n",
+    )
+    .unwrap();
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let (jwks, jwt, bad_jwt, _keydir) = mint_rsa_jwks_and_two_tokens(
+        serde_json::json!({
+            "sub": "practitioner/org-iam",
+            "iss": TEST_OIDC_ISSUER,
+            "aud": TEST_OIDC_AUD,
+            "exp": t + 3600,
+            "groups": ["data-steward@demo.invalid"],
+        }),
+        serde_json::json!({
+            "sub": "practitioner/org-iam",
+            "iss": TEST_OIDC_ISSUER,
+            "aud": "some-other-resource",
+            "exp": t + 3600,
+            "groups": ["data-steward@demo.invalid"],
+        }),
+    );
+    let token = "org-iam-broker";
+    let (addr, audit_dir) = spawn_org_iam_sidecar(token, jwks, mapping).await;
+    let url = format!("http://{addr}/v1/consent/grant");
+    let body = serde_json::json!({
+        "subject": "patient/42",
+        "purpose": "care_provision",
+        "actor": "ignored-for-caps",
+        "capability": [],
+        "scope": ["patient_summary"]
+    });
+    let res = client()
+        .post(&url)
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .header("Authorization", format!("Bearer {jwt}"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 201, "body={}", res.text().await.unwrap());
+    let audit = std::fs::read_to_string(audit_dir.path().join("audit.jsonl")).unwrap();
+    assert!(
+        audit.contains("standalone:practitioner/org-iam"),
+        "actor stays standalone:<sub>: {audit}"
+    );
+
+    let denied = client()
+        .post(&url)
+        .header(SIDECAR_TOKEN_HEADER, token)
+        .header("Authorization", format!("Bearer {bad_jwt}"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_ne!(denied.status(), 201);
+    assert!(
+        denied.status() == 401 || denied.status() == 403,
+        "wrong audience status {}",
+        denied.status()
     );
 }
 
