@@ -1,0 +1,40 @@
+# Minimal solum-sidecar runtime. Non-root. Does not enable plaintext off loopback.
+# Start still fails closed until the operator sets the sidecar token, a pilot
+# profile (eu-ehds or kenya-dpa), and --keys-dir. ADR 0004.
+# SOLUM_ALLOW_INTERNAL_BIND=1 is the opt-in for a non-loopback bind.
+# SOLUM_ALLOW_PLAINTEXT_HTTP is not set here.
+
+ARG RUST_VERSION=1.91.1
+
+FROM rust:${RUST_VERSION}-bookworm AS builder
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        git \
+        libsodium-dev \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY . .
+RUN rm -f .cargo/config.toml
+RUN cargo build --release -p solum-sidecar \
+    && strip target/release/solum-sidecar
+
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libsodium23 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin solum
+
+COPY --from=builder /build/target/release/solum-sidecar /usr/local/bin/solum-sidecar
+COPY --from=builder /build/config/profiles/eu-ehds.toml /etc/solum/eu-ehds.toml
+COPY --from=builder /build/config/profiles/kenya-dpa.toml /etc/solum/kenya-dpa.toml
+
+USER solum
+EXPOSE 8787
+ENTRYPOINT ["solum-sidecar"]
