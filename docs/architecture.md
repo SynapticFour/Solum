@@ -61,7 +61,7 @@ The realistic path is:
 
 ## HTTP sidecar
 
-The sidecar exposes versioned `/v1/*` routes (health, consent, audit, FHIR, subject-link). Production authz is capability- and consent-gated. Legacy `&str` APIs without a capability are deprecated.
+The sidecar exposes versioned `/v1/*` routes (consent, audit, FHIR, subject-link). `GET /health` and `GET /ready` are outside the sidecar-token middleware. Bodies are status flags only. `/ready` is 503 when the audit file is not writable. Production authz on `/v1/*` is capability- and consent-gated. The default bind is loopback. `SOLUM_ALLOW_INTERNAL_BIND` is the pilot opt-in for a non-loopback bind and refuses to start unless the token, a pilot profile, and `--keys-dir` are set (ADR 0004). Legacy `&str` APIs without a capability are deprecated.
 
 Optional joins (not compiled into Solum as crates except git-pinned `ferrum-core`):
 

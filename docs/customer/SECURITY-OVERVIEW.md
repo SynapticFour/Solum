@@ -173,7 +173,7 @@ The following are **accepted or open limitations** of the current baseline, rest
 
 13. **Binary install via GitHub Release is prepared but only after a verified SemVer `v*` tag.** The Release workflow can be dry-run via `workflow_dispatch` (`create_release=false`) and now builds `solum-sidecar` as well as `solum`. Until a `v*` tag exists, install from source (see [DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md) §1 and [RELEASING.md](../../RELEASING.md)).
 
-14. **Sidecar HTTP is loopback-only.** Non-loopback bind is refused except `dev-local` with explicit `SOLUM_ALLOW_PLAINTEXT_HTTP=1` (Docker eval). Terminate TLS at a reverse proxy. ([THREAT_MODEL.md](../THREAT_MODEL.md))
+14. **Sidecar HTTP defaults to loopback.** Non-loopback bind is refused except `dev-local` with explicit `SOLUM_ALLOW_PLAINTEXT_HTTP=1` (Docker eval), or the separate pilot opt-in `SOLUM_ALLOW_INTERNAL_BIND=1` which still requires the sidecar token, `eu-ehds` or `kenya-dpa`, and `--keys-dir` (ADR 0004). Terminate TLS at a reverse proxy. ([THREAT_MODEL.md](../THREAT_MODEL.md))
 
 15. **Residency is operator attestation.** Pilot CLI/sidecar require `SOLUM_STORAGE_REGION`. EU/EEA attestation refuses a contradictory `AWS_REGION`. This does not prove the host is in that region.
 

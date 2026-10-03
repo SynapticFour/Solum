@@ -52,6 +52,7 @@ For a durable binary on a host: `cargo build --release -p solum-core` and place 
 | `SOLUM_AUDIT_MAX_BYTES` | Optional | Refuse audit append when the sealed chain would grow past this (default 512 MiB) |
 | `SOLUM_ALLOW_EPHEMERAL` | `dev-local` only | Permits `--ephemeral` keys |
 | `SOLUM_ALLOW_PLAINTEXT_HTTP` | `dev-local` / Docker eval only | Permits non-loopback HTTP bind. Pilot profiles still refuse. |
+| `SOLUM_ALLOW_INTERNAL_BIND` | off | Pilot opt-in for a non-loopback bind. Refuses to start unless the sidecar token, `eu-ehds` or `kenya-dpa`, and `--keys-dir` are set. |
 | `SOLUM_AUDIT_RETENTION_DAYS` | Optional | Must be ≥ profile floor |
 
 TLS: bind `127.0.0.1` and terminate TLS at a reverse proxy. See [SIDECAR-INTEGRATION.md](SIDECAR-INTEGRATION.md).

@@ -70,7 +70,7 @@ Either `--keys-dir` **or** `--ephemeral` is required (clap conflict if both). Om
 | **Capabilities** | **Pilot profiles (`eu-ehds`, `kenya-dpa`):** org-IAM Bearer JWT (`--org-iam-config`, `--jwks-url` or `--jwks-file`, `--oidc-issuer`, `--oidc-audience`). Body `capability[]` is **ignored**. **`dev-local` only:** JSON `capability[]` may mint scopes. | **401/403** — no side effect |
 | **Consent + object bind** | Header/body `subject` + purpose must match an active grant **and** the FHIR / EHR / AQL object must belong to that subject | **403** `object_not_bound` / **400** AQL |
 
-Default bind is **`127.0.0.1`**. Non-loopback binds are **refused** at startup. Terminate TLS at a reverse proxy in front of loopback. The sidecar is not a TLS terminator. Docker eval (`dev-local` only) may set `SOLUM_ALLOW_PLAINTEXT_HTTP=1` to bind `0.0.0.0` on an internal compose network.
+Default bind is **`127.0.0.1`**. Non-loopback binds are **refused** at startup unless `SOLUM_ALLOW_INTERNAL_BIND=1` (or `--allow-internal-bind`) is set together with the sidecar token, profile `eu-ehds` or `kenya-dpa`, and `--keys-dir`. `--ephemeral` and `dev-local` do not satisfy that flag. Terminate TLS at a reverse proxy. The sidecar is not a TLS terminator. Docker eval (`dev-local` only) may set `SOLUM_ALLOW_PLAINTEXT_HTTP=1` to bind `0.0.0.0`. That variable does not open a pilot profile. See [DEMO-OPERATOR.md](DEMO-OPERATOR.md) and [ADR 0004](../adr/0004-internal-network-bind.md).
 
 Pilot profiles also require `SOLUM_STORAGE_REGION` (operator residency attestation). Unset → refuse to start. See [DEPLOYMENT-RUNBOOK.md](DEPLOYMENT-RUNBOOK.md) § operator environment.
 
