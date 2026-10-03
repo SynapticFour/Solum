@@ -60,7 +60,10 @@ mod store_crypto;
 mod subject_link;
 
 pub use fhir_store::{fhir_type_allowed, FhirStore, StoredFhirResource, ALLOWED_FHIR_TYPES};
-pub use listen::{plaintext_http_env_allowed, validate_listen_bind};
+pub use listen::{
+    authorize_internal_bind, internal_bind_env_allowed, plaintext_http_env_allowed,
+    validate_listen_bind, InternalBindRequest,
+};
 pub use subject_link::{SubjectLink, SubjectLinkStore};
 
 use std::fs;
@@ -351,6 +354,9 @@ pub struct SidecarConfig {
     pub subject_link_store: Option<PathBuf>,
     /// Dual-write dead-letter JSONL. Default: `<consent_store_dir>/dual_write_dead_letter.jsonl`.
     pub dual_write_dead_letter: Option<PathBuf>,
+    /// Opt-in non-loopback plaintext bind. Also read from `SOLUM_ALLOW_INTERNAL_BIND`.
+    /// Off by default. ADR 0004.
+    pub allow_internal_bind: bool,
 }
 
 impl SidecarConfig {
@@ -722,9 +728,62 @@ pub fn app_router(state: Arc<AppState>) -> Router {
         ));
 
     Router::new()
+        .route("/health", get(liveness))
+        .route("/ready", get(readiness))
         .merge(authed)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+async fn liveness(State(_state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({ "status": "ok" }))
+}
+
+async fn readiness(State(state): State<Arc<AppState>>) -> Response {
+    let audit_writable = audit_path_writable(&state.audit_path);
+    let chain_ok = FileAuditStore::open(&state.audit_path)
+        .and_then(|store| store.verify_chain())
+        .is_ok();
+    let keys_loaded = sidecar_keys_loaded(&state.keys);
+    let ready = audit_writable && chain_ok && keys_loaded;
+    let status = if ready {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+    (
+        status,
+        Json(serde_json::json!({
+            "status": if ready { "ready" } else { "not_ready" },
+            "audit_writable": audit_writable,
+            "chain_ok": chain_ok,
+            "keys_loaded": keys_loaded,
+        })),
+    )
+        .into_response()
+}
+
+fn audit_path_writable(path: &std::path::Path) -> bool {
+    if path.exists() {
+        std::fs::OpenOptions::new().append(true).open(path).is_ok()
+    } else {
+        let Some(parent) = path.parent() else {
+            return false;
+        };
+        let probe = parent.join(".solum-ready-probe");
+        std::fs::write(&probe, b"")
+            .and_then(|_| std::fs::remove_file(&probe))
+            .is_ok()
+    }
+}
+
+fn sidecar_keys_loaded(keys: &SidecarKeys) -> bool {
+    match keys {
+        SidecarKeys::Ephemeral(keys) => keys.0.lock().is_ok(),
+        SidecarKeys::CustomerHeld(keys) => keys.0.lock().is_ok(),
+        #[cfg(feature = "aws-kms")]
+        SidecarKeys::AwsKms(keys) => keys.0.lock().is_ok(),
+    }
 }
 
 /// Same construction as CLI `cli_actor` in `solum-core` `main.rs`.
@@ -2507,12 +2566,30 @@ async fn transfer_check(
 
 /// Serve the router on `config.bind` until the process is stopped.
 pub async fn serve(config: SidecarConfig) -> Result<(), String> {
-    validate_listen_bind(config.bind, plaintext_http_env_allowed())?;
+    let internal = config.allow_internal_bind || internal_bind_env_allowed();
+    if !internal {
+        validate_listen_bind(config.bind, plaintext_http_env_allowed())?;
+    }
     let state = build_state(&config).await?;
-    if !config.bind.ip().is_loopback() && !state.allow_client_asserted {
+    if internal {
+        let profile = state.deployment.lock().await.profile().meta.profile.clone();
+        authorize_internal_bind(&InternalBindRequest {
+            token: &config.token,
+            profile: &profile,
+            keys_dir: config.keys_dir.is_some(),
+            ephemeral: config.ephemeral,
+            wrapped_keys: config.wrapped_keys_dir.is_some(),
+        })?;
+        if !config.bind.ip().is_loopback() {
+            tracing::warn!(
+                "HTTP is plaintext on a non-loopback bind. TLS must stop at the reverse proxy. ADR 0004."
+            );
+        }
+    } else if !config.bind.ip().is_loopback() && !state.allow_client_asserted {
         return Err(
             "non-loopback HTTP is refused on pilot profiles. Bind 127.0.0.1 and terminate TLS \
-             at a reverse proxy. SOLUM_ALLOW_PLAINTEXT_HTTP=1 is honoured only with dev-local."
+             at a reverse proxy. SOLUM_ALLOW_PLAINTEXT_HTTP=1 is honoured only with dev-local. \
+             SOLUM_ALLOW_INTERNAL_BIND=1 is a separate opt-in and is off."
                 .into(),
         );
     }

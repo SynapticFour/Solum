@@ -69,6 +69,7 @@ async fn spawn_ephemeral_sidecar(token: &str) -> (SocketAddr, tempfile::TempDir)
         fhir_store: None,
         subject_link_store: None,
         dual_write_dead_letter: None,
+        allow_internal_bind: false,
     };
     let state = build_state(&config).await.expect("build_state ephemeral");
     // SOLUM_ALLOW_EPHEMERAL is read only synchronously inside build_state()
@@ -125,6 +126,7 @@ async fn spawn_customer_held_sidecar(
         fhir_store: None,
         subject_link_store: None,
         dual_write_dead_letter: None,
+        allow_internal_bind: false,
     };
     let state = build_state(&config)
         .await
@@ -614,6 +616,7 @@ async fn build_state_requires_keys_dir_or_ephemeral() {
         fhir_store: None,
         subject_link_store: None,
         dual_write_dead_letter: None,
+        allow_internal_bind: false,
     })
     .await
     {
@@ -651,6 +654,7 @@ async fn build_state_ephemeral_requires_allow_env() {
         fhir_store: None,
         subject_link_store: None,
         dual_write_dead_letter: None,
+        allow_internal_bind: false,
     })
     .await
     {
@@ -747,6 +751,7 @@ async fn spawn_org_iam_sidecar(
         fhir_store: None,
         subject_link_store: None,
         dual_write_dead_letter: None,
+        allow_internal_bind: false,
     };
     let state = build_state(&config).await.expect("build_state org-iam");
     drop(_guard);
@@ -1002,6 +1007,7 @@ async fn spawn_ephemeral_sidecar_with_ehrbase(
         fhir_store: None,
         subject_link_store: None,
         dual_write_dead_letter: None,
+        allow_internal_bind: false,
     };
     let state = build_state(&config)
         .await
@@ -1428,6 +1434,7 @@ async fn kenya_dpa_refuses_ephemeral_even_with_allow_env() {
         fhir_store: None,
         subject_link_store: None,
         dual_write_dead_letter: None,
+        allow_internal_bind: false,
     };
     let err = match build_state(&config).await {
         Ok(_) => {
@@ -1474,6 +1481,7 @@ async fn kenya_dpa_refuses_wrong_storage_region() {
         fhir_store: None,
         subject_link_store: None,
         dual_write_dead_letter: None,
+        allow_internal_bind: false,
     };
     let err = match build_state(&config).await {
         Ok(_) => {
@@ -1521,6 +1529,7 @@ async fn kenya_dpa_customer_held_starts_with_ke_region() {
         fhir_store: None,
         subject_link_store: None,
         dual_write_dead_letter: None,
+        allow_internal_bind: false,
     };
     build_state(&config)
         .await
@@ -1556,6 +1565,7 @@ async fn eu_ehds_refuses_without_org_iam() {
         fhir_store: None,
         subject_link_store: None,
         dual_write_dead_letter: None,
+        allow_internal_bind: false,
     })
     .await
     {
@@ -1600,6 +1610,7 @@ async fn eu_ehds_refuses_without_region_attestation() {
         fhir_store: None,
         subject_link_store: None,
         dual_write_dead_letter: None,
+        allow_internal_bind: false,
     })
     .await
     {
@@ -1743,4 +1754,52 @@ fn non_loopback_bind_without_tls_is_refused() {
     let bind: std::net::SocketAddr = "0.0.0.0:8787".parse().unwrap();
     let err = validate_listen_bind(bind, false).unwrap_err();
     assert!(err.contains("non-loopback"), "{err}");
+}
+
+#[tokio::test]
+async fn health_and_ready_are_outside_the_sidecar_token() {
+    let token = "health-token-secret";
+    let (addr, dir) = spawn_ephemeral_sidecar(token).await;
+    let health = client()
+        .get(format!("http://{addr}/health"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(health.status(), 200);
+    let health_body = health.text().await.unwrap();
+    assert!(health_body.contains("\"ok\""));
+    assert!(!health_body.contains(token));
+    assert!(!health_body.contains(dir.path().to_str().unwrap()));
+
+    let ready = client()
+        .get(format!("http://{addr}/ready"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ready.status(), 200);
+    let ready_body = ready.text().await.unwrap();
+    assert!(ready_body.contains("\"ready\""));
+    assert!(ready_body.contains("\"keys_loaded\":true"));
+    assert!(!ready_body.contains(token));
+    assert!(!ready_body.contains(dir.path().to_str().unwrap()));
+
+    let audit = dir.path().join("audit.jsonl");
+    if !audit.exists() {
+        std::fs::write(&audit, b"").unwrap();
+    }
+    let mut perms = std::fs::metadata(&audit).unwrap().permissions();
+    perms.set_readonly(true);
+    std::fs::set_permissions(&audit, perms).unwrap();
+    let denied = client()
+        .get(format!("http://{addr}/ready"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), 503);
+    let denied_body = denied.text().await.unwrap();
+    assert!(denied_body.contains("\"audit_writable\":false"));
+    assert!(denied_body.contains("\"not_ready\""));
+    let audit_text = audit.display().to_string();
+    assert!(!denied_body.contains(&audit_text));
+    assert!(!denied_body.contains("chain_broken"));
 }

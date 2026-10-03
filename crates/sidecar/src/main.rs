@@ -22,6 +22,11 @@ struct Cli {
     #[arg(long, env = "SOLUM_SIDECAR_BIND", default_value = "127.0.0.1:8787")]
     bind: SocketAddr,
 
+    /// Opt-in plaintext bind off loopback. Also `SOLUM_ALLOW_INTERNAL_BIND=1`.
+    /// Refuses to start unless the sidecar token, a pilot profile, and `--keys-dir` are set.
+    #[arg(long, default_value_t = false)]
+    allow_internal_bind: bool,
+
     #[arg(
         long,
         env = "SOLUM_PROFILE",
@@ -162,6 +167,7 @@ async fn main() -> ExitCode {
         fhir_store: cli.fhir_store,
         subject_link_store: cli.subject_link_store,
         dual_write_dead_letter: cli.dual_write_dead_letter,
+        allow_internal_bind: cli.allow_internal_bind,
     };
 
     match serve(config).await {
