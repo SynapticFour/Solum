@@ -4,7 +4,7 @@ This repository follows Semantic Versioning (`MAJOR.MINOR.PATCH`) for **GitHub R
 
 ## Before the first production SemVer tag
 
-1. Ensure [`.github/workflows/ci.yml`](.github/workflows/ci.yml) is green on `main`.
+1. Run `make verify-release` on the commit you will tag. That is [`scripts/verify.sh`](scripts/verify.sh): fmt, clippy, tests, cargo-deny when installed, and the feature-path checks when Rust 1.94.1 is installed. Product CI does not run on push to `main` or on pull requests. Dispatch [`.github/workflows/ci.yml`](.github/workflows/ci.yml) or CodeQL from [docs/CI.md](docs/CI.md) when you want those jobs on a runner.
 2. Ensure [`.github/workflows/release.yml`](.github/workflows/release.yml) has been exercised successfully. Prefer **Actions → Release → Run workflow** with `create_release=false` (dry-run artifacts) before the first `v*` tag.
 3. Update [CHANGELOG.md](CHANGELOG.md): move `[Unreleased]` notes into a dated `## [X.Y.Z]` section.
 4. Confirm workspace `version` in root [`Cargo.toml`](Cargo.toml) matches the intended tag (or document intentional drift).
@@ -13,7 +13,7 @@ This repository follows Semantic Versioning (`MAJOR.MINOR.PATCH`) for **GitHub R
 ## Cut a release
 
 ```bash
-# On main, clean tree, CI green
+# Clean tree, make verify-release already passed
 git tag -a vX.Y.Z -m "vX.Y.Z"
 git push origin vX.Y.Z   # only when you intend to publish
 ```

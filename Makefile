@@ -3,7 +3,7 @@
 # deploy/h3-ehrbase/Dockerfile.sidecar (dev-local + SOLUM_ALLOW_PLAINTEXT_HTTP;
 # consumed by Solum-Demo compose). Production: reverse-proxy TLS in front of 127.0.0.1.
 
-.PHONY: fmt clippy test check deny verify prove
+.PHONY: fmt clippy test check deny verify prove verify-release
 
 fmt:
 	cargo fmt --all
@@ -26,3 +26,6 @@ check: fmt clippy test
 
 verify:
 	./scripts/verify.sh
+
+verify-release:
+	./scripts/verify-release.sh
