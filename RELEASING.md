@@ -34,7 +34,57 @@ The `Release` workflow builds `solum` and `solum-sidecar` for:
 
 and attaches them (plus `.sha256`) to the GitHub Release.
 
-The same workflow also generates a **CycloneDX SBOM** (`solum-sbom.cdx.json`) and attaches it to the release.
+The same workflow generates two **CycloneDX** files with `cargo-cyclonedx` 0.5.9 (`cargo cyclonedx --format json`) and attaches them to the release:
+
+| File | Crate | Binary |
+|------|--------|--------|
+| `solum-core.cdx.json` | `solum-core` | `solum` |
+| `solum-sidecar.cdx.json` | `solum-sidecar` | `solum-sidecar` |
+
+0.5.9 writes one `<package>.cdx.json` beside each workspace member's `Cargo.toml`. It has no `--workspace` flag and no `--output-file` flag, so it does not write a single workspace-wide file. The workspace sets `publish = false`, so no crate is published to crates.io. The release keeps the two crates whose binaries are the release assets.
+
+The `github-release` job runs only when `build-binaries` and `sbom` both succeed, and it refuses to upload if either SBOM file is missing. A failed SBOM job does not create a GitHub Release.
+
+## Publish a release for a tag that already exists
+
+A `v*` push runs the workflow file stored on that tag. A later commit on `main` does not change the file the tag runs. Do not move the tag, and do not re-run that tag's workflow to pick up a workflow fix.
+
+When the binary jobs uploaded artifacts and the release job did not create a release, publish the release against the existing tag:
+
+1. Check out that tag. Generate the SBOM there with the command in [`.github/workflows/release.yml`](.github/workflows/release.yml): `cargo install cargo-cyclonedx --version 0.5.9 --locked`, then `cargo cyclonedx --format json`, then copy `crates/core/solum-core.cdx.json` and `crates/sidecar/solum-sidecar.cdx.json` and hash them.
+2. Download the binary artifacts from the Actions run (`gh run download <run-id> --repo SynapticFour/Solum`).
+3. Write `SHA256SUMS.txt` with `shasum -a 256` over the `.tar.gz` files.
+4. Create the release with `gh release create <tag> --verify-tag`. `--verify-tag` aborts when the tag is absent, so the command does not create a new tag from `main`. Notes are the changelog section for that version.
+
+For `v0.1.1`, run `37175987701` uploaded the five binary artifacts (not expired; they expire 2027-01-02). The `sbom` job failed and `github-release` was skipped, so there is no GitHub Release yet. From a checkout of tag `v0.1.1`:
+
+```bash
+cargo install cargo-cyclonedx --version 0.5.9 --locked
+cargo cyclonedx --format json
+cp crates/core/solum-core.cdx.json solum-core.cdx.json
+cp crates/sidecar/solum-sidecar.cdx.json solum-sidecar.cdx.json
+shasum -a 256 solum-core.cdx.json > solum-core.cdx.json.sha256
+shasum -a 256 solum-sidecar.cdx.json > solum-sidecar.cdx.json.sha256
+
+gh run download 37175987701 --repo SynapticFour/Solum --dir solum-v0.1.1-assets
+shasum -a 256 $(find solum-v0.1.1-assets -name '*.tar.gz' | sort) > SHA256SUMS.txt
+awk '/^## \[0.1.1\]/{p=1} /^\[Unreleased\]:/{p=0} p' CHANGELOG.md > solum-v0.1.1-notes.md
+
+gh release create v0.1.1 \
+  --repo SynapticFour/Solum \
+  --verify-tag \
+  --title 'v0.1.1' \
+  --notes-file solum-v0.1.1-notes.md \
+  solum-v0.1.1-assets/*/*.tar.gz \
+  solum-v0.1.1-assets/*/*.tar.gz.sha256 \
+  SHA256SUMS.txt \
+  solum-core.cdx.json \
+  solum-core.cdx.json.sha256 \
+  solum-sidecar.cdx.json \
+  solum-sidecar.cdx.json.sha256
+```
+
+`--verify-tag` aborts when `v0.1.1` is missing, so this does not create a tag. Do not pass `--target`.
 
 ## Operator install after a GitHub Release exists
 

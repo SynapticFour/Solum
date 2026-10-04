@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **Release SBOM.** `cargo-cyclonedx` 0.5.9 is pinned (`--version 0.5.9 --locked`). It has no `--workspace` or `--output-file` flag. `cargo cyclonedx --format json` writes one file per workspace member. The release attaches `solum-core.cdx.json` and `solum-sidecar.cdx.json`, the two crates whose binaries ship. A failed SBOM job does not create the GitHub Release.
+
 ## [0.1.1] - 2026-10-03
 
 - **Broker-fronted login.** [AUTH-BROKER.md](docs/AUTH-BROKER.md) records that Solum trusts the broker issuer and JWKS, accepts `groups` such as `data-steward@demo.invalid` only when `aud` matches, and still stores `standalone:<sub>`. No visa decoder and no Passport minting.

@@ -105,7 +105,12 @@ jobs:
             ${{ matrix.asset }}.tar.gz.sha256
 
   github-release:
-    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.create_release == 'true'
+    # needs implies success(). A failed sbom job skips this job, so a release
+    # is not published without the SBOM files. Do not add always() here.
+    if: >-
+      (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.create_release == 'true')
+      && needs.build-binaries.result == 'success'
+      && needs.sbom.result == 'success'
     needs: [build-binaries, sbom]
     runs-on: ubuntu-latest
     steps:
@@ -126,9 +131,18 @@ jobs:
           name: solum-sbom
           path: release-assets
 
+      - name: Require SBOM files
+        run: |
+          set -euo pipefail
+          test -s release-assets/solum-core.cdx.json
+          test -s release-assets/solum-sidecar.cdx.json
+          test -s release-assets/solum-core.cdx.json.sha256
+          test -s release-assets/solum-sidecar.cdx.json.sha256
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          fail_on_unmatched_files: true
           generate_release_notes: true
           body: |
             Stage-1 Solum CLI and sidecar binaries for supervised evaluation.
@@ -137,12 +151,14 @@ jobs:
             **Sidecar:** plaintext HTTP is loopback-only; terminate TLS at a reverse proxy. Pilot profiles require org-IAM and `SOLUM_STORAGE_REGION`.
             **Keys:** use CustomerHeld `--keypair` / `--keys-dir` files for evaluations — see [DEPLOYMENT-RUNBOOK.md](docs/customer/DEPLOYMENT-RUNBOOK.md).
             **HELIOS:** audit export + external `helios solum-audit` / CLIN-ACCESS-001 ingest is productized — Solum does not embed HELIOS keys; see [helios.md](docs/helios.md) and HELIOS `docs/solum-ingest.md`.
-            **SBOM:** `solum-sbom.cdx.json` (CycloneDX) is attached to this release.
+            **SBOM:** `solum-core.cdx.json` and `solum-sidecar.cdx.json` (CycloneDX, cargo-cyclonedx 0.5.9) are attached to this release.
           files: |
             release-assets/*.tar.gz
             release-assets/*.sha256
-            release-assets/solum-sbom.cdx.json
-            release-assets/solum-sbom.cdx.json.sha256
+            release-assets/solum-core.cdx.json
+            release-assets/solum-core.cdx.json.sha256
+            release-assets/solum-sidecar.cdx.json
+            release-assets/solum-sidecar.cdx.json.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -155,13 +171,26 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - name: Generate SBOM (CycloneDX)
         run: |
-          cargo install cargo-cyclonedx --locked
-          cargo cyclonedx --workspace --format json --output-file solum-sbom.cdx.json
-          shasum -a 256 solum-sbom.cdx.json > solum-sbom.cdx.json.sha256
+          set -euo pipefail
+          # 0.5.9 accepts --format and --override-filename. It has no --workspace
+          # and no --output-file. Default --describe crate writes one
+          # <package>.cdx.json beside each workspace member's Cargo.toml.
+          # The workspace sets publish = false, so no crate is published to
+          # crates.io. The release ships two binaries; keep those two SBOMs.
+          cargo install cargo-cyclonedx --version 0.5.9 --locked
+          cargo cyclonedx --format json
+          test -s crates/core/solum-core.cdx.json
+          test -s crates/sidecar/solum-sidecar.cdx.json
+          cp crates/core/solum-core.cdx.json solum-core.cdx.json
+          cp crates/sidecar/solum-sidecar.cdx.json solum-sidecar.cdx.json
+          shasum -a 256 solum-core.cdx.json > solum-core.cdx.json.sha256
+          shasum -a 256 solum-sidecar.cdx.json > solum-sidecar.cdx.json.sha256
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
         with:
           name: solum-sbom
           path: |
-            solum-sbom.cdx.json
-            solum-sbom.cdx.json.sha256
+            solum-core.cdx.json
+            solum-core.cdx.json.sha256
+            solum-sidecar.cdx.json
+            solum-sidecar.cdx.json.sha256
