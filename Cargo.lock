@@ -4029,7 +4029,7 @@ dependencies = [
 
 [[package]]
 name = "solum-audit"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "serde",
@@ -4041,7 +4041,7 @@ dependencies = [
 
 [[package]]
 name = "solum-auth-verify"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64 0.22.1",
  "jsonwebtoken",
@@ -4057,14 +4057,14 @@ dependencies = [
 
 [[package]]
 name = "solum-connectors"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "thiserror 1.0.69",
 ]
 
 [[package]]
 name = "solum-consent"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "serde",
@@ -4077,7 +4077,7 @@ dependencies = [
 
 [[package]]
 name = "solum-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "assert_cmd",
  "chrono",
@@ -4100,7 +4100,7 @@ dependencies = [
 
 [[package]]
 name = "solum-crypto"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aws-sdk-kms",
  "aws-smithy-mocks",
@@ -4118,7 +4118,7 @@ dependencies = [
 
 [[package]]
 name = "solum-example-ferrum-companion"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "crypt4gh",
  "ferrum-storage",
@@ -4131,7 +4131,7 @@ dependencies = [
 
 [[package]]
 name = "solum-example-fhir-ips-export"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde_json",
  "solum-fhir",
@@ -4139,7 +4139,7 @@ dependencies = [
 
 [[package]]
 name = "solum-fhir"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -4151,7 +4151,7 @@ dependencies = [
 
 [[package]]
 name = "solum-identity"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -4162,7 +4162,7 @@ dependencies = [
 
 [[package]]
 name = "solum-openehr"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "reqwest",
@@ -4174,7 +4174,7 @@ dependencies = [
 
 [[package]]
 name = "solum-profiles"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -4185,7 +4185,7 @@ dependencies = [
 
 [[package]]
 name = "solum-sidecar"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "base64 0.22.1",

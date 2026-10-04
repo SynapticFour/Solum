@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Proposed tag: `v0.1.1`. The tag is not created in this change.
+## [0.1.1] - 2026-10-03
 
 - **Broker-fronted login.** [AUTH-BROKER.md](docs/AUTH-BROKER.md) records that Solum trusts the broker issuer and JWKS, accepts `groups` such as `data-steward@demo.invalid` only when `aud` matches, and still stores `standalone:<sub>`. No visa decoder and no Passport minting.
 
@@ -19,6 +19,8 @@ Proposed tag: `v0.1.1`. The tag is not created in this change.
 ### Fixed
 
 - **h2 0.4.16+** — cargo-deny RUSTSEC-2026-0258 (unbounded empty DATA frames). Transitive via hyper; lockfile bump only. Remaining `h2` 0.3.27 (AWS SDK / hyper 0.14) has no patch; ignored in `deny.toml` with the same AWS-stack record as the rustls 0.21 advisories.
+- **rustls 0.23.45** — RUSTSEC-2026-0285 (TLS 1.3 handshake messages accepted across encryption-level boundaries, rustls 0.23.13 through 0.23.44). The 0.23 line in the lockfile moved from 0.23.42 to 0.23.45, with `rustls-webpki` 0.103.15 and `aws-lc-rs` 1.18.1. `rustls` 0.21.12 on the AWS SDK path is outside that range and stays.
+- **CI** — push to `main` and pull requests run the secret scan and dependency review. Product CI and CodeQL are `workflow_dispatch`. `make verify-release` is the local gate before `v*`. A `v*` tag publishes the GitHub Release binaries and the GHCR sidecar image.
 
 ### Changed
 
@@ -106,6 +108,7 @@ Proposed tag: `v0.1.1`. The tag is not created in this change.
 
 - Kenya profile is **PROVISIONAL-PRODUCTION-CANDIDATE** after non-counsel Vorprüfung; send checklist (removed from public tree) + brief (removed from public tree) still required for real counsel; portfolio H4 names Kenya as first non-EU pack ([Showcase H4 decision](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/H4-GEOGRAPHY-DECISION.md)).
 - Stage-1 evaluation language unchanged for the frozen tag; **Track B H3 engineering exit** (CDR façade + MVP slices) is available post-baseline — open gates (counsel/OPT/MDR) remain in Showcase [HORIZON-OPEN-GATES](https://github.com/SynapticFour/SynapticFour-Showcase/blob/main/docs/pilots/HORIZON-OPEN-GATES.md).
-- Do **not** cut a production `v*` tag until release CI binaries build successfully.
+- `v0.1.1` is the first product SemVer tag. The Release workflow builds the binaries and the sidecar image when that tag is pushed.
 
-[Unreleased]: https://github.com/SynapticFour/Solum/compare/stage1-baseline-website-2026-07-30...HEAD
+[Unreleased]: https://github.com/SynapticFour/Solum/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/SynapticFour/Solum/compare/stage1-baseline-website-2026-07-30...v0.1.1
