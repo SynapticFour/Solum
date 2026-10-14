@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+// Upstream Cargo.toml author: Roberto <roberto.ariosa@crg.eu>
+// Upstream docs/book.toml authors: EGA-CRG System Developers
+// No Copyright line was in this file in crypt4gh 0.4.1.
+// Modifications: Synaptic Four (RustCrypto instead of rust-crypto).
+
 //! Bob wants to send a message to Alice, containing sensitive data. Bob uses [`Crypt4GH`, the Global Alliance approved secure method for sharing human genetic data][ga4gh].
 //! crypt4gh, a Python tool to encrypt, decrypt or re-encrypt files, according to the [GA4GH encryption file format](http://samtools.github.io/hts-specs/crypt4gh.pdf).
 //! [![How `Crypt4GH` works](https://i.imgur.com/5czeods.png)][ga4gh]

@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+// Upstream Cargo.toml author: Roberto <roberto.ariosa@crg.eu>
+// Upstream docs/book.toml authors: EGA-CRG System Developers
+// No Copyright line was in this file in crypt4gh 0.4.1.
+// Modifications: Synaptic Four (RustCrypto instead of rust-crypto).
+
 #![allow(
 	clippy::missing_errors_doc,
 	clippy::missing_panics_doc,

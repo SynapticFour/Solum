@@ -12,7 +12,7 @@ Crypt4GH is a **universal envelope encryption scheme** (X25519 header packets + 
 
 | Layer | Owner |
 |-------|--------|
-| Crypt4GH format + SynapticFour `crypt4gh` fork (no `rust-crypto`) | Vendored at [`third_party/crypt4gh`](../third_party/crypt4gh) (same lineage as Ferrum) |
+| Crypt4GH format + SynapticFour `crypt4gh` fork (no `rust-crypto`) | Vendored at [`third_party/crypt4gh`](../third_party/crypt4gh) (same lineage as Ferrum). Upstream crypt4gh 0.4.1, Apache-2.0. Author statements found in that tree: `Roberto <roberto.ariosa@crg.eu>` and `EGA-CRG System Developers`. See [NOTICE](../third_party/crypt4gh/NOTICE). |
 | Genomic DRS encrypt / re-wrap / proxy | [Ferrum `ferrum-crypt4gh`](https://github.com/SynapticFour/Ferrum/blob/main/docs/CRYPT4GH.md) |
 | Clinical category encrypt + custody policy | `solum-crypto` (`crypt4gh-v1` on [`EncryptedField`](../crates/crypto/src/lib.rs)) |
 

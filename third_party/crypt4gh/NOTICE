@@ -1,0 +1,26 @@
+# NOTICE — crypt4gh fork
+
+This directory is a fork of **crypt4gh 0.4.1** from
+[EGA-archive/crypt4gh-rust](https://github.com/EGA-archive/crypt4gh-rust).
+The Apache-2.0 text in `LICENSE` is the upstream license text and is unchanged.
+
+## Upstream statements found in this tree
+
+No `Copyright` line was present in `src/*.rs` or in `tests/*.rs`.
+The Apache appendix in `LICENSE` is the unfilled template
+`Copyright [yyyy] [name of copyright owner]`.
+
+Statements that were present:
+
+- `Cargo.toml` and `Cargo.toml.orig`: `authors = ["Roberto <roberto.ariosa@crg.eu>"]`
+- `docs/book.toml`: `authors = ["EGA-CRG System Developers"]`
+- `license = "Apache-2.0"`
+- `repository = "https://github.com/EGA-archive/crypt4gh-rust"`
+
+## Modifications
+
+Synaptic Four replaced the unmaintained `rust-crypto` dependency with
+RustCrypto crates (`aes`, `ctr`, `cbc`, `scrypt`, `bcrypt-pbkdf`).
+Those modifications are Apache-2.0.
+
+SPDX-License-Identifier: Apache-2.0
