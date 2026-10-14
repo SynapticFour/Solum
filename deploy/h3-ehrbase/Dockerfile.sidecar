@@ -3,9 +3,8 @@
 # Binds 0.0.0.0 only because SOLUM_ALLOW_PLAINTEXT_HTTP=1 + dev-local.toml.
 # Pilot profiles (eu-ehds / kenya-dpa) still refuse non-loopback HTTP.
 
-ARG RUST_VERSION=1.91.1
-
-FROM rust:${RUST_VERSION}-bookworm AS builder
+# Tag: rust:1.91.1-bookworm
+FROM rust:1.91.1-bookworm@sha256:c1e5f19e773b7878c3f7a805dd00a495e747acbdc76fb2337a4ebf0418896b33 AS builder
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -22,10 +21,11 @@ COPY . .
 # Use the git pin from crates/crypto/Cargo.toml instead.
 RUN rm -f .cargo/config.toml
 
-RUN cargo build --release -p solum-sidecar \
+RUN cargo build --locked --release -p solum-sidecar \
     && strip target/release/solum-sidecar
 
-FROM debian:bookworm-slim AS runtime
+# Tag: debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS runtime
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

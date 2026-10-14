@@ -12,7 +12,7 @@ clippy:
 	cargo clippy --workspace --all-targets -- -D warnings
 
 test:
-	cargo test --workspace
+	cargo test --locked --workspace
 
 # Zero-risk product proof (CI unit tests). Maintainer gate: make verify.
 prove: test
