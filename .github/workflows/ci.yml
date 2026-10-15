@@ -71,12 +71,12 @@ jobs:
       - name: ferrum-storage-backend tests
         env:
           RUSTUP_TOOLCHAIN: "1.94.1"
-        run: cargo test -p solum-core --features ferrum-storage-backend --lib
+        run: cargo test --locked -p solum-core --features ferrum-storage-backend --lib
       - name: aws-kms mocked tests
         env:
           RUSTUP_TOOLCHAIN: "1.94.1"
         run: |
-          cargo test -p solum-crypto --features aws-kms --test aws_kms
+          cargo test --locked -p solum-crypto --features aws-kms --test aws_kms
           cargo check -p solum-core --features aws-kms
           cargo check -p solum-sidecar --features aws-kms
 
