@@ -46,7 +46,7 @@ Division of labour: **openEHR** for durable clinical modelling semantics; **FHIR
 
 ## 5. Architecture principles
 
-Documented in depth in [architecture.md](architecture.md). Summary:
+Documented in depth in [ARCHITECTURE.md](ARCHITECTURE.md). Summary:
 
 1. **On-premise first** (stage 1); SaaS is a prepared stage-2 path, not the initial delivery model.
 2. **Customer-held keys from the start** — sovereignty via git-pinned `ferrum-core`; clinical fields encrypted with **Crypt4GH** in `solum-crypto` (same envelope as Ferrum — see [CRYPTO.md](CRYPTO.md)).

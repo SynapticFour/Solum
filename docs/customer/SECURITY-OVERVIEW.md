@@ -15,15 +15,15 @@ This document is **not** legal advice, **not** a certification claim, and **not*
 
 ### What it is
 
-Solum is a **compliance layer** for clinical electronic health data: it **enforces** jurisdiction policy, **translates** interchange formats (FHIR first; openEHR / EHRbase on optional Track B), and **produces evidence** of conforming processing and exchange. Track A works with data wherever it already lives; Track B may persist via a partner-facing CDR façade — still **not** a Synaptic Four hospital EHR product. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §1; [architecture.md](../architecture.md); [H3-EHRBASE-SPIKE.md](../H3-EHRBASE-SPIKE.md))
+Solum is a **compliance layer** for clinical electronic health data: it **enforces** jurisdiction policy, **translates** interchange formats (FHIR first; openEHR / EHRbase on optional Track B), and **produces evidence** of conforming processing and exchange. Track A works with data wherever it already lives; Track B may persist via a partner-facing CDR façade — still **not** a Synaptic Four hospital EHR product. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §1; [ARCHITECTURE.md](../ARCHITECTURE.md); [H3-EHRBASE-SPIKE.md](../H3-EHRBASE-SPIKE.md))
 
-Stage 1 delivery is **on-premise first**. A SaaS operating model is a prepared Stage‑2 path, not the initial delivery model. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §5; [architecture.md](../architecture.md))
+Stage 1 delivery is **on-premise first**. A SaaS operating model is a prepared Stage‑2 path, not the initial delivery model. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §5; [ARCHITECTURE.md](../ARCHITECTURE.md))
 
 ### What it is not
 
 - **Not a medical device (intended posture).** Solum’s intended posture is to manage, encrypt, log, translate (e.g. FHIR ↔ openEHR), and evidence conforming processing — **never** interpret clinical data for diagnosis, therapy, or risk support. Classification under MDR/IVDR/AI Act depends on intended purpose and facts; **qualified regulatory review is required before go-to-market claims**. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §3)
-- **Not a hospital EHR UI / full clinical SoR product.** Track A does not replace primary clinical systems; optional Track B is a partner CDR façade, not Synaptic Four’s EHR application. ([architecture.md](../architecture.md); [PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md))
-- **Not a hosted SaaS product in Stage 1.** ([architecture.md](../architecture.md))
+- **Not a hospital EHR UI / full clinical SoR product.** Track A does not replace primary clinical systems; optional Track B is a partner CDR façade, not Synaptic Four’s EHR application. ([ARCHITECTURE.md](../ARCHITECTURE.md); [PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md))
+- **Not a hosted SaaS product in Stage 1.** ([ARCHITECTURE.md](../ARCHITECTURE.md))
 - **Not a declaration of legal compliance.** Operators must track applicable dates for certification, enforcement, and mandatory primary-use interoperability themselves; Solum aims to support **technical readiness**, not declare legal compliance. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §2)
 
 ---
@@ -37,7 +37,7 @@ Solum supports two additive operating modes ([INTEGRATION-ROADMAP.md](../INTEGRA
 | **A — Standalone** | Customer-provided (bring your own) | Customer / SMART-on-FHIR–shaped identity | None required for day-to-day operation |
 | **B — Ferrum-Companion** | Customer storage and/or optional Ferrum object storage | Optional Ferrum auth claims mapping | Optional, git-pinned shared crypto/auth building blocks |
 
-Standalone remains fully usable without Ferrum platform services. Companion features are **additive** — existing Standalone paths stay available. ([INTEGRATION-ROADMAP.md](../INTEGRATION-ROADMAP.md); [architecture.md](../architecture.md) FHIR/MII boundary)
+Standalone remains fully usable without Ferrum platform services. Companion features are **additive** — existing Standalone paths stay available. ([INTEGRATION-ROADMAP.md](../INTEGRATION-ROADMAP.md); [ARCHITECTURE.md](../ARCHITECTURE.md) FHIR/MII boundary)
 
 Both share a sovereignty philosophy with Ferrum (customer-held control, open standards) but are **separate brands, repositories, and regulatory perimeters**. ([PRODUCT-DEFINITION.md](../PRODUCT-DEFINITION.md) §1)
 
@@ -47,7 +47,7 @@ Both share a sovereignty philosophy with Ferrum (customer-held control, open sta
 
 ### Envelope
 
-Clinical field categories are encrypted with **Crypt4GH** (X25519 header + ChaCha20-Poly1305 segments) — the **same envelope format** Ferrum uses for genomic objects, so keys, tooling, and threat models can stay aligned across the portfolio. ([CRYPTO.md](../CRYPTO.md); [architecture.md](../architecture.md))
+Clinical field categories are encrypted with **Crypt4GH** (X25519 header + ChaCha20-Poly1305 segments) — the **same envelope format** Ferrum uses for genomic objects, so keys, tooling, and threat models can stay aligned across the portfolio. ([CRYPTO.md](../CRYPTO.md); [ARCHITECTURE.md](../ARCHITECTURE.md))
 
 ### Customer-held custody (honest language)
 
@@ -57,9 +57,9 @@ Under customer-held key custody:
 
 **Honest zero-knowledge path** (do not read this as “keys never leave your infrastructure in any form”):
 
-> Solum does **not** claim cryptographic zero-knowledge for every operation. FHIR validation, access masking, and format transformation require processing. The realistic path is: (1) customer-held keys for data at rest, (2) confidential computing / TEE where processing must touch plaintext, (3) complete, customer-inspectable auditability as the accountability backbone. ([architecture.md](../architecture.md) — *Honest zero-knowledge path*)
+> Solum does **not** claim cryptographic zero-knowledge for every operation. FHIR validation, access masking, and format transformation require processing. The realistic path is: (1) customer-held keys for data at rest, (2) confidential computing / TEE where processing must touch plaintext, (3) complete, customer-inspectable auditability as the accountability backbone. ([ARCHITECTURE.md](../ARCHITECTURE.md) — *Honest zero-knowledge path*)
 
-> Encrypt/decrypt **touch plaintext in process memory**. Brief in-process plaintext during encrypt/decrypt is inherent to that path. Full confidential-computing isolation (TEE) is a documented **future direction**, not current behaviour. ([architecture.md](../architecture.md); KeyCustody documentation summarised in [BASELINE.md](../BASELINE.md))
+> Encrypt/decrypt **touch plaintext in process memory**. Brief in-process plaintext during encrypt/decrypt is inherent to that path. Full confidential-computing isolation (TEE) is a documented **future direction**, not current behaviour. ([ARCHITECTURE.md](../ARCHITECTURE.md); KeyCustody documentation summarised in [BASELINE.md](../BASELINE.md))
 
 ### What this means in practice
 
@@ -93,7 +93,7 @@ Manual registration of customer-supplied key material (without AWS) remains the 
 
 ### Consent engine
 
-Consent is managed as grant / revoke decisions per **(subject, purpose)**, with purposes validated against the active jurisdiction profile, and a full history retained (EEHRxF-style individual rights orientation). Grant and revoke that go through the product orchestration path also write matching audit events in the same call, so consent state and audit trail do not silently drift apart under normal use. ([architecture.md](../architecture.md); [BASELINE.md](../BASELINE.md))
+Consent is managed as grant / revoke decisions per **(subject, purpose)**, with purposes validated against the active jurisdiction profile, and a full history retained (EEHRxF-style individual rights orientation). Grant and revoke that go through the product orchestration path also write matching audit events in the same call, so consent state and audit trail do not silently drift apart under normal use. ([ARCHITECTURE.md](../ARCHITECTURE.md); [BASELINE.md](../BASELINE.md))
 
 ### Role / capability checks (GTM‑1)
 
@@ -118,7 +118,7 @@ Track B reads (FHIR GET, composition GET, AQL) additionally require that the **o
 
 ## 6. Audit trail
 
-Solum persists a **durable, hash-chained, tamper-evident** audit log for deployments. Operators can export a HELIOS-oriented JSON evidence shape and verify the chain integrity. ([architecture.md](../architecture.md); [BASELINE.md](../BASELINE.md); [helios.md](../helios.md))
+Solum persists a **durable, hash-chained, tamper-evident** audit log for deployments. Operators can export a HELIOS-oriented JSON evidence shape and verify the chain integrity. ([ARCHITECTURE.md](../ARCHITECTURE.md); [BASELINE.md](../BASELINE.md); [helios.md](../helios.md))
 
 **What this is:** customer-inspectable accountability for access, consent, crypto, and authorization-denial events prepared for external evidence tooling.
 

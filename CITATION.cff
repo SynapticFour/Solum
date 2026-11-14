@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: Please cite this repository using these fields. Prefer this file over a hand-copied line.
+title: Solum
+authors:
+  - name: Synaptic Four
+repository-code: https://github.com/SynapticFour/Solum
+url: https://synapticfour.com/en/solum/
+license: BUSL-1.1
+type: software

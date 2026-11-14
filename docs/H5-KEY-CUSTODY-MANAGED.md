@@ -21,7 +21,7 @@ Ephemeral keys remain **dev-only** (`dev-local` + `SOLUM_ALLOW_EPHEMERAL`) — n
 
 ## TEE / “honest ZK” sketch (not implemented)
 
-Solum’s documented long-term path (see [architecture.md](architecture.md)):
+Solum’s documented long-term path (see [ARCHITECTURE.md](ARCHITECTURE.md)):
 
 1. Customer-held keys at rest
 2. Confidential computing / TEE where plaintext must be touched

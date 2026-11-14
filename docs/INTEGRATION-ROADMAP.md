@@ -62,7 +62,7 @@ Diese Erkenntnisse verkleinern den ursprünglich angenommenen Scope erheblich: A
 **Ziel:** Arbeitsteilung zwischen `ferrum-mii-connect` (strukturelle FHIR-Konformität) und Solums Compliance-Schicht (Verschlüsselung, Consent, Audit) explizit festhalten.
 
 **Deliverables:**
-- Neuer Abschnitt in `docs/architecture.md`.
+- Neuer Abschnitt in `docs/ARCHITECTURE.md`.
 - `solum-fhir`: optionales Feld `mii_validation_ref: Option<String>` an `PatientSummary`.
 - Audit-Event bei Verarbeitung eines bereits MII-validierten Feldes.
 
