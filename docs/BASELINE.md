@@ -145,7 +145,7 @@ Legacy library `&str`-Methoden (`grant_consent`, `revoke_consent`, `encrypt_fiel
 
 ## Explizit außerhalb dieser Baseline
 
-Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md), [helios.md](helios.md), [architecture.md](architecture.md), [INTEGRATION-ROADMAP.md](INTEGRATION-ROADMAP.md), and scaffold markers in crate docs:
+Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFINITION.md](PRODUCT-DEFINITION.md), [helios.md](helios.md), [ARCHITECTURE.md](ARCHITECTURE.md), [INTEGRATION-ROADMAP.md](INTEGRATION-ROADMAP.md), and scaffold markers in crate docs:
 
 | Item | Source |
 |------|--------|
@@ -169,7 +169,7 @@ Derived from [roadmap.md](roadmap.md), [profiles.md](profiles.md), [PRODUCT-DEFI
 | Named second maintainer / bus-factor 1 | CONTRIBUTING forbids direct pushes to `main`; CODEOWNERS is a team alias until a second human exists |
 | Patient Summary encrypt/decrypt über `Deployment` (mit `FileAuditStore`) | **Done** — `encrypt_patient_summary_as` / `decrypt_patient_summary_as` |
 | FHIR / IHE EEHRxF priority-category depth beyond minimal Patient Summary (labs, discharge, imaging, prescriptions) | `docs/roadmap.md` stage 2 |
-| SaaS operating model | `docs/roadmap.md` stage 2; `docs/architecture.md` / PRODUCT-DEFINITION — on-premise first |
+| SaaS operating model | `docs/roadmap.md` stage 2; `docs/ARCHITECTURE.md` / PRODUCT-DEFINITION — on-premise first |
 | Live HELIOS CLI/API signing integration | `docs/helios.md` — **deferred / not productized**; export envelope only |
 | Multi-writer durable audit backend | `crates/audit/src/store.rs` — single-writer assumption for stage 1; multi-writer called stage-2 scope |
 | Clinical interpretation / diagnosis / therapy support | Out of scope both stages — `docs/roadmap.md`, CONTRIBUTING MDCG boundary |
