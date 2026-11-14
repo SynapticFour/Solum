@@ -12,6 +12,10 @@ SOLUM_STORAGE_REGION=EU cargo run -p solum-core -- check --profile config/profil
 SOLUM_STORAGE_REGION=us-east-1 cargo run -p solum-core -- check --profile config/profiles/eu-ehds.toml
 ```
 
+`make prove` runs the workspace tests. You should see cargo print `test result: ok` for each suite, then the line `Solum prove OK. Maintainer: make verify. Interactive: Solum-Demo make up`.
+
+When `SOLUM_STORAGE_REGION=EU`, the profile check prints `ok: profile 'eu-ehds' (jurisdiction EU) matches runtime configuration`. A contradictory region exits non-zero and prints `fatal:` and the error.
+
 ## CLI (evaluation / Stage-1)
 
 The `solum` binary (crate `solum-core`) exposes jurisdiction check plus consent, crypto, and audit subcommands. Paths below are examples.
@@ -40,4 +44,4 @@ Use `crypto keygen` + `--keypair` for Stage-1 evaluations. Ephemeral keys (`--ep
 
 Audit `export` writes a HELIOS-oriented envelope only — this tree does not perform live HELIOS signing. Local UI/smoke of a tagged Solum: [Solum-Demo](https://github.com/SynapticFour/Solum-Demo).
 
-Kenya is an evaluation profile, not a production candidate. Next: [architecture.md](architecture.md) · [FOR-EVALUATORS.md](FOR-EVALUATORS.md).
+Kenya is an evaluation profile, not a production candidate. Next: [ARCHITECTURE.md](ARCHITECTURE.md) · [FOR-EVALUATORS.md](FOR-EVALUATORS.md).
